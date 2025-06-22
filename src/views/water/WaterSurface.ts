@@ -1,3 +1,4 @@
+import * as Cesium from 'cesium';
 /**
  * 水面反射效果实现
  * 该文件实现了一个完整的水面反射系统，包括：
@@ -8,7 +9,7 @@
  */
 declare global {
   interface Window {
-    Cesium: any;
+    Cesium: typeof Cesium;
   }
 }
 
