@@ -12,7 +12,8 @@
     "cesium": "^1.130.0",
     "lil-gui": "^0.20.0",
     "vite-plugin-cesium": "^1.2.23",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-router": "4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.3",
