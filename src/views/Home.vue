@@ -6,16 +6,17 @@
     </div>
 
     <div class="nav-cards">
-      <div v-for="item in navItems" :key="item.path" class="nav-card" @click="navigateTo(item.path)">
-        <div class="card-icon">
-          <i :class="item.icon"></i>
-        </div>
-        <div class="card-content">
-          <h3>{{ item.title }}</h3>
-          <p>{{ item.description }}</p>
-        </div>
-        <div class="card-arrow">
-          <i class="fas fa-chevron-right"></i>
+      <div
+        v-for="item in navItems"
+        :key="item.path"
+        class="nav-card"
+        @click="navigateTo(item.path)"
+      >
+        <img class="card-image" :src="item.image" :alt="item.title" />
+
+        <div class="card-title">
+          {{ item.title }}
+          <span class="card-arrow">▼</span>
         </div>
       </div>
     </div>
@@ -23,6 +24,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -31,35 +33,21 @@ interface NavItem {
   path: string
   title: string
   description: string
-  icon: string
+  image: string
 }
 
-const navItems: NavItem[] = [
-  {
-    path: '/mask',
-    title: '着色器遮罩',
-    description: '使用Cesium着色器实现遮罩效果',
-    icon: 'fas fa-mask'
-  },
-  {
-    path: '/off-screen-render',
-    title: '离屏渲染',
-    description: '演示Cesium离屏渲染技术',
-    icon: 'fas fa-desktop'
-  },
-  {
-    path: '/water',
-    title: '水面效果',
-    description: '展示逼真的水面渲染效果',
-    icon: 'fas fa-water'
-  },
-  {
-    path: '/draw-command',
-    title: '绘制命令',
-    description: '演示Cesium绘制命令',
-    icon: 'fas fa-pencil-ruler'
-  }
-]
+const navItems = computed<NavItem[]>(() =>
+  router
+    .getRoutes()
+    .filter((r) => r.path !== '/')
+    .map((r) => {
+      const path = r.path
+      const title = (r.meta as any)?.title ?? path
+      const description = (r.meta as any)?.description ?? ''
+      const image = new URL(`./${path.replace(/^\//, '')}/index.png`, import.meta.url).href
+      return { path, title, description, image }
+    })
+)
 
 const navigateTo = (path: string) => {
   router.push(path)
@@ -101,64 +89,41 @@ const navigateTo = (path: string) => {
   gap: 24px;
 }
 
+/* 卡片样式重写为垂直布局 */
 .nav-card {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
 }
 
 .nav-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
 }
 
-.card-icon {
-  flex-shrink: 0;
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 1.5rem;
+.card-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
 }
 
-.card-content {
-  flex: 1;
-}
-
-.card-content h3 {
-  font-size: 1.3rem;
+.card-title {
+  text-align: center;
+  font-size: 1rem;
   font-weight: 600;
-  margin-bottom: 8px;
+  padding: 12px 8px 16px;
   color: #2d3748;
 }
 
-.card-content p {
-  color: #718096;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
 .card-arrow {
-  flex-shrink: 0;
-  color: #cbd5e0;
-  font-size: 1.2rem;
-  transition: all 0.3s ease;
-}
-
-.nav-card:hover .card-arrow {
-  color: #667eea;
-  transform: translateX(4px);
+  margin-left: 4px;
+  color: #17c964; /* 绿色箭头 */
+  font-size: 0.875rem;
 }
 
 @media (max-width: 768px) {

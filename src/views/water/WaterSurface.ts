@@ -379,7 +379,7 @@ function renderSceneToFramebuffer(scene: any, framebuffer: any): void {
   frameState.passes.render = true;
   frameState.passes.postProcess = scene.postProcessStages.hasSelected;
   
-  let backgroundColor = (window as any).Cesium.defaultValue(scene.backgroundColor, (window as any).Cesium.Color.BLACK);
+  let backgroundColor = scene.backgroundColor ?? (window as any).Cesium.Color.BLACK;
   if (scene._hdr) {
     backgroundColor = (window as any).Cesium.Color.clone(backgroundColor, new (window as any).Cesium.Color());
     backgroundColor.red = Math.pow(backgroundColor.red, scene.gamma);
@@ -411,6 +411,25 @@ function renderSceneToFramebuffer(scene: any, framebuffer: any): void {
   viewport.height = context.drawingBufferHeight;
   
   const passState = originalView.passState;
+  
+  // === 兼容 Cesium 1.120+ 的 3D Tiles 渲染 ===
+  // • 新版在 Cesium3DTileset.updateForPass 中会从 frameState.tilesetPassState 读取状态对象
+  // • 如果缺失则抛出 “Expected tilesetPassState to be typeof object” 错误
+  // 这里动态创建并挂到 frameState 上，确保流程完整。
+  if ((frameState as any).tilesetPassState === undefined) {
+    // Cesium 官方提供的封装类
+    const CesiumNS = (window as any).Cesium;
+    const tilesetPassState = new CesiumNS.Cesium3DTilePassState({
+      pass: CesiumNS.Cesium3DTilePass?.RENDER ?? 0,
+    });
+    (frameState as any).tilesetPassState = tilesetPassState;
+  }
+
+  // 同时给 passState 补充，虽然目前用不上，但以防内部还会读取
+  if ((passState as any).tilesetPassState === undefined) {
+    (passState as any).tilesetPassState = (frameState as any).tilesetPassState;
+  }
+  
   passState.framebuffer = framebuffer;
   passState.blendingEnabled = undefined;
   passState.scissorTest = undefined;
@@ -421,17 +440,17 @@ function renderSceneToFramebuffer(scene: any, framebuffer: any): void {
   }
   
   scene.updateEnvironment();
-  scene.updateAndExecuteCommands(passState, backgroundColor);
-  scene.resolveFramebuffers(passState);
-  
-  if ((window as any).Cesium.defined(scene.globe)) {
-    scene.globe.endFrame(frameState);
-    if (!scene.globe.tilesLoaded) {
-      scene._renderRequested = true;
+      scene.updateAndExecuteCommands(passState, backgroundColor);
+    scene.resolveFramebuffers(passState);
+    
+    if ((window as any).Cesium.defined(scene.globe)) {
+      scene.globe.endFrame(frameState);
+      if (!scene.globe.tilesLoaded) {
+        scene._renderRequested = true;
+      }
     }
-  }
-  
-  context.endFrame();
+    
+    context.endFrame();
 }
 
 // 水面反射类
@@ -459,7 +478,7 @@ class WaterSurface {
   constructor(options: WaterSurfaceOptions) {
     this._scene = options.scene;
     this._height = options.height;
-    this._flowDegrees = (window as any).Cesium.defaultValue(options.flowDegrees, 0);
+    this._flowDegrees = options.flowDegrees ?? 0;
     
     const positions3D = options.positions;
     const positionsLength = positions3D.length;
@@ -479,7 +498,7 @@ class WaterSurface {
         (window as any).Cesium.Cartesian3.fromRadians(
           coordinate.longitude,
           coordinate.latitude,
-          this._height,
+          coordinate.height,
         ),
       );
     });
@@ -517,14 +536,14 @@ class WaterSurface {
     this._reflectorProjectionMatrix = (window as any).Cesium.Matrix4.IDENTITY.clone();
     
     this._initUniforms = {
-      normalMapUrl: (window as any).Cesium.defaultValue(options.normalMapUrl, "/img/waterNormals.jpg"),
-      size: (window as any).Cesium.defaultValue(options.rippleSize, 50),
-      waterColor: (window as any).Cesium.defaultValue(options.waterColor, (window as any).Cesium.Color.fromCssColorString("#001e0f")),
-      waterAlpha: (window as any).Cesium.defaultValue(options.waterAlpha, 0.9),
-      rf0: (window as any).Cesium.defaultValue(options.reflectivity, 0.3),
-      lightDirection: (window as any).Cesium.defaultValue(options.lightDirection, new (window as any).Cesium.Cartesian3(0, 0, 1)),
-      sunShiny: (window as any).Cesium.defaultValue(options.sunShiny, 100),
-      distortionScale: (window as any).Cesium.defaultValue(options.distortionScale, 3.7),
+      normalMapUrl: options.normalMapUrl ?? "/img/waterNormals.jpg",
+      size: options.rippleSize ?? 50,
+      waterColor: options.waterColor ?? (window as any).Cesium.Color.fromCssColorString("#001e0f"),
+      waterAlpha: options.waterAlpha ?? 0.9,
+      rf0: options.reflectivity ?? 0.3,
+      lightDirection: options.lightDirection ?? new (window as any).Cesium.Cartesian3(0, 0, 1),
+      sunShiny: options.sunShiny ?? 100,
+      distortionScale: options.distortionScale ?? 3.7,
     };
     
     const context = this._scene.context;

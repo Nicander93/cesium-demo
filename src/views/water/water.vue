@@ -2,16 +2,43 @@
   <div id="cesiumContainer">
 
   </div>
+  <div class="camera-info">
+    <div>经度: {{ cameraInfo.longitude }}°</div>
+    <div>纬度: {{ cameraInfo.latitude }}°</div>
+    <div>高度: {{ cameraInfo.height }}m</div>
+  </div>
 </template>
 
 <script setup lang="ts">
 // 水面反射效果演示
 import { WaterSurface } from './WaterSurface';
 import * as Cesium from 'cesium'
-import {onMounted} from 'vue'
+import { onMounted, ref } from 'vue'
 window.Cesium = Cesium;
+
+// 相机信息响应式数据
+const cameraInfo = ref({
+  longitude: 0,
+  latitude: 0,
+  height: 0
+});
+
 // 设置 Cesium Ion 访问令牌
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5OWQ2NGJkZS0yODlmLTRlZjItYjZhYy03Mjc5MmM2OWM0OTkiLCJpZCI6NDAyNDQsImlhdCI6MTY2ODIzODM1OX0.au0c5QRIKaUh_Crsz6sfDfdSj2ePoQyaRcXcoXdcqOw'
+
+// 更新相机信息的函数
+function updateCameraInfo(viewer: Cesium.Viewer) {
+  const camera = viewer.camera;
+  const position = camera.position;
+  const cartographic = Cesium.Cartographic.fromCartesian(position);
+  
+  cameraInfo.value = {
+    longitude: parseFloat(Cesium.Math.toDegrees(cartographic.longitude).toFixed(6)),
+    latitude: parseFloat(Cesium.Math.toDegrees(cartographic.latitude).toFixed(6)),
+    height: Math.round(cartographic.height)
+  };
+}
+
 async function initWaterDemo() {
   // 创建Cesium viewer
   const viewer = new Cesium.Viewer("cesiumContainer", {
@@ -27,49 +54,95 @@ async function initWaterDemo() {
     navigationInstructionsInitiallyVisible: false,
     animation: false,
     baseLayerPicker: false,
-    terrainProvider: await Cesium.createWorldTerrainAsync(),
+    // terrainProvider: await Cesium.createWorldTerrainAsync(),
   });
 
   // 隐藏版权信息
   (viewer.cesiumWidget.creditContainer as HTMLElement).style.display = "none";
-  viewer.scene.globe.depthTestAgainstTerrain = true;
+  viewer.scene.globe.depthTestAgainstTerrain = false;
   viewer.scene.debugShowFramesPerSecond = true;
+
+  // 监听相机移动事件
+  viewer.camera.moveEnd.addEventListener(() => {
+    updateCameraInfo(viewer);
+  });
 
   // 定义水面多边形位置
   const waterPositions = [
-    Cesium.Cartographic.fromDegrees(-75.59967741159785, 40.04091766662355, 76.37856662343563),
-    Cesium.Cartographic.fromDegrees(-75.59955207631664, 40.036827420667116, 71.6963743893841),
-    Cesium.Cartographic.fromDegrees(-75.59376378325359, 40.0367060679407, 83.98039248519758),
-    Cesium.Cartographic.fromDegrees(-75.5936186712503, 40.03959922674249, 82.13316846253008),
-    Cesium.Cartographic.fromDegrees(-75.59550520685805, 40.04082628776817, 84.00794582002823),
+    Cesium.Cartographic.fromDegrees(119.031533, 33.593063, 163),
+    Cesium.Cartographic.fromDegrees(119.030249, 33.592114, 163),
+    Cesium.Cartographic.fromDegrees(119.032524, 33.591157, 163),
+    Cesium.Cartographic.fromDegrees(119.033232, 33.592346, 163),
+    Cesium.Cartographic.fromDegrees(119.032454, 33.592552, 163),
   ];
 
   // 加载3D瓦片集
   try {
-    const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(40866);
-    viewer.scene.primitives.add(tileset);
+    // const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(40866);
+    const tileset = await Cesium.Cesium3DTileset.fromUrl('https://data.mars3d.cn/3dtiles/qx-simiao/tileset.json', {
+      skipLevelOfDetail: true,
+      baseScreenSpaceError: 1024,
+      skipScreenSpaceErrorFactor: 16,
+      skipLevels: 1,
+      immediatelyLoadDesiredLevelOfDetail: false,
+      loadSiblings: false,
+      cullWithChildrenBounds: true
+    });
     
+    // 期望抬高的米数
+    const deltaHeight = 110;
+
+    // 1. 取模型中心的经纬高
+    const bounding = tileset.boundingSphere;
+    const centerCarto = Cesium.Cartographic.fromCartesian(bounding.center);
+
+    // 2. 计算“原始位置”与“抬高后位置”对应的 Cartesian3
+    const surface = Cesium.Cartesian3.fromRadians(
+      centerCarto.longitude,
+      centerCarto.latitude,
+      centerCarto.height
+    );
+    const offset  = Cesium.Cartesian3.fromRadians(
+      centerCarto.longitude,
+      centerCarto.latitude,
+      centerCarto.height + deltaHeight
+    );
+
+    // 3. 两点相减得到沿当地法线方向的平移向量
+    const translation = Cesium.Cartesian3.subtract(offset, surface, new Cesium.Cartesian3());
+
+    // 4. 应用到 tileset
+    tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+    
+    viewer.scene.primitives.add(tileset);
+
     // 等待瓦片集准备就绪后再缩放
     await (tileset as any).readyPromise;
+  
     viewer.zoomTo(tileset);
   } catch (error) {
     console.warn("无法加载3D瓦片集:", error);
-    // 如果加载失败，设置一个默认视角
-    viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(-75.597, 40.038, 200),
-      orientation: {
-        heading: 0.0,
-        pitch: -0.5,
-        roll: 0.0
-      }
-    });
+  } finally {
+    
+    // viewer.camera.setView({
+    //   destination: Cesium.Cartesian3.fromDegrees( 119.47758, 28.44004, 500),
+    //   orientation: {
+    //     heading: 0.0,
+    //     pitch: -0.5,
+    //     roll: 0.0
+    //   }
+    // });
+    
+    // 初始化相机信息
+    updateCameraInfo(viewer);
   }
 
   // 水面配置选项
   const waterSurfaceOptions = {
     scene: viewer.scene,
     positions: waterPositions,
-    height: 81,
+    // 与 3D Tiles 的高度偏移保持一致：81 + (-200) = -119
+    // height: 510,
     rippleSize: 100,
     waterColor: Cesium.Color.fromCssColorString("#001e0f"),
     waterAlpha: 0.9,
@@ -88,7 +161,7 @@ async function initWaterDemo() {
     透明度: 0.9,
     反射率: 0.3,
     扭曲: 3.7,
-    高度: 81,
+    高度: -119,
   };
 
   // 更新水面属性的函数
@@ -118,11 +191,26 @@ async function initWaterDemo() {
     waterControls
   };
 }
-onMounted(()=>{
+onMounted(() => {
   initWaterDemo()
 })
 </script>
 
 <style scoped>
+.camera-info {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 14px;
+  z-index: 1000;
+}
 
+.camera-info div {
+  margin: 2px 0;
+}
 </style>
