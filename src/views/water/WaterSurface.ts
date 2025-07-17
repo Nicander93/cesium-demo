@@ -459,6 +459,7 @@ class WaterSurface {
   private _height: number;
   private _flowDegrees: number;
   private _positions: any[];
+  private _originalPositions: any[]; // 保存原始坐标信息
   private _reflectorWorldPosition: any;
   private _originalReflectorWorldPosition: any;
   private _normal: any;
@@ -481,6 +482,11 @@ class WaterSurface {
     this._flowDegrees = options.flowDegrees ?? 0;
     
     const positions3D = options.positions;
+    // 保存原始坐标信息
+    this._originalPositions = positions3D.map((pos: any) => ({
+      longitude: pos.longitude,
+      latitude: pos.latitude
+    }));
     const positionsLength = positions3D.length;
     let centerX = 0;
     let centerY = 0;
@@ -494,11 +500,12 @@ class WaterSurface {
       centerY += Math.cos(latitude) * Math.sin(longitude);
       centerZ += Math.sin(latitude);
       
+      // 使用传入的height参数，忽略coordinate中的高度值
       this._positions.push(
         (window as any).Cesium.Cartesian3.fromRadians(
           coordinate.longitude,
           coordinate.latitude,
-          coordinate.height,
+          this._height  // 统一使用传入的height参数
         ),
       );
     });
@@ -594,6 +601,20 @@ class WaterSurface {
 
   set height(newHeight: number) {
     this._height = newHeight;
+    
+    // 重新计算所有位置的高度
+    this._positions = [];
+    this._originalPositions.forEach((coordinate: any) => {
+      this._positions.push(
+        (window as any).Cesium.Cartesian3.fromRadians(
+          coordinate.longitude,
+          coordinate.latitude,
+          this._height
+        ),
+      );
+    });
+    
+    // 重新计算反射器位置
     const cartographic = (window as any).Cesium.Cartographic.fromCartesian(this._originalReflectorWorldPosition);
     const newPosition = (window as any).Cesium.Cartesian3.fromRadians(
       cartographic.longitude,
@@ -601,17 +622,14 @@ class WaterSurface {
       this._height,
     );
     
-    const translation = (window as any).Cesium.Cartesian3.subtract(
-      newPosition,
-      this._originalReflectorWorldPosition,
-      new (window as any).Cesium.Cartesian3(),
-    );
-    const translationMatrix = (window as any).Cesium.Matrix4.fromTranslation(translation);
-    this._primitive.modelMatrix = translationMatrix;
-    
     this._reflectorWorldPosition = newPosition;
     this._normal = (window as any).Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(this._reflectorWorldPosition);
     this._waterPlane = (window as any).Cesium.Plane.fromPointNormal(this._reflectorWorldPosition, this._normal);
+    
+    // 重新创建primitive
+    this._scene.primitives.remove(this._primitive);
+    this._primitive = this._createPrimitive(this._positions, this._flowDegrees);
+    this._scene.primitives.add(this._primitive);
     
     this._reflectMatrix = new (window as any).Cesium.Matrix4(
       this._waterPlane.normal.x * -2 * this._waterPlane.normal.x + 1,

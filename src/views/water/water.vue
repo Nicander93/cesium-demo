@@ -7,6 +7,22 @@
     <div>纬度: {{ cameraInfo.latitude }}°</div>
     <div>高度: {{ cameraInfo.height }}m</div>
   </div>
+  
+  <div class="water-controls">
+    <div class="control-item">
+      <label>水面高度:</label>
+      <input 
+        type="number" 
+        v-model="waterHeight" 
+        @input="updateWaterHeight"
+        min="0" 
+        max="1000" 
+        step="1"
+        placeholder="输入高度(米)"
+      />
+      <span>米</span>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -22,6 +38,9 @@ const cameraInfo = ref({
   latitude: 0,
   height: 0
 });
+
+// 水面高度响应式数据
+const waterHeight = ref(163);
 
 // 设置 Cesium Ion 访问令牌
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5OWQ2NGJkZS0yODlmLTRlZjItYjZhYy03Mjc5MmM2OWM0OTkiLCJpZCI6NDAyNDQsImlhdCI6MTY2ODIzODM1OX0.au0c5QRIKaUh_Crsz6sfDfdSj2ePoQyaRcXcoXdcqOw'
@@ -39,7 +58,12 @@ function updateCameraInfo(viewer: Cesium.Viewer) {
   };
 }
 
-async function initWaterDemo() {
+async function initWaterDemo(): Promise<{
+  viewer: any;
+  waterSurface: any;
+  updateWaterProperties: () => void;
+  waterControls: any;
+}> {
   // 创建Cesium viewer
   const viewer = new Cesium.Viewer("cesiumContainer", {
     infoBox: false,
@@ -67,13 +91,13 @@ async function initWaterDemo() {
     updateCameraInfo(viewer);
   });
 
-  // 定义水面多边形位置
+  // 定义水面多边形位置（只包含经纬度，高度由height参数控制）
   const waterPositions = [
-    Cesium.Cartographic.fromDegrees(119.031533, 33.593063, 163),
-    Cesium.Cartographic.fromDegrees(119.030249, 33.592114, 163),
-    Cesium.Cartographic.fromDegrees(119.032524, 33.591157, 163),
-    Cesium.Cartographic.fromDegrees(119.033232, 33.592346, 163),
-    Cesium.Cartographic.fromDegrees(119.032454, 33.592552, 163),
+    Cesium.Cartographic.fromDegrees(119.031533, 33.593063, 0),
+    Cesium.Cartographic.fromDegrees(119.030249, 33.592114, 0),
+    Cesium.Cartographic.fromDegrees(119.032524, 33.591157, 0),
+    Cesium.Cartographic.fromDegrees(119.033232, 33.592346, 0),
+    Cesium.Cartographic.fromDegrees(119.032454, 33.592552, 0),
   ];
 
   // 加载3D瓦片集
@@ -141,8 +165,7 @@ async function initWaterDemo() {
   const waterSurfaceOptions = {
     scene: viewer.scene,
     positions: waterPositions,
-    // 与 3D Tiles 的高度偏移保持一致：81 + (-200) = -119
-    // height: 510,
+    height: 163,      // 设置水面高度为163米
     rippleSize: 100,
     waterColor: Cesium.Color.fromCssColorString("#001e0f"),
     waterAlpha: 0.9,
@@ -161,7 +184,7 @@ async function initWaterDemo() {
     透明度: 0.9,
     反射率: 0.3,
     扭曲: 3.7,
-    高度: -119,
+    高度: 163,
   };
 
   // 更新水面属性的函数
@@ -191,8 +214,20 @@ async function initWaterDemo() {
     waterControls
   };
 }
-onMounted(() => {
-  initWaterDemo()
+
+// 全局变量存储waterSurface实例
+let globalWaterSurface: any = null;
+
+// 更新水面高度的函数
+const updateWaterHeight = () => {
+  if (globalWaterSurface) {
+    globalWaterSurface.height = waterHeight.value;
+    console.log('水面高度已更新为:', waterHeight.value, '米');
+  }
+};
+onMounted(async () => {
+  const result = await initWaterDemo();
+  globalWaterSurface = result.waterSurface;
 })
 </script>
 
@@ -212,5 +247,56 @@ onMounted(() => {
 
 .camera-info div {
   margin: 2px 0;
+}
+
+.water-controls {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  font-family: 'Arial', sans-serif;
+  font-size: 14px;
+  z-index: 1000;
+  min-width: 200px;
+}
+
+.control-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.control-item label {
+  font-weight: bold;
+  min-width: 80px;
+}
+
+.control-item input {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 80px;
+}
+
+.control-item input:focus {
+  outline: none;
+  border-color: #4CAF50;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.control-item input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.control-item span {
+  color: #4CAF50;
+  font-weight: bold;
 }
 </style>
