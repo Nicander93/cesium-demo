@@ -40,7 +40,7 @@ const cameraInfo = ref({
 });
 
 // 水面高度响应式数据
-const waterHeight = ref(163);
+const waterHeight = ref(44);
 
 // 设置 Cesium Ion 访问令牌
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5OWQ2NGJkZS0yODlmLTRlZjItYjZhYy03Mjc5MmM2OWM0OTkiLCJpZCI6NDAyNDQsImlhdCI6MTY2ODIzODM1OX0.au0c5QRIKaUh_Crsz6sfDfdSj2ePoQyaRcXcoXdcqOw'
@@ -165,7 +165,7 @@ async function initWaterDemo(): Promise<{
   const waterSurfaceOptions = {
     scene: viewer.scene,
     positions: waterPositions,
-    height: 163,      // 设置水面高度为163米
+    height: 44,      // 设置水面高度为163米
     rippleSize: 100,
     waterColor: Cesium.Color.fromCssColorString("#001e0f"),
     waterAlpha: 0.9,
@@ -184,7 +184,7 @@ async function initWaterDemo(): Promise<{
     透明度: 0.9,
     反射率: 0.3,
     扭曲: 3.7,
-    高度: 163,
+    高度: 44,
   };
 
   // 更新水面属性的函数

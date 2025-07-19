@@ -41,6 +41,15 @@ const routes: RouteRecordRaw[] = [
       icon: 'fas fa-pencil-ruler',
     },
   },
+  {
+    path: '/primitive',
+    component: () => import('@/views/primitive/primitive.vue'),
+    meta: {
+      title: 'Primitive',
+      description: '演示Cesium Primitive',
+      icon: 'fas fa-cube',
+    },
+  },
 ]
 
 export default createRouter({

@@ -56,8 +56,8 @@ const navigateTo = (path: string) => {
 
 <style scoped>
 .home-container {
-  min-height: 100vh;
-  overflow: auto  ;
+  height: 100vh;
+  overflow: auto;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 40px 20px;
 }
@@ -82,10 +82,10 @@ const navigateTo = (path: string) => {
 }
 
 .nav-cards {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 24px;
 }
 
