@@ -50,6 +50,15 @@ const routes: RouteRecordRaw[] = [
       icon: 'fas fa-cube',
     },
   },
+  {
+    path: '/custom-primitive',
+    component: () => import('@/views/custom-primitive/custom-primitive.vue'),
+    meta: {
+      title: '自定义Primitive',
+      description: '演示Cesium自定义Primitive',
+      icon: 'fas fa-cube',
+    },
+  },
 ]
 
 export default createRouter({
