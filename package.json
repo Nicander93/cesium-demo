@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "cesium": "^1.130.0",
@@ -16,10 +19,14 @@
     "vue-router": "4"
   },
   "devDependencies": {
+    "@types/node": "^24.1.0",
     "@vitejs/plugin-vue": "^5.2.3",
+    "@vitest/ui": "^3.2.4",
     "@vue/tsconfig": "^0.7.0",
+    "jsdom": "^26.1.0",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
+    "vitest": "^3.2.4",
     "vue-tsc": "^2.2.8"
   }
 }

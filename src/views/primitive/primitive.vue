@@ -54,6 +54,7 @@ onMounted(async () => {
   const viewer = new Cesium.Viewer('cesiumContainer');
   // 打开FXAA抗锯齿
   viewer.scene.postProcessStages.fxaa.enabled = true;
+  viewer.scene.globe.depthTestAgainstTerrain = true;
   let p = [110.0, 30.0];
   let fillInstances = [];
   let outlineInstances = [];
@@ -115,13 +116,39 @@ onMounted(async () => {
   }
 
   // 使用普通Primitive渲染填充面（为了支持hover效果）
-  const fillPrimitive = new Cesium.Primitive({
+  // 修改GroundPrimitive配置
+  const fillPrimitive = new Cesium.GroundPrimitive({
     geometryInstances: fillInstances,
     appearance: new Cesium.PerInstanceColorAppearance({
       flat: true,
-      translucent: true  // 启用透明度支持
-    })
+    }),
+    allowPicking: true,
+    releaseGeometryInstances: false,
   });
+  const supportsFragmentCulling = Cesium.GroundPrimitive.supportsMaterials(viewer.scene);
+  console.log('Supports fragment culling:', supportsFragmentCulling);
+
+  // 在GeometryInstance中添加pickColor属性
+  fillInstances.forEach((instance, i) => {
+    instance.attributes.pickColor = Cesium.ColorGeometryInstanceAttribute.fromColor(
+      Cesium.Color.fromHsl(i / 10000, 1.0, 0.5)
+    );
+  });
+
+  // 修改拾取逻辑
+  const setupHoverEffect = () => {
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction((event) => {
+      const picked = viewer.scene.pick(event.endPosition);
+      if (picked && picked.primitive === fillPrimitive) {
+        const color = picked.color;
+        const instanceId = Math.round(
+          Cesium.Color.hue(color) * 10000
+        );
+        console.log('Found instance ID:', instanceId);
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  };
 
   // 使用普通Primitive渲染边框
   const outlinePrimitive = new Cesium.Primitive({

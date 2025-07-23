@@ -59,6 +59,15 @@ const routes: RouteRecordRaw[] = [
       icon: 'fas fa-cube',
     },
   },
+  {
+    path: '/cesium-utils-demo',
+    component: () => import('@/views/cesium-utils-demo/cesium-utils-demo.vue'),
+    meta: {
+      title: 'Cesium工具类',
+      description: '便于创建各种Cesium数据的工具类演示',
+      icon: 'fas fa-toolbox',
+    },
+  },
 ]
 
 export default createRouter({
