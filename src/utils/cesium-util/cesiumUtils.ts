@@ -1,48 +1,152 @@
 import * as Cesium from 'cesium';
 
+// 提取Cesium原生构造函数参数类型
+type Cesium3DTilesetOptions = ConstructorParameters<typeof Cesium.Cesium3DTileset>[0];
+type EntityOptions = Cesium.Entity.ConstructorOptions;
+
+// 影像提供者构造参数类型
+type WebMapServiceImageryProviderOptions = ConstructorParameters<typeof Cesium.WebMapServiceImageryProvider>[0];
+type WebMapTileServiceImageryProviderOptions = ConstructorParameters<typeof Cesium.WebMapTileServiceImageryProvider>[0];
+type UrlTemplateImageryProviderOptions = ConstructorParameters<typeof Cesium.UrlTemplateImageryProvider>[0];
+type BingMapsImageryProviderOptions = ConstructorParameters<typeof Cesium.BingMapsImageryProvider>[0];
+type ArcGisMapServerImageryProviderOptions = ConstructorParameters<typeof Cesium.ArcGisMapServerImageryProvider>[0];
+
+// GeoJSON/KML/CZML加载选项类型
+type GeoJsonLoadOptions = Parameters<typeof Cesium.GeoJsonDataSource.load>[1];
+type KmlLoadOptions = Parameters<typeof Cesium.KmlDataSource.load>[1];
+type CzmlLoadOptions = Parameters<typeof Cesium.CzmlDataSource.load>[1];
+
 // 基础配置接口
-export interface BaseOptions {
+export interface BaseLayerOptions {
   id?: string;
   name?: string;
   show?: boolean;
-  [key: string]: any;
 }
 
-// 图层配置接口
-export interface LayerOptions extends BaseOptions {
-  type: 'geojson' | 'kml' | 'czml' | 'wms' | 'wmts' | 'xyz' | 'bing' | 'arcgis';
+// GeoJSON图层选项 - 使用Cesium原生选项
+export interface GeoJsonLayerOptions extends BaseLayerOptions {
+  type: 'geojson';
   url?: string;
   data?: any;
   style?: any;
   clustering?: boolean;
   clampToGround?: boolean;
+  options?: GeoJsonLoadOptions;
 }
 
-// 3D瓦片配置接口
-export interface TilesetOptions extends BaseOptions {
+// KML图层选项 - 使用Cesium原生选项
+export interface KmlLayerOptions extends BaseLayerOptions {
+  type: 'kml';
+  url?: string;
+  data?: any;
+  clampToGround?: boolean;
+  options?: KmlLoadOptions;
+}
+
+// CZML图层选项 - 使用Cesium原生选项
+export interface CzmlLayerOptions extends BaseLayerOptions {
+  type: 'czml';
+  url?: string;
+  data?: any;
+  options?: CzmlLoadOptions;
+}
+
+// WMS图层选项 - 使用Cesium原生选项
+export interface WmsLayerOptions extends BaseLayerOptions {
+  type: 'wms';
+  options?: WebMapServiceImageryProviderOptions;
+}
+
+// WMTS图层选项 - 使用Cesium原生选项
+export interface WmtsLayerOptions extends BaseLayerOptions {
+  type: 'wmts';
+  options?: WebMapTileServiceImageryProviderOptions;
+}
+
+// XYZ图层选项 - 使用Cesium原生选项
+export interface XyzLayerOptions extends BaseLayerOptions {
+  type: 'xyz';
+  options?: UrlTemplateImageryProviderOptions;
+}
+
+// Bing图层选项 - 使用Cesium原生选项
+export interface BingLayerOptions extends BaseLayerOptions {
+  type: 'bing';
+  options?: BingMapsImageryProviderOptions;
+}
+
+// ArcGIS图层选项 - 使用Cesium原生选项
+export interface ArcGisLayerOptions extends BaseLayerOptions {
+  type: 'arcgis';
+  options?: ArcGisMapServerImageryProviderOptions;
+}
+
+// 3D瓦片选项 - 使用Cesium原生选项
+export interface TilesetLayerOptions extends BaseLayerOptions {
+  type: '3dtiles';
   url: string;
-  modelMatrix?: Cesium.Matrix4;
-  maximumScreenSpaceError?: number;
-  skipLevelOfDetail?: boolean;
-  baseScreenSpaceError?: number;
-  skipScreenSpaceErrorFactor?: number;
-  skipLevels?: number;
-  immediatelyLoadDesiredLevelOfDetail?: boolean;
-  loadSiblings?: boolean;
-  cullWithChildrenBounds?: boolean;
-  enableCollision?: boolean;
-  debugShowBoundingVolume?: boolean;
-  debugShowContentBoundingVolume?: boolean;
-  debugShowViewerRequestVolume?: boolean;
-  pointCloudShading?: any;
-  imageBasedLightingFactor?: Cesium.Cartesian2;
-  lightColor?: Cesium.Cartesian3;
-  luminanceAtZenith?: number;
-  shadows?: Cesium.ShadowMode;
+  options?: Cesium3DTilesetOptions;
+}
+
+// Entity选项 - 使用Cesium原生选项，但支持数组形式的position
+export interface EntityLayerOptions extends BaseLayerOptions, Omit<EntityOptions, 'id' | 'name' | 'show' | 'position'> {
+  type: 'entity';
+  position?: Cesium.Cartesian3 | number[];
+}
+
+// Primitive选项
+export interface PrimitiveLayerOptions extends BaseLayerOptions {
+  type: 'primitive';
+  primitiveType: 'point' | 'polyline' | 'polygon' | 'box' | 'cylinder' | 'ellipsoid' | 'sphere' | 'wall';
+  positions?: Cesium.Cartesian3[] | number[][];
+  position?: Cesium.Cartesian3 | number[];
+  dimensions?: Cesium.Cartesian3;
+  radii?: Cesium.Cartesian3;
+  height?: number;
+  extrudedHeight?: number;
+  material?: Cesium.Material | Cesium.Color | string;
+  outline?: boolean;
+  outlineColor?: Cesium.Color | string;
+  outlineWidth?: number;
+  asynchronous?: boolean;
+  releaseGeometryInstances?: boolean;
+  allowPicking?: boolean;
+  classificationType?: Cesium.ClassificationType;
+  appearance?: Cesium.Appearance;
+  // Primitive特有属性
+  width?: number;
+  radius?: number;
+  length?: number;
+  topRadius?: number;
+  bottomRadius?: number;
+  maximumHeights?: number[];
+  minimumHeights?: number[];
+  granularity?: number;
+}
+
+// 联合类型 - 根据type字段提供不同的选项类型
+export type LayerOptions =
+  | GeoJsonLayerOptions
+  | KmlLayerOptions
+  | CzmlLayerOptions
+  | WmsLayerOptions
+  | WmtsLayerOptions
+  | XyzLayerOptions
+  | BingLayerOptions
+  | ArcGisLayerOptions
+  | TilesetLayerOptions
+  | EntityLayerOptions
+  | PrimitiveLayerOptions;
+
+// 保持原有的独立配置接口用于直接调用对应方法
+export interface TilesetOptions extends BaseLayerOptions {
+  type: '3dtiles' | '3dtileset';
+  url: string;
+  options?: Cesium3DTilesetOptions;
 }
 
 // Primitive配置接口
-export interface PrimitiveOptions extends BaseOptions {
+export interface PrimitiveOptions extends BaseLayerOptions {
   type: 'point' | 'polyline' | 'polygon' | 'box' | 'cylinder' | 'ellipsoid' | 'sphere' | 'wall';
   positions?: Cesium.Cartesian3[] | number[];
   position?: Cesium.Cartesian3 | number[];
@@ -61,28 +165,13 @@ export interface PrimitiveOptions extends BaseOptions {
   appearance?: Cesium.Appearance;
 }
 
-// Entity配置接口
-export interface EntityOptions extends BaseOptions {
+// Entity配置接口 - 使用Cesium原生类型
+export interface EntityConfig extends BaseLayerOptions, Omit<EntityOptions, 'id' | 'name' | 'show' | 'position'> {
   position?: Cesium.Cartesian3 | number[];
-  orientation?: Cesium.Quaternion;
-  point?: Cesium.PointGraphics.ConstructorOptions;
-  billboard?: Cesium.BillboardGraphics.ConstructorOptions;
-  label?: Cesium.LabelGraphics.ConstructorOptions;
-  model?: Cesium.ModelGraphics.ConstructorOptions;
-  polyline?: Cesium.PolylineGraphics.ConstructorOptions;
-  polygon?: Cesium.PolygonGraphics.ConstructorOptions;
-  ellipse?: Cesium.EllipseGraphics.ConstructorOptions;
-  box?: Cesium.BoxGraphics.ConstructorOptions;
-  cylinder?: Cesium.CylinderGraphics.ConstructorOptions;
-  ellipsoid?: Cesium.EllipsoidGraphics.ConstructorOptions;
-  wall?: Cesium.WallGraphics.ConstructorOptions;
-  rectangle?: Cesium.RectangleGraphics.ConstructorOptions;
-  corridor?: Cesium.CorridorGraphics.ConstructorOptions;
-  path?: Cesium.PathGraphics.ConstructorOptions;
 }
 
 // Billboard配置接口
-export interface BillboardOptions extends BaseOptions {
+export interface BillboardOptions extends BaseLayerOptions {
   position: Cesium.Cartesian3 | number[];
   image?: string | HTMLCanvasElement | HTMLImageElement;
   text?: string;
@@ -104,17 +193,7 @@ export interface BillboardOptions extends BaseOptions {
  * Cesium工具类 - 用于便于创建Cesium中各种数据
  * 参考mars3d LayerUtil设计
  */
-export class CesiumUtils {
-  private viewer: Cesium.Viewer;
-  private layers: Map<string, any> = new Map();
-  private primitives: Map<string, Cesium.Primitive> = new Map();
-  private entities: Map<string, Cesium.Entity> = new Map();
-
-  constructor(viewer: Cesium.Viewer) {
-    this.viewer = viewer;
-  }
-
-  // ========================= 工具方法 =========================
+export class LayerUtil {
 
   /**
    * 将经纬度数组转换为Cartesian3
@@ -135,12 +214,17 @@ export class CesiumUtils {
     if (color instanceof Cesium.Color) {
       return alpha !== undefined ? color.withAlpha(alpha) : color;
     }
-    
+
     if (typeof color === 'string') {
-      const cesiumColor = Cesium.Color.fromCssColorString(color);
-      return alpha !== undefined ? cesiumColor.withAlpha(alpha) : cesiumColor;
+      try {
+        const cesiumColor = Cesium.Color.fromCssColorString(color);
+        return alpha !== undefined ? cesiumColor.withAlpha(alpha) : cesiumColor;
+      } catch (error) {
+        // 如果解析失败，返回默认白色
+        return alpha !== undefined ? Cesium.Color.WHITE.withAlpha(alpha) : Cesium.Color.WHITE;
+      }
     }
-    
+
     return Cesium.Color.WHITE;
   }
 
@@ -156,61 +240,80 @@ export class CesiumUtils {
   /**
    * 创建图层
    */
-  async createLayer(options: LayerOptions): Promise<any> {
-    const id = options.id || CesiumUtils.generateId('layer');
-    
+  static async createLayer(options: LayerOptions): Promise<any> {
+    const id = options.id || LayerUtil.generateId('layer');
+
     let layer: any;
-    
+
     switch (options.type) {
       case 'geojson':
-        layer = await this.createGeoJsonLayer(options);
+        layer = await LayerUtil.createGeoJsonLayer(options as GeoJsonLayerOptions);
         break;
       case 'kml':
-        layer = await this.createKmlLayer(options);
+        layer = await LayerUtil.createKmlLayer(options as KmlLayerOptions);
         break;
       case 'czml':
-        layer = await this.createCzmlLayer(options);
+        layer = await LayerUtil.createCzmlLayer(options as CzmlLayerOptions);
         break;
       case 'wms':
-        layer = this.createWmsLayer(options);
+        layer = LayerUtil.createWmsLayer(options as WmsLayerOptions);
         break;
       case 'wmts':
-        layer = this.createWmtsLayer(options);
+        layer = LayerUtil.createWmtsLayer(options as WmtsLayerOptions);
         break;
       case 'xyz':
-        layer = this.createXyzLayer(options);
+        layer = LayerUtil.createXyzLayer(options as XyzLayerOptions);
         break;
       case 'bing':
-        layer = this.createBingLayer(options);
+        layer = LayerUtil.createBingLayer(options as BingLayerOptions);
         break;
       case 'arcgis':
-        layer = this.createArcGisLayer(options);
+        layer = LayerUtil.createArcGisLayer(options as ArcGisLayerOptions);
         break;
+      case '3dtiles':
+        layer = await LayerUtil.create3DTileset({
+          ...options,
+          url: options.url as any
+        } as TilesetOptions);
+        break;
+      case 'entity':
+        layer = LayerUtil.createEntity(options as EntityLayerOptions);
+        break;
+      case 'primitive':
+        const primitiveOptions = options as PrimitiveLayerOptions;
+        layer = LayerUtil.createPrimitive(primitiveOptions);
+        break;
+
       default:
-        throw new Error(`Unsupported layer type: ${options.type}`);
+        throw new Error(`Unsupported layer type: ${(options as any).type}`);
     }
 
     if (layer) {
       layer.name = options.name || id;
       layer.show = options.show !== false;
-      this.layers.set(id, layer);
     }
 
     return layer;
   }
 
   /**
+   * 批量创建图层
+   */
+  static async createLayers(options: LayerOptions[]): Promise<any[]> {
+    return Promise.all(options.map(option => LayerUtil.createLayer(option)));
+  }
+
+  /**
    * 创建GeoJSON图层
    */
-  private async createGeoJsonLayer(options: LayerOptions): Promise<Cesium.GeoJsonDataSource> {
+  static async createGeoJsonLayer(options: GeoJsonLayerOptions): Promise<Cesium.GeoJsonDataSource> {
     const dataSource = await Cesium.GeoJsonDataSource.load(options.url || options.data, {
-      clampToGround: options.clampToGround,
-      ...options
+      clampToGround: options.clampToGround
     });
 
     // 应用样式
     if (options.style) {
-      this.applyGeoJsonStyle(dataSource, options.style);
+      LayerUtil.applyGeoJsonStyle(dataSource, options.style);
     }
 
     // 添加聚类
@@ -220,36 +323,32 @@ export class CesiumUtils {
       dataSource.clustering.minimumClusterSize = 3;
     }
 
-    this.viewer.dataSources.add(dataSource);
     return dataSource;
   }
 
   /**
    * 创建KML图层
    */
-  private async createKmlLayer(options: LayerOptions): Promise<Cesium.KmlDataSource> {
+  static async createKmlLayer(options: KmlLayerOptions): Promise<Cesium.KmlDataSource> {
     const dataSource = await Cesium.KmlDataSource.load(options.url || options.data, {
-      clampToGround: options.clampToGround,
-      ...options
+      clampToGround: options.clampToGround
     });
 
-    this.viewer.dataSources.add(dataSource);
     return dataSource;
   }
 
   /**
    * 创建CZML图层
    */
-  private async createCzmlLayer(options: LayerOptions): Promise<Cesium.CzmlDataSource> {
+  static async createCzmlLayer(options: CzmlLayerOptions): Promise<Cesium.CzmlDataSource> {
     const dataSource = await Cesium.CzmlDataSource.load(options.url || options.data);
-    this.viewer.dataSources.add(dataSource);
     return dataSource;
   }
 
   /**
    * 创建WMS图层
    */
-  private createWmsLayer(options: LayerOptions): Cesium.ImageryLayer {
+  static createWmsLayer(options: WmsLayerOptions): Cesium.ImageryLayer {
     const { url, layers, parameters, ...rest } = options as any;
 
     const provider = new Cesium.WebMapServiceImageryProvider({
@@ -259,16 +358,13 @@ export class CesiumUtils {
       ...rest, // 其余参数原样透传
     } as any);
 
-    const layer: Cesium.ImageryLayer = (this.viewer.imageryLayers as any).addImageryProvider
-      ? (this.viewer.imageryLayers as any).addImageryProvider(provider)
-      : (this.viewer.imageryLayers.add as any)(provider);
-    return layer;
+    return new Cesium.ImageryLayer(provider);
   }
 
   /**
    * 创建WMTS图层
    */
-  private createWmtsLayer(options: LayerOptions): Cesium.ImageryLayer {
+  static createWmtsLayer(options: WmtsLayerOptions): Cesium.ImageryLayer {
     const { url, layer, style, format, tileMatrixSetID, ...rest } = options as any;
 
     const provider = new Cesium.WebMapTileServiceImageryProvider({
@@ -280,16 +376,13 @@ export class CesiumUtils {
       ...rest,
     } as any);
 
-    const imageryLayer: Cesium.ImageryLayer = (this.viewer.imageryLayers as any).addImageryProvider
-      ? (this.viewer.imageryLayers as any).addImageryProvider(provider)
-      : (this.viewer.imageryLayers.add as any)(provider);
-    return imageryLayer;
+    return new Cesium.ImageryLayer(provider);
   }
 
   /**
    * 创建XYZ图层
    */
-  private createXyzLayer(options: LayerOptions): Cesium.ImageryLayer {
+  static createXyzLayer(options: XyzLayerOptions): Cesium.ImageryLayer {
     const { url, ...rest } = options as any;
 
     const provider = new Cesium.UrlTemplateImageryProvider({
@@ -297,16 +390,14 @@ export class CesiumUtils {
       ...rest,
     } as any);
 
-    const imageryLayer: Cesium.ImageryLayer = (this.viewer.imageryLayers as any).addImageryProvider
-      ? (this.viewer.imageryLayers as any).addImageryProvider(provider)
-      : (this.viewer.imageryLayers.add as any)(provider);
+    const imageryLayer: Cesium.ImageryLayer = new Cesium.ImageryLayer(provider);
     return imageryLayer;
   }
 
   /**
    * 创建Bing图层
    */
-  private createBingLayer(options: LayerOptions): Cesium.ImageryLayer {
+  static createBingLayer(options: BingLayerOptions): Cesium.ImageryLayer {
     const { key, mapStyle, culture, url, ...rest } = options as any;
 
     const provider = new Cesium.BingMapsImageryProvider({
@@ -317,16 +408,14 @@ export class CesiumUtils {
       ...rest,
     } as any);
 
-    const imageryLayer: Cesium.ImageryLayer = (this.viewer.imageryLayers as any).addImageryProvider
-      ? (this.viewer.imageryLayers as any).addImageryProvider(provider)
-      : (this.viewer.imageryLayers.add as any)(provider);
+    const imageryLayer: Cesium.ImageryLayer = new Cesium.ImageryLayer(provider);
     return imageryLayer;
   }
 
   /**
    * 创建ArcGIS图层
    */
-  private createArcGisLayer(options: LayerOptions): Cesium.ImageryLayer {
+  static createArcGisLayer(options: ArcGisLayerOptions): Cesium.ImageryLayer {
     const { url, ...rest } = options as any;
 
     const provider = new Cesium.ArcGisMapServerImageryProvider({
@@ -334,18 +423,16 @@ export class CesiumUtils {
       ...rest,
     } as any);
 
-    const imageryLayer: Cesium.ImageryLayer = (this.viewer.imageryLayers as any).addImageryProvider
-      ? (this.viewer.imageryLayers as any).addImageryProvider(provider)
-      : (this.viewer.imageryLayers.add as any)(provider);
+    const imageryLayer: Cesium.ImageryLayer = new Cesium.ImageryLayer(provider);
     return imageryLayer;
   }
 
   /**
    * 应用GeoJSON样式
    */
-  private applyGeoJsonStyle(dataSource: Cesium.GeoJsonDataSource, style: any): void {
+  static applyGeoJsonStyle(dataSource: Cesium.GeoJsonDataSource, style: any): void {
     const entities = dataSource.entities.values;
-    
+
     for (const entity of entities) {
       if (entity.point && style.point) {
         Object.assign(entity.point, style.point);
@@ -370,53 +457,28 @@ export class CesiumUtils {
   /**
    * 创建3D瓦片集
    */
-  async create3DTileset(options: TilesetOptions): Promise<Cesium.Cesium3DTileset> {
+  static async create3DTileset(options: TilesetOptions): Promise<Cesium.Cesium3DTileset> {
+    // 使用options中的配置，如果没有则使用默认值
+    const tilesetOptions = options.options || {};
+
     const tileset = await Cesium.Cesium3DTileset.fromUrl(options.url, {
-      maximumScreenSpaceError: options.maximumScreenSpaceError || 16,
-      skipLevelOfDetail: options.skipLevelOfDetail !== false,
-      baseScreenSpaceError: options.baseScreenSpaceError || 1024,
-      skipScreenSpaceErrorFactor: options.skipScreenSpaceErrorFactor || 16,
-      skipLevels: options.skipLevels || 1,
-      immediatelyLoadDesiredLevelOfDetail: options.immediatelyLoadDesiredLevelOfDetail || false,
-      loadSiblings: options.loadSiblings || false,
-      cullWithChildrenBounds: options.cullWithChildrenBounds !== false,
-      enableCollision: options.enableCollision || false,
-      debugShowBoundingVolume: options.debugShowBoundingVolume || false,
-      debugShowContentBoundingVolume: options.debugShowContentBoundingVolume || false,
-      debugShowViewerRequestVolume: options.debugShowViewerRequestVolume || false,
-      shadows: options.shadows || Cesium.ShadowMode.ENABLED,
-      ...options
+      maximumScreenSpaceError: 16,
+      skipLevelOfDetail: true,
+      baseScreenSpaceError: 1024,
+      skipScreenSpaceErrorFactor: 16,
+      skipLevels: 1,
+      immediatelyLoadDesiredLevelOfDetail: false,
+      loadSiblings: false,
+      cullWithChildrenBounds: true,
+      enableCollision: false,
+      debugShowBoundingVolume: false,
+      debugShowContentBoundingVolume: false,
+      debugShowViewerRequestVolume: false,
+      shadows: Cesium.ShadowMode.ENABLED,
+      ...tilesetOptions
     });
 
-    // 设置模型矩阵（用于位置调整）
-    if (options.modelMatrix) {
-      tileset.modelMatrix = options.modelMatrix;
-    }
-
-    // 设置点云着色
-    if (options.pointCloudShading) {
-      tileset.pointCloudShading = options.pointCloudShading;
-    }
-
-    // 设置基于图像的光照
-    if (options.imageBasedLightingFactor) {
-      tileset.imageBasedLighting.imageBasedLightingFactor = options.imageBasedLightingFactor;
-    }
-
-    if (options.lightColor) {
-      tileset.imageBasedLighting.lightColor = options.lightColor;
-    }
-
-    if (options.luminanceAtZenith !== undefined) {
-      tileset.imageBasedLighting.luminanceAtZenith = options.luminanceAtZenith;
-    }
-
     tileset.show = options.show !== false;
-    
-    this.viewer.scene.primitives.add(tileset);
-    
-    const id = options.id || CesiumUtils.generateId('tileset');
-    this.layers.set(id, tileset);
 
     return tileset;
   }
@@ -424,22 +486,22 @@ export class CesiumUtils {
   /**
    * 调整3D瓦片集高度
    */
-  adjust3DTilesetHeight(tileset: Cesium.Cesium3DTileset, deltaHeight: number): void {
+  static adjust3DTilesetHeight(tileset: Cesium.Cesium3DTileset, deltaHeight: number): void {
     const boundingSphere = tileset.boundingSphere;
     const cartographic = Cesium.Cartographic.fromCartesian(boundingSphere.center);
-    
+
     const surface = Cesium.Cartesian3.fromRadians(
       cartographic.longitude,
       cartographic.latitude,
       cartographic.height
     );
-    
+
     const offset = Cesium.Cartesian3.fromRadians(
       cartographic.longitude,
       cartographic.latitude,
       cartographic.height + deltaHeight
     );
-    
+
     const translation = Cesium.Cartesian3.subtract(offset, surface, new Cesium.Cartesian3());
     tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
   }
@@ -449,41 +511,39 @@ export class CesiumUtils {
   /**
    * 创建Primitive
    */
-  createPrimitive(options: PrimitiveOptions): Cesium.Primitive | Cesium.GroundPrimitive {
-    const id = options.id || CesiumUtils.generateId('primitive');
+  static createPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive | Cesium.GroundPrimitive {
+    const id = options.id || LayerUtil.generateId('primitive');
     let primitive: Cesium.Primitive | Cesium.GroundPrimitive;
+    const primitiveType = options.primitiveType || 'polygon';
 
-    switch (options.type) {
+    switch (primitiveType) {
       case 'point':
-        primitive = this.createPointPrimitive(options);
+        primitive = LayerUtil.createPointPrimitive(options);
         break;
       case 'polyline':
-        primitive = this.createPolylinePrimitive(options);
+        primitive = LayerUtil.createPolylinePrimitive(options);
         break;
       case 'polygon':
-        primitive = this.createPolygonPrimitive(options);
+        primitive = LayerUtil.createPolygonPrimitive(options);
         break;
       case 'box':
-        primitive = this.createBoxPrimitive(options);
+        primitive = LayerUtil.createBoxPrimitive(options);
         break;
       case 'cylinder':
-        primitive = this.createCylinderPrimitive(options);
+        primitive = LayerUtil.createCylinderPrimitive(options);
         break;
       case 'ellipsoid':
       case 'sphere':
-        primitive = this.createEllipsoidPrimitive(options);
+        primitive = LayerUtil.createEllipsoidPrimitive(options);
         break;
       case 'wall':
-        primitive = this.createWallPrimitive(options);
+        primitive = LayerUtil.createWallPrimitive(options);
         break;
       default:
-        throw new Error(`Unsupported primitive type: ${options.type}`);
+        throw new Error(`Unsupported primitive type: ${primitiveType}`);
     }
 
     primitive.show = options.show !== false;
-    
-    this.viewer.scene.primitives.add(primitive);
-    this.primitives.set(id, primitive);
 
     return primitive;
   }
@@ -491,13 +551,13 @@ export class CesiumUtils {
   /**
    * 创建点Primitive
    */
-  private createPointPrimitive(options: PrimitiveOptions): Cesium.Primitive {
+  static createPointPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive {
     const positions = Array.isArray(options.positions) ? options.positions : [options.position!];
     const instances: Cesium.GeometryInstance[] = [];
 
     positions.forEach((pos, index) => {
-      const position = Array.isArray(pos) ? CesiumUtils.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3;
-      
+      const position = Array.isArray(pos) ? LayerUtil.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3;
+
       const geometry = new Cesium.SphereGeometry({
         radius: options.radius || 10000,
         vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
@@ -512,7 +572,7 @@ export class CesiumUtils {
         ),
         attributes: {
           color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-            CesiumUtils.parseColor(options.material as string || '#ffffff')
+            LayerUtil.parseColor(options.material as string || '#ffffff')
           )
         },
         id: `${options.id || 'point'}_${index}`
@@ -536,16 +596,15 @@ export class CesiumUtils {
   /**
    * 创建线Primitive
    */
-  private createPolylinePrimitive(options: PrimitiveOptions): Cesium.Primitive {
-    const positions = options.positions!.map(pos => 
-      Array.isArray(pos) ? CesiumUtils.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3
+  static createPolylinePrimitive(options: PrimitiveLayerOptions): Cesium.Primitive {
+    const positions = options.positions!.map(pos =>
+      Array.isArray(pos) ? LayerUtil.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3
     );
 
     const geometry = new Cesium.PolylineGeometry({
       positions,
       width: options.width || 1.0,
       vertexFormat: Cesium.PolylineColorAppearance.VERTEX_FORMAT,
-      followSurface: options.followSurface !== false,
       granularity: options.granularity || Cesium.Math.RADIANS_PER_DEGREE
     });
 
@@ -553,7 +612,7 @@ export class CesiumUtils {
       geometry,
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          CesiumUtils.parseColor(options.material as string || '#ffffff')
+          LayerUtil.parseColor(options.material as string || '#ffffff')
         )
       }
     });
@@ -572,9 +631,9 @@ export class CesiumUtils {
   /**
    * 创建面Primitive
    */
-  private createPolygonPrimitive(options: PrimitiveOptions): Cesium.Primitive | Cesium.GroundPrimitive {
-    const positions = options.positions!.map(pos => 
-      Array.isArray(pos) ? CesiumUtils.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3
+  static createPolygonPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive | Cesium.GroundPrimitive {
+    const positions = options.positions!.map(pos =>
+      Array.isArray(pos) ? LayerUtil.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3
     );
 
     const geometry = new Cesium.PolygonGeometry({
@@ -589,13 +648,13 @@ export class CesiumUtils {
       geometry,
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          CesiumUtils.parseColor(options.material as string || '#ffffff')
+          LayerUtil.parseColor(options.material as string || '#ffffff')
         )
       }
     });
 
     // 根据是否贴地选择不同的Primitive类型
-    const PrimitiveClass = options.height === 0 && !options.extrudedHeight ? 
+    const PrimitiveClass = options.height === 0 && !options.extrudedHeight ?
       Cesium.GroundPrimitive : Cesium.Primitive;
 
     return new PrimitiveClass({
@@ -614,12 +673,14 @@ export class CesiumUtils {
   /**
    * 创建盒子Primitive
    */
-  private createBoxPrimitive(options: PrimitiveOptions): Cesium.Primitive {
-    const position = Array.isArray(options.position) ? 
-      CesiumUtils.degreesToCartesian3(options.position as number[]) : options.position!;
+  static createBoxPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive {
+    const position = Array.isArray(options.position) ?
+      LayerUtil.degreesToCartesian3(options.position as number[]) : options.position!;
 
+    const dimensions = options.dimensions || new Cesium.Cartesian3(100000, 100000, 100000);
     const geometry = new Cesium.BoxGeometry({
-      dimensions: options.dimensions || new Cesium.Cartesian3(100000, 100000, 100000),
+      minimum: new Cesium.Cartesian3(-dimensions.x / 2, -dimensions.y / 2, -dimensions.z / 2),
+      maximum: new Cesium.Cartesian3(dimensions.x / 2, dimensions.y / 2, dimensions.z / 2),
       vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
     });
 
@@ -628,7 +689,7 @@ export class CesiumUtils {
       modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(position),
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          CesiumUtils.parseColor(options.material as string || '#ffffff')
+          LayerUtil.parseColor(options.material as string || '#ffffff')
         )
       }
     });
@@ -648,9 +709,9 @@ export class CesiumUtils {
   /**
    * 创建圆柱Primitive
    */
-  private createCylinderPrimitive(options: PrimitiveOptions): Cesium.Primitive {
-    const position = Array.isArray(options.position) ? 
-      CesiumUtils.degreesToCartesian3(options.position as number[]) : options.position!;
+  static createCylinderPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive {
+    const position = Array.isArray(options.position) ?
+      LayerUtil.degreesToCartesian3(options.position as number[]) : options.position!;
 
     const geometry = new Cesium.CylinderGeometry({
       length: options.length || 100000,
@@ -664,7 +725,7 @@ export class CesiumUtils {
       modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(position),
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          CesiumUtils.parseColor(options.material as string || '#ffffff')
+          LayerUtil.parseColor(options.material as string || '#ffffff')
         )
       }
     });
@@ -684,12 +745,12 @@ export class CesiumUtils {
   /**
    * 创建椭球/球体Primitive
    */
-  private createEllipsoidPrimitive(options: PrimitiveOptions): Cesium.Primitive {
-    const position = Array.isArray(options.position) ? 
-      CesiumUtils.degreesToCartesian3(options.position as number[]) : options.position!;
+  static createEllipsoidPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive {
+    const position = Array.isArray(options.position) ?
+      LayerUtil.degreesToCartesian3(options.position as number[]) : options.position!;
 
     const radii = options.radii || new Cesium.Cartesian3(50000, 50000, 50000);
-    
+
     const geometry = new Cesium.EllipsoidGeometry({
       radii,
       vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
@@ -700,7 +761,7 @@ export class CesiumUtils {
       modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(position),
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          CesiumUtils.parseColor(options.material as string || '#ffffff')
+          LayerUtil.parseColor(options.material as string || '#ffffff')
         )
       }
     });
@@ -720,9 +781,9 @@ export class CesiumUtils {
   /**
    * 创建墙体Primitive
    */
-  private createWallPrimitive(options: PrimitiveOptions): Cesium.Primitive {
-    const positions = options.positions!.map(pos => 
-      Array.isArray(pos) ? CesiumUtils.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3
+  static createWallPrimitive(options: PrimitiveLayerOptions): Cesium.Primitive {
+    const positions = options.positions!.map(pos =>
+      Array.isArray(pos) ? LayerUtil.degreesToCartesian3(pos as number[]) : pos as Cesium.Cartesian3
     );
 
     const geometry = new Cesium.WallGeometry({
@@ -737,7 +798,7 @@ export class CesiumUtils {
       geometry,
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          CesiumUtils.parseColor(options.material as string || '#ffffff')
+          LayerUtil.parseColor(options.material as string || '#ffffff')
         )
       }
     });
@@ -759,15 +820,15 @@ export class CesiumUtils {
   /**
    * 创建Entity
    */
-  createEntity(options: EntityOptions): Cesium.Entity {
-    const id = options.id || CesiumUtils.generateId('entity');
-    
+  static createEntity(options: EntityLayerOptions): Cesium.Entity {
+    const id = options.id || LayerUtil.generateId('entity');
+
     const entityOptions: Cesium.Entity.ConstructorOptions = {
       id,
       name: options.name,
       show: options.show !== false,
-      position: Array.isArray(options.position) ? 
-        CesiumUtils.degreesToCartesian3(options.position as number[]) : options.position,
+      position: Array.isArray(options.position) ?
+        LayerUtil.degreesToCartesian3(options.position as number[]) : options.position,
       orientation: options.orientation
     };
 
@@ -775,83 +836,83 @@ export class CesiumUtils {
     if (options.point) {
       entityOptions.point = new Cesium.PointGraphics(options.point);
     }
-    
+
     if (options.billboard) {
       entityOptions.billboard = new Cesium.BillboardGraphics(options.billboard);
     }
-    
+
     if (options.label) {
       entityOptions.label = new Cesium.LabelGraphics(options.label);
     }
-    
+
     if (options.model) {
       entityOptions.model = new Cesium.ModelGraphics(options.model);
     }
-    
+
     if (options.polyline) {
-      if (options.polyline.positions && Array.isArray(options.polyline.positions[0])) {
-        options.polyline.positions = (options.polyline.positions as number[][]).map(pos => 
-          CesiumUtils.degreesToCartesian3(pos)
+      const polylineOptions = { ...options.polyline };
+      if (polylineOptions.positions && Array.isArray((polylineOptions.positions as any)[0])) {
+        polylineOptions.positions = ((polylineOptions.positions as unknown) as number[][]).map(pos =>
+          LayerUtil.degreesToCartesian3(pos)
         );
       }
-      entityOptions.polyline = new Cesium.PolylineGraphics(options.polyline);
+      entityOptions.polyline = new Cesium.PolylineGraphics(polylineOptions);
     }
-    
+
     if (options.polygon) {
-      if (options.polygon.hierarchy && Array.isArray(options.polygon.hierarchy)) {
-        options.polygon.hierarchy = new Cesium.PolygonHierarchy(
-          (options.polygon.hierarchy as number[][]).map(pos => CesiumUtils.degreesToCartesian3(pos))
+      const polygonOptions = { ...options.polygon };
+      if (polygonOptions.hierarchy && Array.isArray(polygonOptions.hierarchy)) {
+        polygonOptions.hierarchy = new Cesium.PolygonHierarchy(
+          ((polygonOptions.hierarchy as unknown) as number[][]).map(pos => LayerUtil.degreesToCartesian3(pos))
         );
       }
-      entityOptions.polygon = new Cesium.PolygonGraphics(options.polygon);
+      entityOptions.polygon = new Cesium.PolygonGraphics(polygonOptions as any);
     }
-    
+
     if (options.ellipse) {
       entityOptions.ellipse = new Cesium.EllipseGraphics(options.ellipse);
     }
-    
+
     if (options.box) {
       entityOptions.box = new Cesium.BoxGraphics(options.box);
     }
-    
+
     if (options.cylinder) {
       entityOptions.cylinder = new Cesium.CylinderGraphics(options.cylinder);
     }
-    
+
     if (options.ellipsoid) {
       entityOptions.ellipsoid = new Cesium.EllipsoidGraphics(options.ellipsoid);
     }
-    
+
     if (options.wall) {
-      if (options.wall.positions && Array.isArray(options.wall.positions[0])) {
-        options.wall.positions = (options.wall.positions as number[][]).map(pos => 
-          CesiumUtils.degreesToCartesian3(pos)
+      const wallOptions = { ...options.wall };
+      if (wallOptions.positions && Array.isArray((wallOptions.positions as any)[0])) {
+        wallOptions.positions = ((wallOptions.positions as unknown) as number[][]).map(pos =>
+          LayerUtil.degreesToCartesian3(pos)
         );
       }
-      entityOptions.wall = new Cesium.WallGraphics(options.wall);
+      entityOptions.wall = new Cesium.WallGraphics(wallOptions);
     }
-    
+
     if (options.rectangle) {
       entityOptions.rectangle = new Cesium.RectangleGraphics(options.rectangle);
     }
-    
+
     if (options.corridor) {
-      if (options.corridor.positions && Array.isArray(options.corridor.positions[0])) {
-        options.corridor.positions = (options.corridor.positions as number[][]).map(pos => 
-          CesiumUtils.degreesToCartesian3(pos)
+      const corridorOptions = { ...options.corridor };
+      if (corridorOptions.positions && Array.isArray((corridorOptions.positions as any)[0])) {
+        corridorOptions.positions = ((corridorOptions.positions as unknown) as number[][]).map(pos =>
+          LayerUtil.degreesToCartesian3(pos)
         );
       }
-      entityOptions.corridor = new Cesium.CorridorGraphics(options.corridor);
+      entityOptions.corridor = new Cesium.CorridorGraphics(corridorOptions);
     }
-    
+
     if (options.path) {
       entityOptions.path = new Cesium.PathGraphics(options.path);
     }
-
-    const entity = this.viewer.entities.add(entityOptions);
-    this.entities.set(id, entity);
-
-    return entity;
+    return new Cesium.Entity(entityOptions);
   }
 
   // ========================= Billboard =========================
@@ -859,10 +920,10 @@ export class CesiumUtils {
   /**
    * 创建Billboard
    */
-  createBillboard(options: BillboardOptions): Cesium.Entity {
-    const id = options.id || CesiumUtils.generateId('billboard');
-    const position = Array.isArray(options.position) ? 
-      CesiumUtils.degreesToCartesian3(options.position as number[]) : options.position;
+  static createBillboard(options: BillboardOptions): Cesium.Entity {
+    const id = options.id || LayerUtil.generateId('billboard');
+    const position = Array.isArray(options.position) ?
+      LayerUtil.degreesToCartesian3(options.position as number[]) : options.position;
 
     const entityOptions: Cesium.Entity.ConstructorOptions = {
       id,
@@ -874,10 +935,10 @@ export class CesiumUtils {
     // 如果提供了图片，创建Billboard
     if (options.image) {
       entityOptions.billboard = {
-        image: options.image,
+        image: options.image as any,
         scale: options.scale || 1.0,
-        pixelOffset: options.pixelOffset,
-        eyeOffset: options.eyeOffset,
+        pixelOffset: options.pixelOffset as any,
+        eyeOffset: options.eyeOffset as any,
         horizontalOrigin: options.horizontalOrigin || Cesium.HorizontalOrigin.CENTER,
         verticalOrigin: options.verticalOrigin || Cesium.VerticalOrigin.BOTTOM,
         heightReference: options.heightReference || Cesium.HeightReference.NONE,
@@ -890,8 +951,8 @@ export class CesiumUtils {
       entityOptions.label = {
         text: options.text,
         font: options.font || '14pt sans-serif',
-        fillColor: CesiumUtils.parseColor(options.fillColor as string || '#ffffff'),
-        outlineColor: CesiumUtils.parseColor(options.outlineColor as string || '#000000'),
+        fillColor: LayerUtil.parseColor(options.fillColor as string || '#ffffff'),
+        outlineColor: LayerUtil.parseColor(options.outlineColor as string || '#000000'),
         outlineWidth: options.outlineWidth || 2,
         style: options.style || Cesium.LabelStyle.FILL_AND_OUTLINE,
         scale: options.scale || 1.0,
@@ -904,154 +965,25 @@ export class CesiumUtils {
       };
     }
 
-    const entity = this.viewer.entities.add(entityOptions);
-    this.entities.set(id, entity);
+    const entity = new Cesium.Entity(entityOptions);
 
     return entity;
   }
 
-  // ========================= 管理方法 =========================
+} // ← 结束 LayerUtil class
 
-  /**
-   * 根据ID获取图层
-   */
-  getLayer(id: string): any {
-    return this.layers.get(id);
-  }
+// ================================= 兼容性导出  =================================
 
-  /**
-   * 根据ID获取Primitive
-   */
-  getPrimitive(id: string): Cesium.Primitive | undefined {
-    return this.primitives.get(id);
-  }
+/**
+ * 为了与旧代码保持兼容，暴露 CesiumUtils 常量指向 LayerUtil 本身。
+ */
+export const CesiumUtils = LayerUtil
 
-  /**
-   * 根据ID获取Entity
-   */
-  getEntity(id: string): Cesium.Entity | undefined {
-    return this.entities.get(id);
-  }
-
-  /**
-   * 移除图层
-   */
-  removeLayer(id: string): boolean {
-    const layer = this.layers.get(id);
-    if (layer) {
-      if (layer instanceof Cesium.DataSource) {
-        this.viewer.dataSources.remove(layer);
-      } else if (layer instanceof Cesium.ImageryLayer) {
-        this.viewer.imageryLayers.remove(layer);
-      } else if (layer instanceof Cesium.Cesium3DTileset) {
-        this.viewer.scene.primitives.remove(layer);
-      }
-      this.layers.delete(id);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * 移除Primitive
-   */
-  removePrimitive(id: string): boolean {
-    const primitive = this.primitives.get(id);
-    if (primitive) {
-      this.viewer.scene.primitives.remove(primitive);
-      this.primitives.delete(id);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * 移除Entity
-   */
-  removeEntity(id: string): boolean {
-    const entity = this.entities.get(id);
-    if (entity) {
-      this.viewer.entities.remove(entity);
-      this.entities.delete(id);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * 清除所有数据
-   */
-  clear(): void {
-    // 清除所有图层
-    this.layers.forEach((layer, id) => {
-      this.removeLayer(id);
-    });
-
-    // 清除所有Primitive
-    this.primitives.forEach((primitive, id) => {
-      this.removePrimitive(id);
-    });
-
-    // 清除所有Entity
-    this.entities.forEach((entity, id) => {
-      this.removeEntity(id);
-    });
-  }
-
-  /**
-   * 设置图层显示状态
-   */
-  setLayerVisible(id: string, visible: boolean): void {
-    const layer = this.layers.get(id);
-    if (layer && 'show' in layer) {
-      layer.show = visible;
-    }
-  }
-
-  /**
-   * 飞行到指定对象
-   */
-  async flyTo(id: string): Promise<void> {
-    const layer = this.layers.get(id);
-    const primitive = this.primitives.get(id);
-    const entity = this.entities.get(id);
-
-    if (layer) {
-      await this.viewer.flyTo(layer);
-    } else if (primitive) {
-      await this.viewer.flyTo(primitive);
-    } else if (entity) {
-      await this.viewer.flyTo(entity);
-    }
-  }
-
-  /**
-   * 获取所有图层列表
-   */
-  getLayers(): Array<{id: string, name: string, type: string, visible: boolean}> {
-    const result: Array<{id: string, name: string, type: string, visible: boolean}> = [];
-    
-    this.layers.forEach((layer, id) => {
-      let type = 'unknown';
-      if (layer instanceof Cesium.GeoJsonDataSource) type = 'geojson';
-      else if (layer instanceof Cesium.KmlDataSource) type = 'kml';
-      else if (layer instanceof Cesium.CzmlDataSource) type = 'czml';
-      else if (layer instanceof Cesium.ImageryLayer) type = 'imagery';
-      else if (layer instanceof Cesium.Cesium3DTileset) type = '3dtiles';
-
-      result.push({
-        id,
-        name: layer.name || id,
-        type,
-        visible: layer.show !== false
-      });
-    });
-
-    return result;
-  }
+/**
+ * 创建并初始化 CesiumUtils（LayerUtil）。
+ */
+export function createCesiumUtils(viewer?: Cesium.Viewer) {
+  return LayerUtil
 }
 
-// 导出默认实例创建函数
-export function createCesiumUtils(viewer: Cesium.Viewer): CesiumUtils {
-  return new CesiumUtils(viewer);
-}
+

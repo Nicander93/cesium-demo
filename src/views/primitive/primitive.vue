@@ -135,20 +135,6 @@ onMounted(async () => {
     );
   });
 
-  // 修改拾取逻辑
-  const setupHoverEffect = () => {
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-    handler.setInputAction((event) => {
-      const picked = viewer.scene.pick(event.endPosition);
-      if (picked && picked.primitive === fillPrimitive) {
-        const color = picked.color;
-        const instanceId = Math.round(
-          Cesium.Color.hue(color) * 10000
-        );
-        console.log('Found instance ID:', instanceId);
-      }
-    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
-  };
 
   // 使用普通Primitive渲染边框
   const outlinePrimitive = new Cesium.Primitive({

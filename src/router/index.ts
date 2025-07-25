@@ -68,6 +68,13 @@ const routes: RouteRecordRaw[] = [
       icon: 'fas fa-toolbox',
     },
   },
+  {
+    path: '/diffusion-circle',
+    component: () => import('@/views/diffusion-circle/index.vue'),
+    meta: {
+      title: '扩散圆',
+    },
+  },
 ]
 
 export default createRouter({
