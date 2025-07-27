@@ -1,33 +1,9 @@
-<template>
-  <div id="cesiumContainer">
+# 扩散圆
 
-  </div>
-</template>
+- 核心是设置一个随时间变化的扩散半径（0~1）
 
-<script setup lang="ts">
-import * as Cesium from 'cesium';
-import { onMounted } from 'vue';
-
-onMounted(() => {
-  const viewer = new Cesium.Viewer('cesiumContainer');
-  viewer.resolutionScale = window.devicePixelRatio;
-
-  const instance = new Cesium.GeometryInstance({
-    geometry: new Cesium.EllipseGeometry({
-      center: Cesium.Cartesian3.fromDegrees(118, 23, 0),
-      semiMinorAxis: 500,
-      semiMajorAxis: 500,
-    }),
-  });
-
-  const appearance = new Cesium.MaterialAppearance({
-    material: new Cesium.Material({
-      fabric: {
-        uniforms: {
-          color: Cesium.Color.fromCssColorString('#00E8FF'),
-          time: 10
-        },
-        source: `czm_material czm_getMaterial(czm_materialInput materialInput)
+``` javascript
+`czm_material czm_getMaterial(czm_materialInput materialInput)
                        {
                            // 获取默认材质
                            czm_material material = czm_getDefaultMaterial(materialInput);
@@ -47,7 +23,7 @@ onMounted(() => {
                             * time控制扩散速度，数值越大扩散越快
                             */
                            float diffusionRadius = fract(czm_frameNumber * time / 1000.0);
-                           // 如果距离大于当前扩散半径，则透明
+                           // 如果距离大于当前扩散半径，则丢弃
                            if(distanceFromCenter > diffusionRadius * 0.5) {
                              discard; // 丢弃该像素，不进行渲染
                            }else{
@@ -56,20 +32,4 @@ onMounted(() => {
                            }
                            return material;
                        }`
-      }
-    })
-  })
-
- viewer.scene.primitives.add(
-    new Cesium.Primitive({
-      geometryInstances: instance,
-      appearance: appearance
-    })
-  );
-  viewer.camera.setView({
-    destination: Cesium.Cartesian3.fromDegrees(118, 23, 1000),
-  })
-})
-</script>
-
-<style scoped></style>
+```
