@@ -75,6 +75,20 @@ const routes: RouteRecordRaw[] = [
       title: '扩散圆',
     },
   },
+  {
+    path: '/gradient-box',
+    component: () => import('@/views/gradient-box/index.vue'),
+    meta: {
+      title: '渐变box',
+    },
+  },
+  {
+    path: '/shadertoy-simple-demo',
+    component: () => import('@/views/shadertoy-simple-demo/index.vue'),
+    meta: {
+      title: 'ShaderToy简单示例',
+    },
+  },
 ]
 
 export default createRouter({

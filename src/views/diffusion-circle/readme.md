@@ -2,6 +2,8 @@
 
 - 核心是设置一个随时间变化的扩散半径（0~1）
 
+![](./image.png)
+
 ``` javascript
 `czm_material czm_getMaterial(czm_materialInput materialInput)
                        {
