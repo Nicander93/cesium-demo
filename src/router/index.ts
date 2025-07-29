@@ -96,6 +96,13 @@ const routes: RouteRecordRaw[] = [
       title: 'ShaderToy流体水',
     },
   },
+  {
+    path: '/shadertoy-water-ripple',
+    component: () => import('@/views/shadertoy-water-ripple/index.vue'),
+    meta: {
+      title: 'ShaderToy水波纹',
+    }
+  }
 ]
 
 export default createRouter({

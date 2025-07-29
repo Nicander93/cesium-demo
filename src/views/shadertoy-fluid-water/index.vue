@@ -1,40 +1,34 @@
 <template>
-  <div id="CesiumContainer">
-
-  </div>
+  <div id="CesiumContainer" />
 </template>
 
 <script setup lang="ts">
-import * as Cesium from 'cesium'
-import { onMounted } from 'vue'
+import * as Cesium from "cesium";
+import { onMounted } from "vue";
 
 onMounted(() => {
-  const viewer = new Cesium.Viewer('CesiumContainer')
+  const viewer = new Cesium.Viewer("CesiumContainer");
   let geometry = Cesium.BoxGeometry.fromDimensions({
-    dimensions: new Cesium.Cartesian3(50.0, 50.0, 50.0)
-  })
-  let position = Cesium.Cartesian3.fromDegrees(120, 30, 500)
-  let modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position)
+    dimensions: new Cesium.Cartesian3(50.0, 50.0, 50.0),
+  });
+  let position = Cesium.Cartesian3.fromDegrees(120, 30, 500);
+  let modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position);
   let scaleMatrix = Cesium.Matrix4.fromScale(
     new Cesium.Cartesian3(200, 200, 200)
-  )
+  );
   modelMatrix = Cesium.Matrix4.multiply(
     modelMatrix,
     scaleMatrix,
     new Cesium.Matrix4()
-  )
+  );
   let r = Cesium.Matrix4.fromRotation(
     Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(90))
-  )
-  modelMatrix = Cesium.Matrix4.multiply(
-    modelMatrix,
-    r,
-    new Cesium.Matrix4()
-  )
+  );
+  modelMatrix = Cesium.Matrix4.multiply(modelMatrix, r, new Cesium.Matrix4());
   let instance = new Cesium.GeometryInstance({
     geometry: geometry,
-    modelMatrix: modelMatrix
-  })
+    modelMatrix: modelMatrix,
+  });
   let appearance = new Cesium.MaterialAppearance({
     translucent: false,
     fragmentShaderSource: `
@@ -375,23 +369,23 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
                 vDirection=p.xyz-vOrigin;
                 gl_Position=czm_modelViewProjection * p;
             }
-            `
-  })
+            `,
+  });
   let primitive = new Cesium.Primitive({
     geometryInstances: instance,
-    appearance: appearance
-  })
+    appearance: appearance,
+  });
 
-  viewer.scene.primitives.add(primitive)
+  viewer.scene.primitives.add(primitive);
   viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(120, 30, 2000),
     orientation: {
       heading: Cesium.Math.toRadians(0),
       pitch: Cesium.Math.toRadians(-30),
-      roll: 0.0
-    }
-  })
-})
+      roll: 0.0,
+    },
+  });
+});
 </script>
 
 <style scoped></style>
