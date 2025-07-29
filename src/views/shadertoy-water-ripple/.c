@@ -54,9 +54,11 @@ vec2 hash22(vec2 p)
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
     // 根据鼠标位置调整分辨率
+    // iMouse.x/iResolution.x 表示鼠标在窗口中的水平位置，范围是0到1
     // 鼠标位置越靠右，分辨率越高，波纹越密集
     float resolution = 10. * exp2(-3.*iMouse.x/iResolution.x);
-    // 将像素坐标转换为UV坐标，并应用分辨率缩放
+    // 将像素坐标转换为归一化后的UV坐标，并应用分辨率缩放
+    // 归一化后的UV坐标：X 坐标范围是 [0, width/height]，Y 坐标范围是 [0, 1]
     vec2 uv = fragCoord.xy / iResolution.y * resolution;
     // 计算当前像素所在的网格单元
     vec2 p0 = floor(uv);
