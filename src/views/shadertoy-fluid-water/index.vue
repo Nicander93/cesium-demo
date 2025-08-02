@@ -8,7 +8,9 @@ import { onMounted } from "vue";
 
 onMounted(() => {
   Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5OWQ2NGJkZS0yODlmLTRlZjItYjZhYy03Mjc5MmM2OWM0OTkiLCJpZCI6NDAyNDQsImlhdCI6MTY2ODIzODM1OX0.au0c5QRIKaUh_Crsz6sfDfdSj2ePoQyaRcXcoXdcqOw'
-  const viewer = new Cesium.Viewer("CesiumContainer");
+  const viewer = new Cesium.Viewer("CesiumContainer", {
+    scene3DOnly: true
+  });
   let geometry = Cesium.BoxGeometry.fromDimensions({
     dimensions: new Cesium.Cartesian3(50.0, 50.0, 50.0),
   });
@@ -342,6 +344,8 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
               vec4 color =trace_heightfield( vOrigin, rayDir ) ;
               if(color.a==0.)discard;
               out_FragColor =color ;
+              // 不是顶点着色器的问题
+              // out_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
               out_FragColor.a =1.;
           }
         `,
@@ -360,7 +364,7 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
             {
                 vec4 p=vec4(position3DHigh + position3DLow,1.);
                 v_positionEC = (czm_modelView * p).xyz;      // position in eye coordinates
-                v_normalEC = czm_normal * normal;// normal in eye coordinates
+                v_normalEC = czm_normal * normal; // normal in eye coordinates
                 vOrigin=czm_encodedCameraPositionMCHigh+czm_encodedCameraPositionMCLow;
                 vDirection=p.xyz-vOrigin;
                 gl_Position=czm_modelViewProjection * p;
@@ -370,6 +374,9 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
   let primitive = new Cesium.Primitive({
     geometryInstances: instance,
     appearance: appearance
+    // appearance: new Cesium.MaterialAppearance({
+    //   material: Cesium.Material.fromType('Color')
+    // })
   })
 
   viewer.scene.primitives.add(primitive)
