@@ -102,6 +102,13 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: 'ShaderToy水波纹',
     }
+  },
+  {
+    path: '/heatmapjs',
+    component: () => import('@/views/heatmapjs/index.vue'),
+    meta: {
+      title: '热力图',
+    }
   }
 ]
 
