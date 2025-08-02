@@ -7,6 +7,7 @@ import * as Cesium from "cesium";
 import { onMounted } from "vue";
 
 onMounted(() => {
+  Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5OWQ2NGJkZS0yODlmLTRlZjItYjZhYy03Mjc5MmM2OWM0OTkiLCJpZCI6NDAyNDQsImlhdCI6MTY2ODIzODM1OX0.au0c5QRIKaUh_Crsz6sfDfdSj2ePoQyaRcXcoXdcqOw'
   const viewer = new Cesium.Viewer("CesiumContainer");
   let geometry = Cesium.BoxGeometry.fromDimensions({
     dimensions: new Cesium.Cartesian3(50.0, 50.0, 50.0),
@@ -30,7 +31,7 @@ onMounted(() => {
     modelMatrix: modelMatrix,
   });
   let appearance = new Cesium.MaterialAppearance({
-    translucent: false,
+    translucent: true,
     fragmentShaderSource: `
           precision highp float;
           precision highp sampler3D;
@@ -338,15 +339,10 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
           void main(){
               iTime= czm_frameNumber /100.;
               vec3 rayDir = normalize( vDirection );
-              
-              // 转换坐标系统，将Cesium坐标映射到shader的坐标空间
-              vec3 ro = vOrigin * 0.001; // 缩小坐标
-              vec3 rd = rayDir;
-              
-              vec4 color = trace_heightfield(ro, rd);
+              vec4 color =trace_heightfield( vOrigin, rayDir ) ;
               if(color.a==0.)discard;
-              out_FragColor = color;
-              out_FragColor.a = 1.;
+              out_FragColor =color ;
+              out_FragColor.a =1.;
           }
         `,
     vertexShaderSource: `
@@ -369,14 +365,14 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
                 vDirection=p.xyz-vOrigin;
                 gl_Position=czm_modelViewProjection * p;
             }
-            `,
-  });
+            `
+  })
   let primitive = new Cesium.Primitive({
     geometryInstances: instance,
-    appearance: appearance,
-  });
+    appearance: appearance
+  })
 
-  viewer.scene.primitives.add(primitive);
+  viewer.scene.primitives.add(primitive)
   viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(120, 30, 2000),
     orientation: {
