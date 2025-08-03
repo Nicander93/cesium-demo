@@ -29,8 +29,10 @@ Zavie / Ctrl-Alt-Test
 float hash12(vec2 p)
 {
     // 将二维坐标转换为三维，并乘以缩放因子
+    // fract 函数将浮点数的小数部分返回
     vec3 p3  = fract(vec3(p.xyx) * HASHSCALE1);
     // 使用点积运算增加随机性
+    // dot 函数计算两个向量的点积
     p3 += dot(p3, p3.yzx + 19.19);
     // 返回0-1之间的随机浮点数
     return fract((p3.x + p3.y) * p3.z);

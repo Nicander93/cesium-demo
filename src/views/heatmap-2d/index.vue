@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 import * as Cesium from "cesium";
-import * as h337 from "heatmap.js";
+// import * as h337 from "@/libs/heatmap/heatmap.js";
 import { onMounted } from "vue";
 import heatmapData from "./heatmapData.js";
 
@@ -28,7 +28,7 @@ onMounted(() => {
   let canvasWidth = w * 500;
   let canvasHeight = h * 500;
   //将经纬度数据坐标转换到画布的坐标系上
-  let convertData: Array<{x: number, y: number, value: number}> = [];
+  let convertData: Array<{ x: number, y: number, value: number }> = [];
   heatmapData.forEach(data => {
     let x = (data.lng - xMin) / w * canvasWidth;
     let y = -(data.lat - yMax) / h * canvasHeight;
@@ -38,47 +38,30 @@ onMounted(() => {
       value: data.count
     })
   })
-  
+
   // 创建一个独立的容器，避免与 Cesium 的 Canvas 冲突
   let container = document.createElement('div')
   container.style.height = canvasHeight + 'px'
   container.style.width = canvasWidth + 'px'
-  container.style.position = 'absolute'
-  container.style.top = '0'
-  container.style.left = '0'
-  container.style.zIndex = '1000'
-  container.style.pointerEvents = 'none'
   document.body.append(container)
-  
-  try {
-    //创建热力图对象，添加更多配置选项
-    const heatmapInstance = h337.create({
-      container: container,
-      radius: 25, //给定半径
-      maxOpacity: 0.8,
-      minOpacity: 0,
-      blur: 0.75,
-      gradient: {
-        '.5': 'blue',
-        '.8': 'red',
-        '.95': 'white'
-      }
-    })
-    
-    // 使用 try-catch 包装 setData 调用
-    try {
-      heatmapInstance.setData({
-        data: convertData,
-        max: 100,
-        min: 0
-      })
-    } catch (error) {
-      console.error('热力图数据设置失败:', error)
-      // 如果热力图创建失败，可以尝试其他方式
-      console.log('尝试使用备用方法创建热力图...')
+
+  //创建热力图对象
+  const heatmapInstance = h337.create({
+    container: container,
+    radius: 25, //给定半径
+    maxOpacity: 0.8,
+    minOpacity: 0
+  })
+  heatmapInstance.setData({
+    data: convertData,
+    max: 100
+  })
+  let rect = new Cesium.Rectangle(Cesium.Math.toRadians(xMin), Cesium.Math.toRadians(yMin), Cesium.Math.toRadians(xMax), Cesium.Math.toRadians(yMax));
+  viewer.entities.add({
+    rectangle: {
+      coordinates: rect,
+      material: heatmapInstance._renderer.canvas
     }
-  } catch (error) {
-    console.error('热力图创建失败:', error)
-  }
+  })
 })
 </script>
