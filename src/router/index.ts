@@ -119,9 +119,18 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/globe-material',
-    component: () => import('@/views/globe-material/index.vue'),
+    component: () => import('@/views/globe-material/index1.vue'),
     meta: {
       title: '地球材质',
+    }
+  },
+  {
+    path: '/globe-material-local',
+    component: () => import('@/views/globe-material/index2.vue'),
+    meta: {
+      title: '局部地球材质',
+      description: '局部等高线与高程渲染组合效果',
+      icon: 'fas fa-mountain',
     }
   }
 ]
