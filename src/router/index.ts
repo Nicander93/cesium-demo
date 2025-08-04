@@ -104,7 +104,7 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/heatmapjs',
+    path: '/heatmap-2d',
     component: () => import('@/views/heatmap-2d/index.vue'),
     meta: {
       title: '热力图(2D)',
@@ -115,6 +115,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/heatmap-3d/index.vue'),
     meta: {
       title: '热力图(3D)',
+    }
+  },
+  {
+    path: '/globe-material',
+    component: () => import('@/views/globe-material/index.vue'),
+    meta: {
+      title: '地球材质',
     }
   }
 ]
