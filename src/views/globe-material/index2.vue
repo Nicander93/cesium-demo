@@ -4,40 +4,21 @@
       <div class="section">
         <h3>材质选择</h3>
         <div class="material-checkbox" v-for="material in materials" :key="material.value">
-          <input 
-            type="checkbox" 
-            :id="material.value" 
-            :value="material.value" 
-            v-model="material.checked"
-            @change="updateMaterial" 
-          />
+          <input type="checkbox" :id="material.value" :value="material.value" v-model="material.checked"
+            @change="updateMaterial" />
           <label :for="material.value">{{ material.name }}</label>
         </div>
       </div>
-      
+
       <div class="section" v-if="materials.find(m => m.value === 'contour')?.checked">
         <h3>等高线设置</h3>
         <div class="control-item">
           <label>间距: {{ contourSpacing }}m</label>
-          <input 
-            type="range" 
-            min="10" 
-            max="500" 
-            step="10" 
-            v-model="contourSpacing"
-            @input="updateContourSpacing"
-          />
+          <input type="range" min="10" max="500" step="10" v-model="contourSpacing" @input="updateContourSpacing" />
         </div>
         <div class="control-item">
           <label>宽度: {{ contourWidth }}px</label>
-          <input 
-            type="range" 
-            min="1" 
-            max="10" 
-            step="1" 
-            v-model="contourWidth"
-            @input="updateContourWidth"
-          />
+          <input type="range" min="1" max="10" step="1" v-model="contourWidth" @input="updateContourWidth" />
         </div>
         <div class="control-item">
           <button @click="changeContourColor">更换等高线颜色</button>
@@ -86,7 +67,7 @@ onMounted(() => {
       requestVertexNormals: true,
     }),
   })
-  
+
   // 设置相机位置到指定坐标
   viewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(108.65965453922512, 33.95476339380693, 10000),
@@ -94,7 +75,7 @@ onMounted(() => {
 
   // 计算局部区域
   setupLocalRegion()
-  
+
   // 初始化材质
   updateMaterial()
 })
@@ -103,16 +84,16 @@ onMounted(() => {
 const setupLocalRegion = () => {
   // 定义区域边界点坐标（经纬度）
   const positions = Cesium.Cartesian3.fromDegreesArray([
-    108.65965453922512, 33.95476339380693, 
-    108.65595162347408, 33.94407796652331, 
+    108.65965453922512, 33.95476339380693,
+    108.65595162347408, 33.94407796652331,
     108.67528801889657, 33.9386867822117,
     108.67875288821011, 33.952295612409095
   ])
-  
+
   // 建立局部坐标系
   const m = Cesium.Transforms.eastNorthUpToFixedFrame(positions[0])
   inverse = Cesium.Matrix4.inverse(m, new Cesium.Matrix4())
-  
+
   const localPositions: Cesium.Cartesian3[] = []
   positions.forEach((position) => {
     localPositions.push(
@@ -123,13 +104,13 @@ const setupLocalRegion = () => {
       )
     )
   })
-  
+
   // 计算矩形范围
   const boundingRectangle = Cesium.BoundingRectangle.fromPoints(
     localPositions,
     new Cesium.BoundingRectangle()
   )
-  
+
   rect = new Cesium.Cartesian4(
     boundingRectangle.x,
     boundingRectangle.y,
@@ -227,7 +208,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput)
 `
     }
   })
-  
+
   return contourMaterial
 }
 
@@ -235,7 +216,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput)
 const createCombinedMaterial = () => {
   const hasContour = materials.value.find(m => m.value === 'contour')?.checked
   const hasElevation = materials.value.find(m => m.value === 'elevation')?.checked
-  
+
   if (hasContour && hasElevation) {
     // 创建组合材质
     return new Cesium.Material({
@@ -255,53 +236,53 @@ const createCombinedMaterial = () => {
               m_3: new Cesium.Cartesian4(inverse[12], inverse[13], inverse[14], inverse[15])
             },
             source: `
-uniform vec4 color;
-uniform float spacing;
-uniform float width;
-uniform vec4 rect;
-uniform vec4 m_0;
-uniform vec4 m_1;
-uniform vec4 m_2;
-uniform vec4 m_3;
+                uniform vec4 color;
+                uniform float spacing;
+                uniform float width;
+                uniform vec4 rect;
+                uniform vec4 m_0;
+                uniform vec4 m_1;
+                uniform vec4 m_2;
+                uniform vec4 m_3;
 
-czm_material czm_getMaterial(czm_materialInput materialInput)
-{
-    czm_material material = czm_getDefaultMaterial(materialInput);
-    
-    float distanceToContour = mod(materialInput.height, spacing);
+                czm_material czm_getMaterial(czm_materialInput materialInput)
+                {
+                    czm_material material = czm_getDefaultMaterial(materialInput);
+                    
+                    float distanceToContour = mod(materialInput.height, spacing);
 
-    #if (__VERSION__ == 300 || defined(GL_OES_standard_derivatives))
-        float dxc = abs(dFdx(materialInput.height));
-        float dyc = abs(dFdy(materialInput.height));
-        float dF = max(dxc, dyc) * czm_pixelRatio * width;
-        float alpha = (distanceToContour < dF) ? 1.0 : 0.0;
-    #else
-        float alpha = (distanceToContour < (czm_pixelRatio * width)) ? 1.0 : 0.0;
-    #endif
+                    #if (__VERSION__ == 300 || defined(GL_OES_standard_derivatives))
+                        float dxc = abs(dFdx(materialInput.height));
+                        float dyc = abs(dFdy(materialInput.height));
+                        float dF = max(dxc, dyc) * czm_pixelRatio * width;
+                        float alpha = (distanceToContour < dF) ? 1.0 : 0.0;
+                    #else
+                        float alpha = (distanceToContour < (czm_pixelRatio * width)) ? 1.0 : 0.0;
+                    #endif
 
-    vec4 outColor = czm_gammaCorrect(vec4(color.rgb, alpha * color.a));
-    material.diffuse = outColor.rgb;
+                    vec4 outColor = czm_gammaCorrect(vec4(color.rgb, alpha * color.a));
+                    material.diffuse = outColor.rgb;
 
-    mat4 m = mat4(m_0[0],m_0[1],m_0[2],m_0[3],
-                   m_1[0],m_1[1],m_1[2],m_1[3],
-                   m_2[0],m_2[1],m_2[2],m_2[3],
-                   m_3[0],m_3[1],m_3[2],m_3[3]);
+                    mat4 m = mat4(m_0[0],m_0[1],m_0[2],m_0[3],
+                                  m_1[0],m_1[1],m_1[2],m_1[3],
+                                  m_2[0],m_2[1],m_2[2],m_2[3],
+                                  m_3[0],m_3[1],m_3[2],m_3[3]);
 
-    vec4 eyeCoordinate = vec4(-materialInput.positionToEyeEC, 1.0);
-    vec4 worldCoordinate4 = czm_inverseView * eyeCoordinate;
-    vec3 worldCoordinate = worldCoordinate4.xyz;
-    
-    vec4 local = m * vec4(worldCoordinate, 1.);
-    
-    material.alpha = 0.;
-    
-    if(local.x > rect.x && local.x < rect.z && local.y < rect.w && local.y > rect.y){
-        material.alpha = outColor.a;
-    }
-    
-    return material;
-}
-`
+                    vec4 eyeCoordinate = vec4(-materialInput.positionToEyeEC, 1.0);
+                    vec4 worldCoordinate4 = czm_inverseView * eyeCoordinate;
+                    vec3 worldCoordinate = worldCoordinate4.xyz;
+                    
+                    vec4 local = m * vec4(worldCoordinate, 1.);
+                    
+                    material.alpha = 0.;
+                    
+                    if(local.x > rect.x && local.x < rect.z && local.y < rect.w && local.y > rect.y){
+                        material.alpha = outColor.a;
+                    }
+                    
+                    return material;
+                }
+                `
           },
           elevationRampMaterial: {
             type: "ElevationRamp",
@@ -319,14 +300,14 @@ czm_material czm_getMaterial(czm_materialInput materialInput)
   } else if (hasElevation) {
     return Cesium.Material.fromType("ElevationRamp")
   }
-  
+
   return undefined
 }
 
 // 更新材质
 const updateMaterial = () => {
   const material = createCombinedMaterial()
-  
+
   if (material) {
     // 如果有高程渲染，设置相关参数
     const hasElevation = materials.value.find(m => m.value === 'elevation')?.checked
@@ -344,7 +325,7 @@ const updateMaterial = () => {
         (material.uniforms as any).image = getColorRamp()
       }
     }
-    
+
     currentMaterial = material
     viewer.scene.globe.material = material
   } else {
