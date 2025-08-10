@@ -1,0 +1,44 @@
+<template>
+  <div id="CesiumContainer">
+    <div class="draw-toolbar">
+      <button class="draw-btn" @click="drawUtil?.changeDrawMode('point')">绘制点</button>
+      <button class="draw-btn">绘制线</button>
+      <button class="draw-btn">绘制面</button>
+      <button class="draw-btn" @click="drawUtil?.clear()">清除</button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import * as Cesium from 'cesium'
+import { onMounted } from 'vue';
+import { DrawUtil } from './drawUtil';
+
+let drawUtil: DrawUtil | undefined;
+onMounted(() => {
+  const viewer = new Cesium.Viewer('CesiumContainer')
+  viewer.scene.globe.depthTestAgainstTerrain = true
+  Cesium.createWorldTerrainAsync().then(terrainProvider => {
+    viewer.terrainProvider = terrainProvider
+  })
+  drawUtil = new DrawUtil(viewer)
+  drawUtil.changeDrawMode('point')
+})
+
+</script>
+
+<style scoped>
+.draw-toolbar {
+  position: absolute;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: aliceblue;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100px;
+  top: 40px;
+  right: 10px;
+  z-index: 1000;
+}
+</style>

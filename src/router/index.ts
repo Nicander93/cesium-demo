@@ -145,6 +145,13 @@ const routes: RouteRecordRaw[] = [
       description: "倾斜局部压平",
     },
   },
+  {
+    path: "/draw-util ",
+    component: () => import("@/views/draw-util/index.vue"),
+    meta: {
+      title: "绘制工具",
+    },
+  }
 ];
 
 export default createRouter({
