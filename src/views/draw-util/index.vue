@@ -2,7 +2,7 @@
   <div id="CesiumContainer">
     <div class="draw-toolbar">
       <button class="draw-btn" @click="drawUtil?.changeDrawMode('point')">绘制点</button>
-      <button class="draw-btn">绘制线</button>
+      <button class="draw-btn" @click="drawUtil?.changeDrawMode('polyline')">绘制线</button>
       <button class="draw-btn">绘制面</button>
       <button class="draw-btn" @click="drawUtil?.clear()">清除</button>
     </div>
@@ -17,12 +17,13 @@ import { DrawUtil } from './drawUtil';
 let drawUtil: DrawUtil | undefined;
 onMounted(() => {
   const viewer = new Cesium.Viewer('CesiumContainer')
+  viewer.resolutionScale = window.devicePixelRatio
   viewer.scene.globe.depthTestAgainstTerrain = true
+  viewer.scene.postProcessStages.fxaa.enabled = true
   Cesium.createWorldTerrainAsync().then(terrainProvider => {
     viewer.terrainProvider = terrainProvider
   })
   drawUtil = new DrawUtil(viewer)
-  drawUtil.changeDrawMode('point')
 })
 
 </script>

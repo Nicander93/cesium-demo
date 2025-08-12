@@ -159,53 +159,53 @@ const createLocalContourMaterial = () => {
         m_3: new Cesium.Cartesian4(inverse[12], inverse[13], inverse[14], inverse[15])
       },
       source: `
-uniform vec4 color;
-uniform float spacing;
-uniform float width;
-uniform vec4 rect;
-uniform vec4 m_0;
-uniform vec4 m_1;
-uniform vec4 m_2;
-uniform vec4 m_3;
+          uniform vec4 color;
+          uniform float spacing;
+          uniform float width;
+          uniform vec4 rect;
+          uniform vec4 m_0;
+          uniform vec4 m_1;
+          uniform vec4 m_2;
+          uniform vec4 m_3;
 
-czm_material czm_getMaterial(czm_materialInput materialInput)
-{
-    czm_material material = czm_getDefaultMaterial(materialInput);
-    
-    float distanceToContour = mod(materialInput.height, spacing);
+          czm_material czm_getMaterial(czm_materialInput materialInput)
+          {
+              czm_material material = czm_getDefaultMaterial(materialInput);
+              
+              float distanceToContour = mod(materialInput.height, spacing);
 
-    #if (__VERSION__ == 300 || defined(GL_OES_standard_derivatives))
-        float dxc = abs(dFdx(materialInput.height));
-        float dyc = abs(dFdy(materialInput.height));
-        float dF = max(dxc, dyc) * czm_pixelRatio * width;
-        float alpha = (distanceToContour < dF) ? 1.0 : 0.0;
-    #else
-        float alpha = (distanceToContour < (czm_pixelRatio * width)) ? 1.0 : 0.0;
-    #endif
+              #if (__VERSION__ == 300 || defined(GL_OES_standard_derivatives))
+                  float dxc = abs(dFdx(materialInput.height));
+                  float dyc = abs(dFdy(materialInput.height));
+                  float dF = max(dxc, dyc) * czm_pixelRatio * width;
+                  float alpha = (distanceToContour < dF) ? 1.0 : 0.0;
+              #else
+                  float alpha = (distanceToContour < (czm_pixelRatio * width)) ? 1.0 : 0.0;
+              #endif
 
-    vec4 outColor = czm_gammaCorrect(vec4(color.rgb, alpha * color.a));
-    material.diffuse = outColor.rgb;
+              vec4 outColor = czm_gammaCorrect(vec4(color.rgb, alpha * color.a));
+              material.diffuse = outColor.rgb;
 
-    mat4 m = mat4(m_0[0],m_0[1],m_0[2],m_0[3],
-                   m_1[0],m_1[1],m_1[2],m_1[3],
-                   m_2[0],m_2[1],m_2[2],m_2[3],
-                   m_3[0],m_3[1],m_3[2],m_3[3]);
+              mat4 m = mat4(m_0[0],m_0[1],m_0[2],m_0[3],
+                            m_1[0],m_1[1],m_1[2],m_1[3],
+                            m_2[0],m_2[1],m_2[2],m_2[3],
+                            m_3[0],m_3[1],m_3[2],m_3[3]);
 
-    vec4 eyeCoordinate = vec4(-materialInput.positionToEyeEC, 1.0);
-    vec4 worldCoordinate4 = czm_inverseView * eyeCoordinate;
-    vec3 worldCoordinate = worldCoordinate4.xyz;
-    
-    vec4 local = m * vec4(worldCoordinate, 1.);
-    
-    material.alpha = 0.;
-    
-    if(local.x > rect.x && local.x < rect.z && local.y < rect.w && local.y > rect.y){
-        material.alpha = outColor.a;
-    }
-    
-    return material;
-}
-`
+              vec4 eyeCoordinate = vec4(-materialInput.positionToEyeEC, 1.0);
+              vec4 worldCoordinate4 = czm_inverseView * eyeCoordinate;
+              vec3 worldCoordinate = worldCoordinate4.xyz;
+              
+              vec4 local = m * vec4(worldCoordinate, 1.);
+              
+              material.alpha = 0.;
+              
+              if(local.x > rect.x && local.x < rect.z && local.y < rect.w && local.y > rect.y){
+                  material.alpha = outColor.a;
+              }
+              
+              return material;
+          }
+          `
     }
   })
 

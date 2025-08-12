@@ -81,7 +81,6 @@ onMounted(() => {
             image: heatmapInstance._renderer.canvas
           }
         },
-
       }),
       vertexShaderSource: `
         in vec3 position3DHigh;

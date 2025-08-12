@@ -1,39 +1,32 @@
 import type { Viewer } from "cesium";
-import * as Cesium from 'cesium';
+import * as Cesium from "cesium";
 
-type DrawMode = 'defaullt' | 'point'
+type DrawMode = "default" | "point" | "polyline";
 /**
  * 实现绘制Util
  * 绘制模式：点、线、面
  */
 export class DrawUtil {
-  private _mode: DrawMode = 'defaullt';
+  private _mode: DrawMode = "default";
   // TODO: 这里要解决变量初始化问题
-  private _drawPrimitives: Cesium.PrimitiveCollection;
-  private _pointPrimitives: Cesium.PointPrimitiveCollection;
-  private _polylinePrimitives: Cesium.PrimitiveCollection;
-  private _previewPoint: Cesium.PointPrimitive | null = null; // 预览点
+  private _drawEntitys: Cesium.Entity[] | null = null;
+  private _currentEntity: Cesium.Entity | null = null;
+  private _polylinePositions: Cesium.Cartesian3[] = [];
 
   private _viewer: Viewer;
 
   constructor(viewer: Viewer) {
     this._viewer = viewer;
-    this.initilizePrimitive()
-    this.initilizeEvent()
+    this.initilizePrimitive();
+    this.initilizeEvent();
   }
 
-  public changeDrawMode(mode: DrawMode = 'point') {
-    this._mode = mode
+  public changeDrawMode(mode: DrawMode = "point") {
+    this._mode = mode;
   }
 
   private initilizePrimitive() {
-    this._drawPrimitives = new Cesium.PrimitiveCollection();
-    this._pointPrimitives = new Cesium.PointPrimitiveCollection();
-    this._polylinePrimitives = new Cesium.PrimitiveCollection();
-
-    this._drawPrimitives.add(this._pointPrimitives);
-    this._drawPrimitives.add(this._polylinePrimitives);
-    this._viewer.scene.primitives.add(this._drawPrimitives);
+    this._drawEntitys = [];
   }
 
   private initilizeEvent() {
@@ -45,57 +38,70 @@ export class DrawUtil {
     this._viewer.screenSpaceEventHandler.setInputAction(
       this.handleMouseMoveEvent.bind(this),
       Cesium.ScreenSpaceEventType.MOUSE_MOVE
-    )
+    );
   }
 
-  public drawPolyline(position: Cesium.Cartesian3) {
-    if (position) {
-      this.
+  public drawPolyline(
+    position: Cesium.Cartesian3,
+    state: "append" | "complete" = "append"
+  ) {
+    if (!this._currentEntity) {
+      this._currentEntity = this._viewer.entities.add({
+        polyline: {
+          positions: new Cesium.CallbackProperty(() => {
+            return this._polylinePositions;
+          }, false),
+          width: 5,
+          clampToGround: true,
+          material: new Cesium.PolylineOutlineMaterialProperty({
+            color: Cesium.Color.ORANGE,
+            outlineWidth: 2,
+            outlineColor: Cesium.Color.BLACK,
+          }),
+        },
+      });
+    } else {
+      this._polylinePositions.push(position);
+      this._polylinePositions.push(position);
     }
-
+    switch (state) {
+      case "append":
+      // this._currentEntity.polyline;
+    }
   }
 
   public drawPoint(position: Cesium.Cartesian3) {
     if (position) {
-      this._pointPrimitives.add({
+      const entity = this._viewer.entities.add({
         position,
-        pixelSize: 5,
-        color: Cesium.Color.RED,
-        disableDepthTestDistance: 5000,
-        outlineColor: Cesium.Color.YELLOW,
-        outlineWidth: 2
+        point: {
+          pixelSize: 5,
+          color: Cesium.Color.RED,
+          disableDepthTestDistance: 50000,
+          outlineColor: Cesium.Color.YELLOW,
+          outlineWidth: 2,
+        },
       });
-      this.addActivePrimitive(position)
-    }
-  }
-
-  /**
-   * 添加当前激活的Primitve，用于当鼠标移动时，绘制要素也跟着移动
-   */
-  public addActivePrimitive(position: Cesium.Cartesian3) {
-    switch (this._mode) {
-      case 'point':
-        this._pointPrimitives.add({
-          position,
-          color: Cesium.Color.YELLOW
-        });
-        break;
-      default:
-        break
+      this._drawEntitys?.push(entity);
     }
   }
 
   /**
    * 处理点击函数
-   * @param event 
+   * @param event
    */
-  public handleDrawEvent(event: Cesium.ScreenSpaceEventHandler.PositionedEvent) {
-    const position = this.pickPositon(event.position)
+  public handleDrawEvent(
+    event: Cesium.ScreenSpaceEventHandler.PositionedEvent
+  ) {
+    const position = this.pickPositon(event.position);
 
     if (Cesium.defined(position)) {
       switch (this._mode) {
-        case 'point':
-          this.drawPoint(position)
+        case "point":
+          this.drawPoint(position);
+          break;
+        case "polyline":
+          this.drawPolyline(position);
           break;
         default:
           break;
@@ -106,39 +112,43 @@ export class DrawUtil {
   /**
    * 根据屏幕坐标，获取场景中点击的位置
    * @param windowPosition 屏幕坐标
-   * @returns 
+   * @returns
    */
   private pickPositon(windowPosition: Cesium.Cartesian2) {
     let position: Cesium.Cartesian3 | undefined;
 
     if (this._viewer.scene.pickPositionSupported) {
-      position = this._viewer.scene.pickPosition(windowPosition)
+      position = this._viewer.scene.pickPosition(windowPosition);
     }
     if (!Cesium.defined(position)) {
-      const pickObject = this._viewer.scene.pick(windowPosition)
+      const pickObject = this._viewer.scene.pick(windowPosition);
       if (Cesium.defined(pickObject)) {
-        position = pickObject.position
+        position = pickObject.position;
       }
     }
     if (!Cesium.defined(position)) {
       const ray = this._viewer.camera.getPickRay(windowPosition);
       position = this._viewer.scene.globe.pick(ray!, this._viewer.scene);
     }
-    return position
+    return position;
   }
 
-
-  public handleMouseMoveEvent(event: Cesium.ScreenSpaceEventHandler.MotionEvent) {
-    const position = this.pickPositon(event.endPosition)
-    if (!position) return
+  public handleMouseMoveEvent(
+    event: Cesium.ScreenSpaceEventHandler.MotionEvent
+  ) {
+    const position = this.pickPositon(event.endPosition);
+    if (!position) return;
 
     switch (this._mode) {
-      case 'point':
+      case "point":
         // 更新预览点位置
         this.updatePreviewPoint(position);
-        break
+        break;
+      case "polyline":
+        this.updatePreviewPolyline(position);
+        break;
       default:
-        break
+        break;
     }
   }
 
@@ -146,28 +156,38 @@ export class DrawUtil {
    * 更新预览点位置
    */
   private updatePreviewPoint(position: Cesium.Cartesian3) {
-    if (!this._previewPoint) {
+    if (!this._currentEntity) {
       // 创建预览点
-      this._previewPoint = this._pointPrimitives.add({
+      this._currentEntity = this._viewer.entities.add({
         position,
-        pixelSize: 8,
-        color: Cesium.Color.CYAN,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2
+        point: {
+          pixelSize: 8,
+          color: Cesium.Color.CYAN,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
       });
     } else {
       // 更新预览点位置
-      this._previewPoint.position = position;
+      if (this._currentEntity.position) {
+        (this._currentEntity.position as any).setValue(position);
+      }
+    }
+  }
+
+  private updatePreviewPolyline(position: Cesium.Cartesian3) {
+    if (this._currentEntity) {
+      this._polylinePositions[this._polylinePositions.length - 1] = position;
     }
   }
 
   public clear() {
-    this._drawPrimitives.removeAll();
-    this._drawPrimitives && this._viewer.scene.primitives.remove(this._drawPrimitives);
-    this._previewPoint = null;
-    this.changeDrawMode('defaullt')
-    this.initilizePrimitive()
-  }
+    this._viewer.entities.removeAll();
+    this._currentEntity = null;
+    this._polylinePositions = [];
 
+    this.changeDrawMode("default");
+    this.initilizePrimitive();
+  }
 }
