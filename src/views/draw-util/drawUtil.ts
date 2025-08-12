@@ -1,5 +1,6 @@
 import type { Viewer } from "cesium";
 import * as Cesium from "cesium";
+import { useTooltip } from "./tooltip";
 
 type DrawMode = "default" | "point" | "polyline";
 /**
@@ -10,8 +11,11 @@ export class DrawUtil {
   private _mode: DrawMode = "default";
   // TODO: 这里要解决变量初始化问题
   private _drawEntitys: Cesium.Entity[] | null = null;
+  // 用于指代当前绘制的entity
   private _currentEntity: Cesium.Entity | null = null;
+  private _previewEntity: Cesium.Entity | null = null;
   private _polylinePositions: Cesium.Cartesian3[] = [];
+  private ToolTip = useTooltip();
 
   private _viewer: Viewer;
 
@@ -45,6 +49,9 @@ export class DrawUtil {
     position: Cesium.Cartesian3,
     state: "append" | "complete" = "append"
   ) {
+    // 这里添加两次是因为第二次添加的点作为预览点（鼠标当前位置）
+    this._polylinePositions.push(position);
+    this._polylinePositions.push(position);
     if (!this._currentEntity) {
       this._currentEntity = this._viewer.entities.add({
         polyline: {
@@ -60,9 +67,6 @@ export class DrawUtil {
           }),
         },
       });
-    } else {
-      this._polylinePositions.push(position);
-      this._polylinePositions.push(position);
     }
     switch (state) {
       case "append":
@@ -94,7 +98,6 @@ export class DrawUtil {
     event: Cesium.ScreenSpaceEventHandler.PositionedEvent
   ) {
     const position = this.pickPositon(event.position);
-
     if (Cesium.defined(position)) {
       switch (this._mode) {
         case "point":
@@ -138,10 +141,15 @@ export class DrawUtil {
   ) {
     const position = this.pickPositon(event.endPosition);
     if (!position) return;
-
+    const { x, y } = Cesium.SceneTransforms.wgs84ToWindowCoordinates(
+      this._viewer.scene,
+      position!
+    );
+    this.ToolTip.updateTooltipPosition(x, y);
     switch (this._mode) {
       case "point":
         // 更新预览点位置
+      
         this.updatePreviewPoint(position);
         break;
       case "polyline":
@@ -156,9 +164,9 @@ export class DrawUtil {
    * 更新预览点位置
    */
   private updatePreviewPoint(position: Cesium.Cartesian3) {
-    if (!this._currentEntity) {
+    if (!this._previewEntity) {
       // 创建预览点
-      this._currentEntity = this._viewer.entities.add({
+      this._previewEntity = this._viewer.entities.add({
         position,
         point: {
           pixelSize: 8,
@@ -170,13 +178,31 @@ export class DrawUtil {
       });
     } else {
       // 更新预览点位置
-      if (this._currentEntity.position) {
-        (this._currentEntity.position as any).setValue(position);
+      if (this._previewEntity.position) {
+        (this._previewEntity.position as any).setValue(position);
       }
     }
   }
 
   private updatePreviewPolyline(position: Cesium.Cartesian3) {
+    if (!this._previewEntity) {
+      // 创建预览点
+      this._previewEntity = this._viewer.entities.add({
+        position,
+        point: {
+          pixelSize: 8,
+          color: Cesium.Color.CYAN,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+      });
+    } else {
+      // 更新预览点位置
+      if (this._previewEntity.position) {
+        (this._previewEntity.position as any).setValue(position);
+      }
+    }
     if (this._currentEntity) {
       this._polylinePositions[this._polylinePositions.length - 1] = position;
     }
@@ -185,6 +211,7 @@ export class DrawUtil {
   public clear() {
     this._viewer.entities.removeAll();
     this._currentEntity = null;
+    this._previewEntity = null;
     this._polylinePositions = [];
 
     this.changeDrawMode("default");
