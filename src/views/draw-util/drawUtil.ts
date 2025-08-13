@@ -10,11 +10,12 @@ type DrawMode = "default" | "point" | "polyline" | "polygon";
 export class DrawUtil {
   private _mode: DrawMode = "default";
   // TODO: 这里要解决变量初始化问题
+  // 存储绘制的所有entity
   private _drawEntitys: Cesium.Entity[] | null = null;
   // 用于指代当前绘制的entity
   private _currentEntity: Cesium.Entity | null = null;
+  private _currentPositions: Cesium.Cartesian3[] = [];
   private _previewEntity: Cesium.Entity | null = null;
-  private _polylinePositions: Cesium.Cartesian3[] = [];
   private ToolTip = useTooltip();
 
   private _viewer: Viewer;
@@ -51,128 +52,76 @@ export class DrawUtil {
 
   public drawPoint(position: Cesium.Cartesian3) {
     if (position) {
-      const entity = this._viewer.entities.add({
-        position,
-        point: {
-          pixelSize: 5,
-          color: Cesium.Color.RED,
-          disableDepthTestDistance: 50000,
-          outlineColor: Cesium.Color.YELLOW,
-          outlineWidth: 2,
-        },
-      });
+      const entity = this._viewer.entities.add(this.createPoint(position));
       this._drawEntitys?.push(entity);
     }
   }
 
-  public drawPolyline(
-    position: Cesium.Cartesian3,
-    state: "append" | "complete" = "append"
-  ) {
+  public drawPolyline(position: Cesium.Cartesian3) {
     // 这里添加两次是因为第二次添加的点作为预览点（鼠标当前位置）
-    this._polylinePositions.push(position);
-    this._polylinePositions.push(position);
+    this._currentPositions.push(position);
+    this._currentPositions.push(position);
+
     if (!this._currentEntity) {
-      this._currentEntity = this._viewer.entities.add({
-        polyline: {
-          positions: new Cesium.CallbackProperty(() => {
-            return this._polylinePositions;
-          }, false),
-          width: 5,
-          clampToGround: true,
-          material: new Cesium.PolylineOutlineMaterialProperty({
-            color: Cesium.Color.ORANGE,
-            outlineWidth: 2,
-            outlineColor: Cesium.Color.BLACK,
-          }),
-        },
-      });
-    }
-    switch (state) {
-      case "append":
-      // this._currentEntity.polyline;
+      this._currentEntity = this._viewer.entities.add(
+        this.createPolyline(
+          new Cesium.CallbackProperty(() => {
+            return this._currentPositions;
+          }, false)
+        )
+      );
     }
   }
 
   public drawPolygon(position: Cesium.Cartesian3) {
     // 这里添加两次是因为第二次添加的点作为预览点（鼠标当前位置）
-    this._polylinePositions.push(position);
-    this._polylinePositions.push(position);
+    this._currentPositions.push(position);
+    this._currentPositions.push(position);
 
     if (!this._currentEntity) {
-      this._currentEntity = this._viewer.entities.add({
-        polygon: {
-          hierarchy: new Cesium.CallbackProperty(() => {
-            return new Cesium.PolygonHierarchy(this._polylinePositions);
-          }, false),
-          // perPositionHeight: true,
-          // heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          material: Cesium.Color.RED,
-          // 解决某些角度看不到的问题
-          classificationType: Cesium.ClassificationType.BOTH,
-          // 双面渲染
-          perPositionHeight: false,
-          // 设置高度参考
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        },
-      });
+      this._currentEntity = this._viewer.entities.add(
+        this.createPolygon(
+          new Cesium.CallbackProperty(() => {
+            return new Cesium.PolygonHierarchy(this._currentPositions);
+          }, false)
+        )
+      );
     }
   }
 
   public completeDraw() {
     switch (this._mode) {
       case "point":
-        this._viewer.entities.remove(this._previewEntity!);
-        this._currentEntity = null;
-        this._previewEntity = null;
+        // 
         break;
       case "polyline":
         if (this._currentEntity) {
-          const positions = [...this._polylinePositions];
-          const newEntity = this._viewer.entities.add({
-            polyline: {
-              positions: positions,
-              width: 5,
-              clampToGround: true,
-              material: new Cesium.PolylineOutlineMaterialProperty({
-                color: Cesium.Color.ORANGE,
-                outlineWidth: 2,
-                outlineColor: Cesium.Color.BLACK,
-              }),
-            },
-          });
+          const positions = [...this._currentPositions];
+          const newEntity = this._viewer.entities.add(
+            this.createPolyline(positions)
+          );
           this._drawEntitys?.push(newEntity);
           this._viewer.entities.remove(this._currentEntity);
         }
-        this._currentEntity = null;
-        this._previewEntity = null;
-        this._polylinePositions = [];
+
         break;
       case "polygon":
         if (this._currentEntity) {
-          const positions = [...this._polylinePositions];
-          const newEntity = this._viewer.entities.add({
-            polygon: {
-              hierarchy: new Cesium.PolygonHierarchy(positions),
-              // 解决某些角度看不到的问题
-              classificationType: Cesium.ClassificationType.BOTH,
-              // 双面渲染
-              perPositionHeight: false,
-              // 设置高度参考
-              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-              material: new Cesium.ColorMaterialProperty(Cesium.Color.RED.withAlpha(0.8)),
-            },
-          });
+          const positions = [...this._currentPositions];
+          const newEntity = this._viewer.entities.add(
+            this.createPolygon(positions)
+          );
           this._drawEntitys?.push(newEntity);
           this._viewer.entities.remove(this._currentEntity);
         }
-        this._currentEntity = null;
-        this._previewEntity = null;
-        this._polylinePositions = [];
         break;
       default:
         break;
     }
+    this._previewEntity && this._viewer.entities.remove(this._previewEntity);
+    this._currentEntity = null;
+    this._previewEntity = null;
+    this._currentPositions = [];
     this.changeDrawMode("default");
     this.ToolTip.destroyTooltip();
   }
@@ -234,6 +183,52 @@ export class DrawUtil {
     }
   }
 
+  private createPoint(position: Cesium.Cartesian3) {
+    return new Cesium.Entity({
+      position,
+      point: {
+        pixelSize: 5,
+        color: Cesium.Color.RED,
+        disableDepthTestDistance: 50000,
+        outlineColor: Cesium.Color.YELLOW,
+        outlineWidth: 2,
+      },
+    });
+  }
+
+  private createPolyline(
+    positions: Cesium.Cartesian3[] | Cesium.CallbackProperty
+  ) {
+    return new Cesium.Entity({
+      polyline: {
+        positions: positions,
+        width: 5,
+        clampToGround: true,
+        material: new Cesium.PolylineOutlineMaterialProperty({
+          color: Cesium.Color.ORANGE,
+          outlineWidth: 2,
+          outlineColor: Cesium.Color.BLACK,
+        }),
+      },
+    });
+  }
+
+  private createPolygon(
+    hierarchy:
+      | Cesium.PolygonHierarchy
+      | Cesium.CallbackProperty
+      | Cesium.Cartesian3[]
+  ) {
+    return new Cesium.Entity({
+      polygon: {
+        hierarchy: hierarchy,
+        material: Cesium.Color.RED,
+        classificationType: Cesium.ClassificationType.BOTH,
+        perPositionHeight: false,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+  }
   /**
    * 更新预览点位置
    */
@@ -278,7 +273,7 @@ export class DrawUtil {
       }
     }
     if (this._currentEntity) {
-      this._polylinePositions[this._polylinePositions.length - 1] = position;
+      this._currentPositions[this._currentPositions.length - 1] = position;
     }
   }
 
@@ -302,7 +297,7 @@ export class DrawUtil {
       }
     }
     if (this._currentEntity) {
-      this._polylinePositions[this._polylinePositions.length - 1] = position;
+      this._currentPositions[this._currentPositions.length - 1] = position;
     }
   }
 
@@ -310,7 +305,7 @@ export class DrawUtil {
     this._viewer.entities.removeAll();
     this._currentEntity = null;
     this._previewEntity = null;
-    this._polylinePositions = [];
+    this._currentPositions = [];
     this.ToolTip.destroyTooltip();
     this.changeDrawMode("default");
     this.initilizePrimitive();
