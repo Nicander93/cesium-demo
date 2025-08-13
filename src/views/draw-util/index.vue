@@ -1,28 +1,30 @@
 <template>
   <div id="CesiumContainer">
     <div class="draw-toolbar">
-      <button class="draw-btn" @click="drawUtil?.changeDrawMode('point')">
+      <c-button class="draw-btn" @click="drawUtil?.changeDrawMode('point')">
         绘制点
-      </button>
-      <button class="draw-btn" @click="drawUtil?.changeDrawMode('polyline')">
+      </c-button>
+      <c-button class="draw-btn" @click="drawUtil?.changeDrawMode('polyline')">
         绘制线
-      </button>
-      <button class="draw-btn" @click="drawUtil?.changeDrawMode('polygon')">
+      </c-button>
+      <c-button class="draw-btn" @click="drawUtil?.changeDrawMode('polygon')">
         绘制面
-      </button>
-      <button class="draw-btn" @click="drawUtil?.clear()">清除</button>
+      </c-button>
+      <c-button class="draw-btn" @click="drawUtil?.clear()">清除</c-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import * as Cesium from "cesium";
-import { onMounted } from "vue";
+import { onMounted, onUnmounted } from "vue";
 import { DrawUtil } from "./drawUtil";
+import CButton from "@/components/c-button.vue";
 
 let drawUtil: DrawUtil | undefined;
+let viewer: Cesium.Viewer
 onMounted(() => {
-  const viewer = new Cesium.Viewer("CesiumContainer");
+  viewer = new Cesium.Viewer("CesiumContainer");
   viewer.resolutionScale = window.devicePixelRatio;
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.scene.postProcessStages.fxaa.enabled = true;
@@ -31,6 +33,9 @@ onMounted(() => {
   });
   drawUtil = new DrawUtil(viewer);
 });
+onUnmounted(() => {
+  viewer.destroy()
+})
 </script>
 
 <style scoped>
