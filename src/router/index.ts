@@ -146,7 +146,7 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: "/draw-util ",
+    path: "/draw-util",
     component: () => import("@/views/draw-util/index.vue"),
     meta: {
       title: "绘制工具",

@@ -92,7 +92,7 @@ export class DrawUtil {
   public completeDraw() {
     switch (this._mode) {
       case "point":
-        // 
+        //
         break;
       case "polyline":
         if (this._currentEntity) {
@@ -126,28 +126,72 @@ export class DrawUtil {
     this.ToolTip.destroyTooltip();
   }
   /**
-   * 处理点击函数
-   * @param event
+   * 多帧稳定拾取
+   * @param windowPosition 屏幕坐标
+   * @param maxFrames 最大帧数
+   * @returns Promise<Cesium.Cartesian3 | undefined>
    */
+  private pickPositionStabilized(
+    windowPosition: Cesium.Cartesian2,
+    maxFrames: number = 6
+  ): Promise<Cesium.Cartesian3 | undefined> {
+    return new Promise((resolve) => {
+      let frameCount = 0;
+      const scene = this._viewer.scene;
+
+      const cb = () => {
+        frameCount++;
+        const position = this.pickPositon(windowPosition);
+        if (position || frameCount >= maxFrames) {
+          scene.postRender.removeEventListener(cb);
+          resolve(position);
+        }
+      };
+
+      scene.postRender.addEventListener(cb);
+    });
+  }
+
   public handleDrawEvent(
     event: Cesium.ScreenSpaceEventHandler.PositionedEvent
   ) {
-    const position = this.pickPositon(event.position);
-    if (Cesium.defined(position)) {
-      switch (this._mode) {
-        case "point":
-          this.drawPoint(position);
-          break;
-        case "polyline":
-          this.drawPolyline(position);
-          break;
-        case "polygon":
-          this.drawPolygon(position);
-          break;
-        default:
-          break;
+    const clickPos = event.position.clone();
+    this._viewer.scene.requestRender();
+    this.pickPositionStabilized(clickPos, 6).then((position) => {
+      if (position) {
+        const cartographic = Cesium.Cartographic.fromCartesian(position);
+        const lon = Cesium.Math.toDegrees(cartographic.longitude);
+        const lat = Cesium.Math.toDegrees(cartographic.latitude);
+        const height = cartographic.height;
+
+        // 检查是否拾取到了3D对象
+        const pickedObject = this._viewer.scene.pick(event.position);
+        const isOn3DTile =
+          pickedObject &&
+          pickedObject.primitive instanceof Cesium.Cesium3DTileset;
+
+        console.log(
+          `经度: ${lon.toFixed(6)}, 纬度: ${lat.toFixed(6)}, 高度: ${height.toFixed(
+            2
+          )}, 3D瓦片: ${isOn3DTile}`
+        );
       }
-    }
+      if (Cesium.defined(position)) {
+        switch (this._mode) {
+          case "point":
+            this.drawPoint(position);
+            break;
+          case "polyline":
+            this.drawPolyline(position);
+            break;
+          case "polygon":
+            this.drawPolygon(position);
+            break;
+          default:
+            break;
+        }
+      }
+    });
   }
 
   public handleMouseMoveEvent(
@@ -155,7 +199,18 @@ export class DrawUtil {
   ) {
     const position = this.pickPositon(event.endPosition);
     if (!position) return;
+    if (position) {
+      const cartographic = Cesium.Cartographic.fromCartesian(position);
+      const lon = Cesium.Math.toDegrees(cartographic.longitude);
+      const lat = Cesium.Math.toDegrees(cartographic.latitude);
+      const height = cartographic.height;
 
+      // 检查是否拾取到了3D对象
+      const pickedObject = this._viewer.scene.pick(event.endPosition);
+      const isOn3DTile = pickedObject && pickedObject.primitive instanceof Cesium.Cesium3DTileset;
+
+      console.log(`经度: ${lon.toFixed(6)}, 纬度: ${lat.toFixed(6)}, 高度: ${height.toFixed(2)}, 3D瓦片: ${isOn3DTile}`);
+    }
     switch (this._mode) {
       case "point":
         // 更新预览点位置
@@ -204,6 +259,8 @@ export class DrawUtil {
         positions: positions,
         width: 5,
         clampToGround: true,
+        classificationType: Cesium.ClassificationType.BOTH, // 同时支持地形和3DTiles
+        zIndex: 1000, // 确保polyline在最上层显示
         material: new Cesium.PolylineOutlineMaterialProperty({
           color: Cesium.Color.ORANGE,
           outlineWidth: 2,
@@ -224,7 +281,7 @@ export class DrawUtil {
         hierarchy: hierarchy,
         material: Cesium.Color.RED,
         classificationType: Cesium.ClassificationType.BOTH,
-        perPositionHeight: false,
+        perPositionHeight: true,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       },
     });
@@ -317,21 +374,25 @@ export class DrawUtil {
    * @returns
    */
   private pickPositon(windowPosition: Cesium.Cartesian2) {
-    let position: Cesium.Cartesian3 | undefined;
+    // 1. 先检查是否拾取到对象
+    const pickedObject = this._viewer.scene.pick(windowPosition);
 
-    if (this._viewer.scene.pickPositionSupported) {
-      position = this._viewer.scene.pickPosition(windowPosition);
-    }
-    if (!Cesium.defined(position)) {
-      const pickObject = this._viewer.scene.pick(windowPosition);
-      if (Cesium.defined(pickObject)) {
-        position = pickObject.position;
+    // 2. 如果拾取到3D瓦片，使用pickPosition
+    if (Cesium.defined(pickedObject) && pickedObject.primitive instanceof Cesium.Cesium3DTileset) {
+      if (this._viewer.scene.pickPositionSupported) {
+        const position = this._viewer.scene.pickPosition(windowPosition);
+        if (Cesium.defined(position)) {
+          return position;
+        }
       }
     }
-    if (!Cesium.defined(position)) {
-      const ray = this._viewer.camera.getPickRay(windowPosition);
-      position = this._viewer.scene.globe.pick(ray!, this._viewer.scene);
+
+    // 3. 如果没有拾取到3D瓦片或pickPosition失败，使用globe.pick
+    const ray = this._viewer.camera.getPickRay(windowPosition);
+    if (ray) {
+      return this._viewer.scene.globe.pick(ray, this._viewer.scene);
     }
-    return position;
+
+    return undefined;
   }
 }

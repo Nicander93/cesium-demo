@@ -1,7 +1,8 @@
 <template>
   <div id="CesiumContainer">
     <div class="card">
-      <c-button>绘制平面</c-button>
+      <c-button @click="handleDrawFlatPolygon">绘制平面</c-button>
+
     </div>
   </div>
 </template>
@@ -12,11 +13,26 @@ import { onMounted } from "vue";
 import { useTileLocalFlat } from "./useTileLocalFlat";
 import { DrawUtil } from "../draw-util/drawUtil";
 import CButton from "@/components/c-button.vue";
+import { vi } from "vitest";
+let viewer: Cesium.Viewer;
+let drawUtil: DrawUtil;
+const handleDrawFlatPolygon = () => {
+  drawUtil.changeDrawMode("point");
+
+};
 
 onMounted(() => {
-  const viewer = new Cesium.Viewer("CesiumContainer");
-  const drawUtil = new DrawUtil(viewer);
-  drawUtil.use
+  viewer = new Cesium.Viewer("CesiumContainer", {
+    scene3DOnly: true,
+  });
+  Cesium.createWorldTerrainAsync().then((terrain) => {
+    viewer.scene.globe.terrainProvider = terrain;
+  });
+  viewer.resolutionScale = window.devicePixelRatio;
+  // 启用地形深度测试，这样才能正确拾取3D瓦片
+  viewer.scene.globe.depthTestAgainstTerrain = true;
+  viewer.scene.postProcessStages.fxaa.enabled = true;
+
   Cesium.Cesium3DTileset.fromUrl(
     `https://data.mars3d.cn/3dtiles/qx-dyt/tileset.json`,
     {
@@ -26,16 +42,22 @@ onMounted(() => {
       preferLeaves: true,
       debugShowBoundingVolume: false,
       debugShowContentBoundingVolume: false,
+      // 启用深度测试，确保3D瓦片能正确遮挡
+      // enablePick: true,
     }
   ).then((tileset) => {
     viewer.scene.primitives.add(tileset);
     viewer.zoomTo(tileset);
+
+    // 在3D瓦片加载完成后初始化绘制工具
+    drawUtil = new DrawUtil(viewer);
+
+    // 确保3D瓦片渲染在正确的深度
+    tileset.show = true;
+
     const positions = Cesium.Cartesian3.fromDegreesArrayHeights([
-      108.95959, 34.220223, 105,
-      108.95922, 34.220054, 105,
-      108.95914, 34.219439, 105,
-      108.95975, 34.219573, 105,
-      108.95957, 34.219781, 105,
+      108.95959, 34.220223, 105, 108.95922, 34.220054, 105, 108.95914,
+      34.219439, 105, 108.95975, 34.219573, 105, 108.95957, 34.219781, 105,
     ]);
     // 使用shaerSource的方式实现
     // const customShader = new Cesium.CustomShader({
@@ -83,7 +105,10 @@ onMounted(() => {
     // tileset.customShader = customShader;
 
     // 使用Texture方式实现
-    const customShader = useTileLocalFlat(positions, tileset.boundingSphere.center)
+    const customShader = useTileLocalFlat(
+      positions,
+      tileset.boundingSphere.center
+    );
     tileset.customShader = customShader;
   });
 });
