@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import * as Cesium from "cesium";
 import { onMounted, onUnmounted } from "vue";
-import { DrawUtil } from "./drawUtil";
+import DrawUtil from "./drawUtil";
 import CButton from "@/components/c-button.vue";
 
 let drawUtil: DrawUtil | undefined;

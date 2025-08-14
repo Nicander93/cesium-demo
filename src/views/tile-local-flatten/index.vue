@@ -2,7 +2,6 @@
   <div id="CesiumContainer">
     <div class="card">
       <c-button @click="handleDrawFlatPolygon">绘制平面</c-button>
-
     </div>
   </div>
 </template>
@@ -11,14 +10,13 @@
 import * as Cesium from "cesium";
 import { onMounted } from "vue";
 import { useTileLocalFlat } from "./useTileLocalFlat";
-import { DrawUtil } from "../draw-util/drawUtil";
+import DrawUtil from "../draw-util/drawUtil";
 import CButton from "@/components/c-button.vue";
-import { vi } from "vitest";
+
 let viewer: Cesium.Viewer;
 let drawUtil: DrawUtil;
 const handleDrawFlatPolygon = () => {
-  drawUtil.changeDrawMode("point");
-
+  drawUtil.changeDrawMode("polygon");
 };
 
 onMounted(() => {
