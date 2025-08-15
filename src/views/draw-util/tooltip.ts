@@ -15,7 +15,7 @@ export function useTooltip() {
     tooltip.style.textWrapMode = "none";
     tooltip.style.zIndex = "1000";
     tooltip.style.transform = "translate(5px, -100%)";
-    tooltip.innerText = "左键开始,右键结束！";
+    tooltip.innerText = "点击左键开始绘制,左键双击结束绘制！";
     // TODO: 先硬编码
     document.getElementById("CesiumContainer")?.append(tooltip);
   }

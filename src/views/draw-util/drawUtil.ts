@@ -31,6 +31,7 @@ export default class DrawUtil {
     this._mode = mode;
     // 根据模式更新鼠标样式
     this.updateMouseCursor(mode);
+    this.updateTooltip(mode);
   }
 
   private initilizePrimitive() {
@@ -177,20 +178,6 @@ export default class DrawUtil {
     const clickPos = event.position.clone();
     this._viewer.scene.requestRender();
     const position = this.pickPositon(clickPos)
-
-    if (position) {
-      const cartographic = Cesium.Cartographic.fromCartesian(position);
-      const lon = Cesium.Math.toDegrees(cartographic.longitude);
-      const lat = Cesium.Math.toDegrees(cartographic.latitude);
-      const height = cartographic.height;
-
-      // 检查是否拾取到了3D对象
-      const pickedObject = this._viewer.scene.pick(event.position);
-      const isOn3DTile =
-        pickedObject &&
-        pickedObject.primitive instanceof Cesium.Cesium3DTileset;
-
-    }
     if (Cesium.defined(position)) {
       switch (this._mode) {
         case "point":
@@ -215,21 +202,8 @@ export default class DrawUtil {
     if (this._mode === "default") {
       return;
     }
-
     const position = this.pickPositon(event.endPosition);
     if (!position) return;
-
-    // 在绘制模式下显示位置信息
-    if (position) {
-      const cartographic = Cesium.Cartographic.fromCartesian(position);
-      const lon = Cesium.Math.toDegrees(cartographic.longitude);
-      const lat = Cesium.Math.toDegrees(cartographic.latitude);
-      const height = cartographic.height;
-
-      // 检查是否拾取到了3D对象
-      const pickedObject = this._viewer.scene.pick(event.endPosition);
-      const isOn3DTile = pickedObject && pickedObject.primitive instanceof Cesium.Cesium3DTileset;
-    }
 
     switch (this._mode) {
       case "point":
@@ -304,6 +278,21 @@ export default class DrawUtil {
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       },
     });
+  }
+
+
+  private updateTooltip(mode: DrawMode) {
+    switch (mode) {
+      case "polygon":
+        this.ToolTip = useTooltip();
+        break;
+      case "polyline":
+        this.ToolTip = useTooltip();
+        break;
+      default:
+        this.ToolTip && this.ToolTip.destroyTooltip();
+        break;
+    }
   }
   /**
    * 更新鼠标样式

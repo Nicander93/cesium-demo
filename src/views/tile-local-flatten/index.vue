@@ -41,11 +41,9 @@ onMounted(() => {
       let positions: Cesium.Cartesian3[] | undefined;
       const hierarchy = firstEntity.polygon?.hierarchy;
       if (typeof hierarchy?.getValue === "function") {
-        // 如果是CallbackProperty
         const value = hierarchy.getValue(Cesium.JulianDate.now());
         positions = value?.positions;
       } else if (hierarchy && "positions" in hierarchy) {
-        // 直接是PolygonHierarchy
         positions = (hierarchy as any).positions;
       }
       if (positions) {
@@ -70,8 +68,6 @@ onMounted(() => {
       preferLeaves: true,
       debugShowBoundingVolume: false,
       debugShowContentBoundingVolume: false,
-      // 启用深度测试，确保3D瓦片能正确遮挡
-      // enablePick: true,
     }
   ).then((tile) => {
     tileset = tile;
