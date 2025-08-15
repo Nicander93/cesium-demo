@@ -59,7 +59,7 @@ onMounted(async () => {
   const postProcessStage = new Cesium.PostProcessStage({
     fragmentShader: fragmentShaderSource,
     uniforms: {
-      fogByHeight: new Cesium.Cartesian4(1500, 0.5, 2500, 0.0), //雾化参数 500米的时候为0.7  1000米的时候为0
+      fogByHeight: new Cesium.Cartesian4(100, 0.6, 5000, 0.0), //雾化参数 500米的时候为0.7  1000米的时候为0
       fogColor: Cesium.Color.WHITE, //雾化颜色 设置为白色
       earthRadius: () => {
         console.log(Cesium.Cartesian3.magnitude(camera.positionWC) -
@@ -72,7 +72,7 @@ onMounted(async () => {
     }
   })
   viewer.scene.postProcessStages.add(postProcessStage)
-// 新增：相机高度高于 10 000 m 时关闭雾效
+  // 新增：相机高度高于 10 000 m 时关闭雾效
   viewer.scene.postRender.addEventListener(() => {
     const height = camera.positionCartographic.height
     postProcessStage.enabled = height <= 150000

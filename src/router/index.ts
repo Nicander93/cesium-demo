@@ -160,10 +160,17 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: "/local-post-process",
-    component: () => import("@/views/local-post-process/index.vue"),
+    path: "/fog-local-post-process",
+    component: () => import("@/views/fog-local-post-process/index.vue"),
     meta: {
-      title: "局部后处理",
+      title: "高度雾",
+    },
+  },
+  {
+    path: "/snow-local-post-process",
+    component: () => import("@/views/snow-local-post-process/index.vue"),
+    meta: {
+      title: "积雪",
     },
   },
 ];
