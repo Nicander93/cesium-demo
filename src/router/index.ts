@@ -151,7 +151,21 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: "绘制工具",
     },
-  }
+  },
+  {
+    path: "/fog-post-process",
+    component: () => import("@/views/fog-post-process/index.vue"),
+    meta: {
+      title: "雾化后处理",
+    },
+  },
+  {
+    path: "/local-post-process",
+    component: () => import("@/views/local-post-process/index.vue"),
+    meta: {
+      title: "局部后处理",
+    },
+  },
 ];
 
 export default createRouter({
