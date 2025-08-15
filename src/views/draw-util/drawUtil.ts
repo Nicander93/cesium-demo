@@ -16,6 +16,8 @@ export default class DrawUtil {
   private _currentEntity: Cesium.Entity | null = null;
   private _currentPositions: Cesium.Cartesian3[] = [];
   private ToolTip = useTooltip();
+  // 用于钩子函数
+  private _completeDrawCallback: ((entitys: Cesium.Entity[]) => void)[] = []
 
   private _viewer: Viewer;
 
@@ -53,6 +55,10 @@ export default class DrawUtil {
       this.completeDraw.bind(this),
       Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
     );
+  }
+
+  public registerCompleteDrawCallback(callback: (entitys: Cesium.Entity[]) => void) {
+    this._completeDrawCallback.push(callback);
   }
 
   public drawPoint(position: Cesium.Cartesian3) {
@@ -123,11 +129,14 @@ export default class DrawUtil {
       default:
         break;
     }
+    // 触发钩子函数
+    this._completeDrawCallback.forEach((callback) => callback(this._drawEntitys ?? []));
     // 不再需要清理预览点实体
     this._currentEntity = null;
     this._currentPositions = [];
     this.changeDrawMode("default");
-    this.ToolTip.destroyTooltip();
+    this.ToolTip && this.ToolTip.destroyTooltip();
+
   }
   /**
    * 多帧稳定拾取
@@ -181,11 +190,6 @@ export default class DrawUtil {
         pickedObject &&
         pickedObject.primitive instanceof Cesium.Cesium3DTileset;
 
-      console.log(
-        `经度: ${lon.toFixed(6)}, 纬度: ${lat.toFixed(6)}, 高度: ${height.toFixed(
-          2
-        )}, 3D瓦片: ${isOn3DTile}`
-      );
     }
     if (Cesium.defined(position)) {
       switch (this._mode) {
@@ -225,8 +229,6 @@ export default class DrawUtil {
       // 检查是否拾取到了3D对象
       const pickedObject = this._viewer.scene.pick(event.endPosition);
       const isOn3DTile = pickedObject && pickedObject.primitive instanceof Cesium.Cesium3DTileset;
-
-      console.log(`经度: ${lon.toFixed(6)}, 纬度: ${lat.toFixed(6)}, 高度: ${height.toFixed(2)}, 3D瓦片: ${isOn3DTile}`);
     }
 
     switch (this._mode) {

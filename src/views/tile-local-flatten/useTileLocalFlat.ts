@@ -25,7 +25,7 @@ export const useTileLocalFlat = (positions: Cesium.Cartesian3[], center: Cesium.
   })
   // 创建canvas进行图形绘制
   let canvas = document.createElement("canvas");
-  canvas.style.cssText = "position:absolute;left:0px;top:0px;z-index:1000;transform: translateY(0px);"
+  canvas.style.cssText = "position:absolute;left:0px;top:0px;z-index:1000;transform: translateY(0px);max-width:300px;max-height:300px;"
   canvas.height = canvasHeight;
   canvas.width = canvasWidth;
   const ctx = canvas.getContext("2d")!;

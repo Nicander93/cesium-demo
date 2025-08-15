@@ -15,6 +15,8 @@ import CButton from "@/components/c-button.vue";
 
 let viewer: Cesium.Viewer;
 let drawUtil: DrawUtil;
+let positions: Cesium.Cartesian3[] | undefined;
+let tileset: Cesium.Cesium3DTileset;
 const handleDrawFlatPolygon = () => {
   drawUtil.changeDrawMode("polygon");
 };
@@ -30,6 +32,34 @@ onMounted(() => {
   // 启用地形深度测试，这样才能正确拾取3D瓦片
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.scene.postProcessStages.fxaa.enabled = true;
+  drawUtil = new DrawUtil(viewer);
+  drawUtil.registerCompleteDrawCallback((entitys) => {
+    // 只需获取第一个entity的多边形位置，避免类型报错
+    if (entitys.length > 0) {
+      const firstEntity = entitys[0];
+      // Cesium中polygon.hierarchy可能是CallbackProperty或PolygonHierarchy
+      let positions: Cesium.Cartesian3[] | undefined;
+      const hierarchy = firstEntity.polygon?.hierarchy;
+      if (typeof hierarchy?.getValue === "function") {
+        // 如果是CallbackProperty
+        const value = hierarchy.getValue(Cesium.JulianDate.now());
+        positions = value?.positions;
+      } else if (hierarchy && "positions" in hierarchy) {
+        // 直接是PolygonHierarchy
+        positions = (hierarchy as any).positions;
+      }
+      if (positions) {
+        // 使用Texture方式实现
+        const customShader = useTileLocalFlat(
+          positions,
+          tileset!.boundingSphere.center
+        );
+        tileset!.customShader = customShader;
+        console.log("第一个entity的位置：", positions);
+      }
+      drawUtil.clear();
+    }
+  })
 
   Cesium.Cesium3DTileset.fromUrl(
     `https://data.mars3d.cn/3dtiles/qx-dyt/tileset.json`,
@@ -43,20 +73,21 @@ onMounted(() => {
       // 启用深度测试，确保3D瓦片能正确遮挡
       // enablePick: true,
     }
-  ).then((tileset) => {
-    viewer.scene.primitives.add(tileset);
-    viewer.zoomTo(tileset);
-
-    // 在3D瓦片加载完成后初始化绘制工具
-    drawUtil = new DrawUtil(viewer);
-
-    // 确保3D瓦片渲染在正确的深度
-    tileset.show = true;
-
+  ).then((tile) => {
+    tileset = tile;
+    viewer.scene.primitives.add(tile);
+    viewer.zoomTo(tile);
     const positions = Cesium.Cartesian3.fromDegreesArrayHeights([
       108.95959, 34.220223, 105, 108.95922, 34.220054, 105, 108.95914,
       34.219439, 105, 108.95975, 34.219573, 105, 108.95957, 34.219781, 105,
     ]);
+    // 使用Texture方式实现
+    const customShader = useTileLocalFlat(
+      positions,
+      tile.boundingSphere.center
+    );
+    tile.customShader = customShader;
+
     // 使用shaerSource的方式实现
     // const customShader = new Cesium.CustomShader({
     //   vertexShaderText: `
@@ -102,18 +133,15 @@ onMounted(() => {
     // });
     // tileset.customShader = customShader;
 
-    // 使用Texture方式实现
-    const customShader = useTileLocalFlat(
-      positions,
-      tileset.boundingSphere.center
-    );
-    tileset.customShader = customShader;
   });
 });
 </script>
 
 <style scoped>
 .card {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   z-index: 1000;
   width: 200px;
   height: 100px;
