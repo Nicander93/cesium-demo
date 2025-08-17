@@ -22,6 +22,7 @@ const createCesium = async () => {
     selectionIndicator: false,
     shadows: true,
   });
+  map.resolutionScale = window.devicePixelRatio;
   
   // 异步设置地形
   try {

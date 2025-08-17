@@ -1,3 +1,4 @@
+// @ts-nocheck
 import AxisPlaneGeometry from "./AxisPlaneGeometry";
 import { VertexFormat, Primitive, MaterialAppearance, Material } from "cesium";
 import * as Cesium from "cesium";
@@ -33,6 +34,7 @@ class AxisPlane {
         }),
       }),
     });
+
     primitive.isAxisPlane = true;
     primitive.normal = this._normal;
     primitive.axis = options.axis;

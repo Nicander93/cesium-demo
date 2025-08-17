@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@types/heatmap.js": "^2.0.41",
-    "cesium": "^1.115.0",
+    "cesium": "^1.132.0",
     "heatmap.js": "^2.0.5",
     "lil-gui": "^0.20.0",
     "vite-plugin-cesium": "^1.2.23",
@@ -26,6 +26,7 @@
     "@vitest/ui": "^3.2.4",
     "@vue/tsconfig": "^0.7.0",
     "jsdom": "^26.1.0",
+    "prettier": "3.6.2",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.4",
