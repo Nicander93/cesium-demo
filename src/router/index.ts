@@ -173,6 +173,13 @@ const routes: RouteRecordRaw[] = [
       title: "积雪",
     },
   },
+  {
+    path: "/model-editor",
+    component: () => import("@/views/model-editor/index.vue"),
+    meta: {
+      title: "模型编辑器",
+    },
+  },
 ];
 
 export default createRouter({
