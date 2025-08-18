@@ -214,7 +214,7 @@ class EditCesium {
   /** 变换操作完成后触发的事件 */
   postTransformEvent: Event;
   /** 移除事件监听器的清理函数 */
-  _removeEventListener: () => void = () => {};
+  _removeEventListener: () => void = () => { };
 
   constructor(viewer: Cesium.Viewer, options: EditCesiumOptions = {}) {
     // 保存Viewer实例
@@ -898,10 +898,10 @@ class EditCesium {
       }
       // 如果点击的是编辑器的控制器
       if (this._primitives.includes(feat.primitive)) {
-        this.mousedownPixel = e.position; // 记录按下位置
-        this.active(feat.primitive); // 激活被点击的控制器
-        this.offset = new Cesium.Cartesian3(); // 重置偏移量
-        this.angle = 0; // 重置旋转角度
+        this.mousedownPixel = e.position;              // 记录按下位置
+        this.active(feat.primitive);                   // 激活被点击的控制器
+        this.offset = new Cesium.Cartesian3();         // 重置偏移量
+        this.angle = 0;                                // 重置旋转角度
 
         // 注册鼠标移动事件监听器
         handler.setInputAction((e: any) => {
@@ -1071,32 +1071,35 @@ class EditCesium {
   }
 
   /**
-   * 计算偏移量
-   * @param startPosition 开始位置
-   * @param endPosition 结束位置
-   * @param offset 偏移量输出
+   * 计算鼠标拖动在各轴上的偏移量
+   * @param startPosition 鼠标起始屏幕坐标
+   * @param endPosition 鼠标结束屏幕坐标
+   * @param offset 偏移量输出对象
+   * @returns 计算后的偏移量
    */
-  private computeOffset(
-    startPosition: Cesium.Cartesian2,
-    endPosition: Cesium.Cartesian2,
-    offset: OffsetCartesian3,
-  ): OffsetCartesian3 {
+  private computeOffset(startPosition: Cesium.Cartesian2, endPosition: Cesium.Cartesian2, offset: OffsetCartesian3): OffsetCartesian3 {
+    // 没有激活的轴则直接返回
     if (!this.activePrimitive) {
       return offset;
     }
+    // 获取当前激活的轴（可能是多个轴的组合）
     const activeAxis = this.activePrimitive.relativeAxis || [
       this.activePrimitive,
     ];
     if (!Array.isArray(activeAxis)) {
       return offset;
     }
+    // 计算相机高度与拖动距离的缩放系数
     const cameraHeight = this.viewer.camera.positionCartographic.height;
     const delta = cameraHeight / 1047;
+    // 遍历每个轴，分别计算在该轴上的投影偏移
     for (const axis of activeAxis) {
+      // 检查轴的必要属性
       if (!axis.positions || !axis.axis || !this._modelMatrix) {
         continue;
       }
       const positions = axis.positions;
+      // 将轴的起止点从模型局部坐标变换到世界坐标
       const cartList = positions.map((pos: Cesium.Cartesian3) =>
         Cesium.Matrix4.multiplyByPoint(
           this._modelMatrix!,
@@ -1104,24 +1107,19 @@ class EditCesium {
           new Cesium.Cartesian3(),
         ),
       );
-      const pixelList = cartList
-        .map((cart: Cesium.Cartesian3) =>
-          LonLat.toPixel(cart, this.viewer.scene),
-        )
-        .filter((pixel) => pixel !== undefined) as Cesium.Cartesian2[];
+      // 将世界坐标转换为屏幕像素坐标
+      const pixelList = cartList.map((cart: Cesium.Cartesian3) =>
+        LonLat.toPixel(cart, this.viewer.scene),
+      ).filter(pixel => pixel !== undefined) as Cesium.Cartesian2[];
 
       if (pixelList.length >= 2) {
-        const axisVector = Cesium.Cartesian2.subtract(
-          pixelList[1],
-          pixelList[0],
-          new Cesium.Cartesian2(),
-        );
-        const moveVector = Cesium.Cartesian2.subtract(
-          endPosition,
-          startPosition,
-          new Cesium.Cartesian2(),
-        );
+        // 计算轴在屏幕上的方向向量
+        const axisVector = Cesium.Cartesian2.subtract(pixelList[1], pixelList[0], new Cesium.Cartesian2());
+        // 计算鼠标拖动的向量
+        const moveVector = Cesium.Cartesian2.subtract(endPosition, startPosition, new Cesium.Cartesian2());
+        // 计算拖动向量在轴方向上的投影长度
         const length = this.projectInAxis(axisVector, moveVector);
+        // 将投影长度乘以缩放系数，得到实际的三维偏移量
         offset[axis.axis.toLowerCase()] = length * delta;
       }
     }
@@ -1142,25 +1140,11 @@ class EditCesium {
       return 0;
     }
     const center = this.center;
-    const startVec = Cesium.Cartesian3.subtract(
-      startPosition,
-      center,
-      new Cesium.Cartesian3(),
-    );
-    const endVec = Cesium.Cartesian3.subtract(
-      endPosition,
-      center,
-      new Cesium.Cartesian3(),
-    );
+    const startVec = Cesium.Cartesian3.subtract(startPosition, center, new Cesium.Cartesian3());
+    const endVec = Cesium.Cartesian3.subtract(endPosition, center, new Cesium.Cartesian3());
 
-    const normalizedStart = Cesium.Cartesian3.normalize(
-      startVec,
-      new Cesium.Cartesian3(),
-    );
-    const normalizedEnd = Cesium.Cartesian3.normalize(
-      endVec,
-      new Cesium.Cartesian3(),
-    );
+    const normalizedStart = Cesium.Cartesian3.normalize(startVec, new Cesium.Cartesian3());
+    const normalizedEnd = Cesium.Cartesian3.normalize(endVec, new Cesium.Cartesian3());
 
     const angle = Cesium.Cartesian3.dot(normalizedStart, normalizedEnd);
 

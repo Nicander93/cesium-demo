@@ -23,7 +23,7 @@ const createCesium = async () => {
     shadows: true,
   });
   map.resolutionScale = window.devicePixelRatio;
-  
+
   // 异步设置地形
   try {
     const terrainProvider = await Cesium.createWorldTerrainAsync();
@@ -31,7 +31,7 @@ const createCesium = async () => {
   } catch (error) {
     console.log('Failed to load terrain:', error);
   }
-  
+
   // 设置默认视角
   map.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(108.95186608439401, 34.21980211937744, 1000),
@@ -41,10 +41,10 @@ const createCesium = async () => {
       roll: 0.0
     }
   });
-  
+
   // 启用深度测试
   map.scene.globe.depthTestAgainstTerrain = true;
-  
+
   (window as any).deepMap = map;
   mapInstance.value = map;
   addBim(map);
@@ -63,23 +63,46 @@ const addBim = async (map: any) => {
         debugShowContentBoundingVolume: false,
       },
     );
+
+    // 等待 tileset 加载完成
+    await tiles.value.readyPromise;
+
+    // 获取 tileset 的包围球中心
+    const boundingSphere = tiles.value.boundingSphere;
+    const tilesetCenter = boundingSphere.center;
+
+    // 目标位置（你想要移动到的经纬度）
+    const targetLongitude = 108.95186608439401;
+    const targetLatitude = 34.21980211937744;
+    const targetHeight = 1700;
+    const targetPosition = Cesium.Cartesian3.fromDegrees(targetLongitude, targetLatitude, targetHeight);
+
+    // 计算偏移量：目标位置 - 当前中心位置
+    const offset = Cesium.Cartesian3.subtract(targetPosition, tilesetCenter, new Cesium.Cartesian3());
+
+    // 创建平移矩阵
+    const translationMatrix = Cesium.Matrix4.fromTranslation(offset);
+
+    // 应用偏移到 tileset
+    tiles.value.modelMatrix = translationMatrix;
+
     map.scene.primitives.add(tiles.value);
     map.zoomTo(tiles.value);
-    
+
     const origin = Cesium.Cartesian3.fromDegrees(
       108.95186608439401,
       34.21980211937744,
       700,
     );
     const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(origin);
-    
+
     bim.value = await Cesium.Model.fromGltfAsync({
       url: '/model/Cesium_Air.glb',
       modelMatrix: modelMatrix,
       scale: 100,
     });
     map.scene.primitives.add(bim.value);
-    
+
     point.value = map.entities.add({
       position: Cesium.Cartesian3.fromDegrees(
         108.95186608439401,
@@ -91,7 +114,7 @@ const addBim = async (map: any) => {
         color: Cesium.Color.RED,
       },
     });
-    
+
     addGui(map);
   } catch (error) {
     console.log(`Failed to load model. ${error}`);
@@ -105,24 +128,24 @@ const addGui = (map: any) => {
     scaleEnabled: true,
   });
   bimEditCesium.addTo(bim.value);
-  
+
   const tilesEditCesium = new EditCesium(map, {
     rotateEnabled: true,
     translateEnabled: true,
   });
   tilesEditCesium.addTo(tiles.value);
-  
+
   const pointEditCesium = new EditCesium(map, {
     translateEnabled: true,
   });
   pointEditCesium.addTo(point.value);
-  
+
   const bimModel = {
     rotateEnabled: true,
     translateEnabled: true,
     scaleEnabled: true,
   };
-  
+
   const gui = new GUI();
   const bimFolder = gui.addFolder('BIM');
   bimFolder.add(bimModel, 'rotateEnabled').onChange(() => {
@@ -134,7 +157,7 @@ const addGui = (map: any) => {
   bimFolder.add(bimModel, 'scaleEnabled').onChange(() => {
     bimEditCesium.scaleEnabled = bimModel.scaleEnabled;
   });
-  
+
   const tilesModel = {
     rotateEnabled: true,
     translateEnabled: true,
@@ -146,7 +169,7 @@ const addGui = (map: any) => {
   tilesFolder.add(tilesModel, 'translateEnabled').onChange(() => {
     tilesEditCesium.translateEnabled = tilesModel.translateEnabled;
   });
-  
+
   const pointModel = {
     translateEnabled: true,
   };
@@ -154,7 +177,7 @@ const addGui = (map: any) => {
   pointFolder.add(pointModel, 'translateEnabled').onChange(() => {
     pointEditCesium.translateEnabled = pointModel.translateEnabled;
   });
-  
+
   pointFolder.open();
   tilesFolder.open();
   bimFolder.open();
