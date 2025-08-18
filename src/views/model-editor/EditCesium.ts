@@ -9,23 +9,23 @@ const _offset = new Cesium.Cartesian3();
 
 // 定义编辑器选项接口
 interface EditCesiumOptions {
-  lineWidth?: number;              // 坐标轴线宽
-  originColor?: Cesium.Color;      // 原点颜色
-  xAxisColor?: Cesium.Color;       // X轴颜色
-  xAxisLength?: number;            // X轴长度
-  yAxisColor?: Cesium.Color;       // Y轴颜色
-  yAxisLength?: number;            // Y轴长度
-  zAxisColor?: Cesium.Color;       // Z轴颜色
-  zAxisLength?: number;            // Z轴长度
-  activeAxisColor?: Cesium.Color;  // 激活轴的颜色
-  scaleAxisColor?: Cesium.Color;   // 缩放轴颜色
-  translateEnabled?: boolean;      // 是否启用平移功能
-  rotateEnabled?: boolean;         // 是否启用旋转功能
-  scaleEnabled?: boolean;          // 是否启用缩放功能
-  scaleAxisLength?: number;        // 缩放轴长度
-  rotatePlaneRadius?: number;      // 旋转平面半径
-  sizeInPixel?: boolean;           // 是否以像素为单位
-  radiusRatio?: number;            // 半径比例系数
+  lineWidth?: number; // 坐标轴线宽
+  originColor?: Cesium.Color; // 原点颜色
+  xAxisColor?: Cesium.Color; // X轴颜色
+  xAxisLength?: number; // X轴长度
+  yAxisColor?: Cesium.Color; // Y轴颜色
+  yAxisLength?: number; // Y轴长度
+  zAxisColor?: Cesium.Color; // Z轴颜色
+  zAxisLength?: number; // Z轴长度
+  activeAxisColor?: Cesium.Color; // 激活轴的颜色
+  scaleAxisColor?: Cesium.Color; // 缩放轴颜色
+  translateEnabled?: boolean; // 是否启用平移功能
+  rotateEnabled?: boolean; // 是否启用旋转功能
+  scaleEnabled?: boolean; // 是否启用缩放功能
+  scaleAxisLength?: number; // 缩放轴长度
+  rotatePlaneRadius?: number; // 旋转平面半径
+  sizeInPixel?: boolean; // 是否以像素为单位
+  radiusRatio?: number; // 半径比例系数
   originOffset?: Cesium.Cartesian3; // 原点偏移量
 }
 
@@ -34,18 +34,18 @@ type EditableObject = Cesium.Model | Cesium.Cesium3DTileset | Cesium.Entity;
 
 // 定义带轴信息的图元接口，扩展Cesium.Polyline以包含轴相关属性
 interface AxisPrimitive extends Cesium.Polyline {
-  axis?: string;                    // 轴标识符 (X, Y, Z, XY, XZ, YZ, RX, RY, RZ, SXYZ等)
-  color?: Cesium.Color;             // 轴的原始颜色
-  pcolor?: Cesium.Color;            // 点图元的颜色属性
-  normal?: Cesium.Cartesian3;       // 轴的法向量，用于旋转计算
-  isAxisPlane?: boolean;            // 是否为坐标平面
-  relativeAxis?: AxisPrimitive[];   // 相关联的轴，用于坐标平面操作
+  axis?: string; // 轴标识符 (X, Y, Z, XY, XZ, YZ, RX, RY, RZ, SXYZ等)
+  color?: Cesium.Color; // 轴的原始颜色
+  pcolor?: Cesium.Color; // 点图元的颜色属性
+  normal?: Cesium.Cartesian3; // 轴的法向量，用于旋转计算
+  isAxisPlane?: boolean; // 是否为坐标平面
+  relativeAxis?: AxisPrimitive[]; // 相关联的轴，用于坐标平面操作
 }
 
 // 定义偏移量扩展类型，用于缩放操作
 interface OffsetCartesian3 extends Cesium.Cartesian3 {
-  sxyz?: number;                    // 缩放偏移量
-  [key: string]: any;               // 允许其他动态属性
+  sxyz?: number; // 缩放偏移量
+  [key: string]: any; // 允许其他动态属性
 }
 
 /**
@@ -57,7 +57,7 @@ class EditCesium {
   /**
    * 构造函数 - 创建模型编辑器实例
    * 支持编辑倾斜摄影、BIM模型、点位等各种类型的对象
-   * 
+   *
    * @param {Viewer} viewer Cesium视图器实例
    * @param {Object} options 配置选项
    * @param {number} [options.lineWidth = 15] 坐标轴线宽，影响坐标轴的粗细程度
@@ -102,7 +102,7 @@ class EditCesium {
   activeAxisColor: Cesium.Color;
   /** 缩放轴的颜色 */
   scaleAxisColor: Cesium.Color;
-  
+
   // === 功能开关 ===
   /** 是否启用平移功能（私有属性，通过getter/setter访问） */
   _translateEnabled: boolean;
@@ -110,7 +110,7 @@ class EditCesium {
   _rotateEnabled: boolean;
   /** 是否启用缩放功能（私有属性，通过getter/setter访问） */
   _scaleEnabled: boolean;
-  
+
   // === 尺寸配置 ===
   /** 缩放轴长度 */
   scaleAxisLength?: number;
@@ -122,25 +122,25 @@ class EditCesium {
   radiusRatio: number;
   /** 坐标轴原点相对于模型中心的偏移量 */
   originOffset: Cesium.Cartesian3;
-  
+
   // === 状态管理 ===
   /** 是否已绑定编辑对象 */
   hasBindObject: boolean = false;
   /** 当前绑定的编辑对象（模型、3D瓦片集或实体） */
   bindObject?: EditableObject;
-  
+
   // === 变换矩阵 ===
   /** 模型的变换矩阵，用于控制对象的位置、旋转、缩放 */
   _modelMatrix?: Cesium.Matrix4;
   /** 模型矩阵的逆矩阵，用于坐标变换计算 */
   _inverseModelMatrix?: Cesium.Matrix4;
-  
+
   // === 几何信息 ===
   /** 编辑对象的中心点位置（局部坐标） */
   _center: Cesium.Cartesian3;
   /** 编辑对象的包围球半径 */
   _radius: number;
-  
+
   // === 图元管理 ===
   /** 坐标轴的根容器，管理所有线性图元 */
   axisRoot?: Cesium.PolylineCollection;
@@ -169,7 +169,7 @@ class EditCesium {
   yAux?: AxisPrimitive;
   /** Z轴辅助线，在拖拽时显示移动轨迹 */
   zAux?: AxisPrimitive;
-  
+
   // === 坐标平面图元 ===
   /** XOY平面（Z轴垂直的平面），用于XY方向的平移操作 */
   XOYPlane?: AxisPrimitive;
@@ -177,7 +177,7 @@ class EditCesium {
   XOZPlane?: AxisPrimitive;
   /** YOZ平面（X轴垂直的平面），用于YZ方向的平移操作 */
   YOZPlane?: AxisPrimitive;
-  
+
   // === 旋转控制器 ===
   /** 绕Z轴的旋转圆，用于Z轴旋转操作 */
   zRotate?: AxisPrimitive;
@@ -189,11 +189,11 @@ class EditCesium {
   rAxuStart?: AxisPrimitive;
   /** 旋转操作时的结束辅助线，显示旋转角度 */
   rAxuEnd?: AxisPrimitive;
-  
+
   // === 缩放控制器 ===
   /** 对角线缩放轴，用于等比例缩放操作 */
   scaleAxis?: AxisPrimitive;
-  
+
   // === 鼠标交互状态 ===
   /** 鼠标按下时的屏幕像素坐标 */
   mousedownPixel?: Cesium.Cartesian2;
@@ -207,7 +207,7 @@ class EditCesium {
   activePrimitive?: AxisPrimitive;
   /** 旋转操作开始时在平面上的局部坐标 */
   startLocalPosition?: Cesium.Cartesian3;
-  
+
   // === 事件系统 ===
   /** 变换操作开始前触发的事件 */
   preTranformEvent: Event;
@@ -219,7 +219,7 @@ class EditCesium {
   constructor(viewer: Cesium.Viewer, options: EditCesiumOptions = {}) {
     // 保存Viewer实例
     this.viewer = viewer;
-    
+
     // === 初始化样式配置 ===
     this.lineWidth = options.lineWidth || 15;
     this.originColor = options.originColor || Cesium.Color.WHITE;
@@ -231,38 +231,38 @@ class EditCesium {
     this.zAxisLength = options.zAxisLength;
     this.activeAxisColor = options.activeAxisColor || Cesium.Color.YELLOW;
     this.scaleAxisColor = options.scaleAxisColor || Cesium.Color.WHITE;
-    
+
     // === 初始化功能开关 ===
     this._translateEnabled = options.translateEnabled || true;
     this._rotateEnabled = options.rotateEnabled || false;
     this._scaleEnabled = options.scaleEnabled || false;
-    
+
     // === 初始化尺寸配置 ===
     this.scaleAxisLength = options.scaleAxisLength;
     this.rotatePlaneRadius = options.rotatePlaneRadius;
     this.sizeInPixel = options.sizeInPixel || false;
     this.radiusRatio = options.radiusRatio || 1;
     this.originOffset = options.originOffset || Cesium.Cartesian3.ZERO;
-    
+
     // === 初始化变换矩阵 ===
     this._modelMatrix = undefined;
     this._inverseModelMatrix = undefined;
-    
+
     // === 初始化几何信息 ===
     this._center = new Cesium.Cartesian3();
     this._radius = 0;
-    
+
     // === 初始化图元管理 ===
     this.axisRoot = undefined;
     this.primitivesList = new Cesium.PrimitiveCollection();
     this._primitives = [];
-    
+
     // === 初始化交互状态 ===
     this.offset = new Cesium.Cartesian3(0, 0, 0);
     this.angle = 0;
     this.mode = EModel.N; // 默认为无操作模式
     this.hasBindObject = false;
-    
+
     // === 初始化事件系统 ===
     /**
      * 变换操作开始前触发的事件
@@ -412,7 +412,7 @@ class EditCesium {
     this.unbind();
     // 标记已绑定对象
     this.hasBindObject = true;
-    
+
     // === 处理3D瓦片集对象 ===
     if (object instanceof Cesium.Cesium3DTileset) {
       this.bindObject = object;
@@ -435,7 +435,7 @@ class EditCesium {
         // 创建控制器：支持实体功能，不支持瓦片功能
         this.createPrimitive(true, false);
       });
-    } 
+    }
     // === 处理模型对象 ===
     else if (object instanceof Cesium.Model) {
       this.bindObject = object;
@@ -456,7 +456,7 @@ class EditCesium {
         // 创建控制器：支持实体功能和瓦片功能（包括缩放）
         this.createPrimitive(true, true);
       });
-    } 
+    }
     // === 处理实体对象 ===
     else if (object instanceof Cesium.Entity) {
       // 获取实体的位置信息
@@ -470,11 +470,11 @@ class EditCesium {
           position = object.position;
         }
       }
-      
+
       if (!position || !(position instanceof Cesium.Cartesian3)) {
         throw new Error("实体位置无效或未定义");
       }
-      
+
       // 创建以实体位置为原点的东北天坐标系变换矩阵
       this.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position);
       // 实体的几何中心就是原点偏移
@@ -487,15 +487,17 @@ class EditCesium {
       this.scaleEnabled = false;
       // 创建控制器：不支持实体功能和瓦片功能
       this.createPrimitive(false, false);
-      
+
       // 监听变换事件，同步更新实体位置
-      this.postTransformEvent.addEventListener((modelMatrix: Cesium.Matrix4) => {
-        const newPosition = new Cesium.Cartesian3();
-        // 从变换矩阵中提取新的位置
-        Cesium.Matrix4.getTranslation(modelMatrix, newPosition);
-        // 更新实体的位置属性
-        object.position = new Cesium.ConstantPositionProperty(newPosition);
-      });
+      this.postTransformEvent.addEventListener(
+        (modelMatrix: Cesium.Matrix4) => {
+          const newPosition = new Cesium.Cartesian3();
+          // 从变换矩阵中提取新的位置
+          Cesium.Matrix4.getTranslation(modelMatrix, newPosition);
+          // 更新实体的位置属性
+          object.position = new Cesium.ConstantPositionProperty(newPosition);
+        },
+      );
     }
   }
 
@@ -506,14 +508,17 @@ class EditCesium {
    * @param isEntity 是否为实体对象，影响旋转控制器的创建
    * @param isTiles 是否为瓦片集对象，影响缩放控制器的创建
    */
-  private createPrimitive(isEntity: boolean = false, isTiles: boolean = false): void {
+  private createPrimitive(
+    isEntity: boolean = false,
+    isTiles: boolean = false,
+  ): void {
     // 创建坐标轴的根容器，使用模型矩阵进行变换
     const polyline = new Cesium.PolylineCollection({
       modelMatrix: this._modelMatrix,
     });
     this.axisRoot = polyline;
     this.primitivesList.add(polyline);
-    
+
     // === 创建基础控制器 ===
     // 创建坐标轴原点
     this.createOrigenPoint();
@@ -521,7 +526,7 @@ class EditCesium {
     this.translateEnabled && this.createMoveAxis();
     // 根据配置创建坐标平面控制器
     this.translateEnabled && this.createAxisPlane();
-    
+
     // === 根据对象类型创建特定控制器 ===
     // 仅对实体对象创建旋转控制器
     isEntity && this.rotateEnabled && this.createRotateAxis();
@@ -539,23 +544,23 @@ class EditCesium {
     const point = new Cesium.PointPrimitiveCollection({
       modelMatrix: this.modelMatrix,
     });
-    
+
     // 添加原点图元
     const originPoint = point.add({
       show: true,
-      position: this.center,                     // 原点位置
-      pixelSize: this.lineWidth * 1.5,          // 点的像素大小，略大于线宽
-      color: this.originColor,                   // 原点颜色
+      position: this.center, // 原点位置
+      pixelSize: this.lineWidth * 1.5, // 点的像素大小，略大于线宽
+      color: this.originColor, // 原点颜色
     }) as any; // 类型断言，因为PointPrimitive不完全匹配AxisPrimitive接口
-    
+
     // 设置轴标识符，XYZ表示可以进行全方向移动
     originPoint.axis = "XYZ";
     // 由于PointPrimitive已有color属性，使用pcolor存储原始颜色用于恢复
     originPoint.pcolor = this.originColor;
-    
+
     this.originPoint = originPoint;
     this.primitivesList.add(point);
-    
+
     // 将原点添加到图元数组中，用于事件处理
     if (this.originPoint) {
       this._primitives.push(this.originPoint);
@@ -572,10 +577,10 @@ class EditCesium {
     if (!this.center || !this.axisRoot) {
       return;
     }
-    
+
     // 计算轴的长度：用户指定长度或根据包围球半径自动计算
     const lineLength = this._radius * this.radiusRatio;
-    const plc = this.axisRoot;  // 坐标轴容器
+    const plc = this.axisRoot; // 坐标轴容器
     const center = this.center; // 坐标轴原点
     // === 创建X轴 ===
     let positions = [
@@ -598,7 +603,7 @@ class EditCesium {
     Cesium.Cartesian3.normalize(this.xNormal, this.xNormal);
     // 创建X轴的辅助线（拖拽时显示）
     this.xAux = plc.add({
-      positions: [],  // 初始为空，拖拽时动态更新
+      positions: [], // 初始为空，拖拽时动态更新
       width: this.lineWidth,
       material: this.getAxisMaterial(this.activeAxisColor, true),
     });
@@ -610,7 +615,7 @@ class EditCesium {
       center,
       new Cesium.Cartesian3(
         center.x,
-        -Cesium.defaultValue(this.yAxisLength, lineLength) + center.y,  // Y轴向负方向延伸
+        -Cesium.defaultValue(this.yAxisLength, lineLength) + center.y, // Y轴向负方向延伸
         center.z,
       ),
     ];
@@ -626,7 +631,7 @@ class EditCesium {
     Cesium.Cartesian3.normalize(this.yNormal, this.yNormal);
     // 创建Y轴的辅助线（拖拽时显示）
     this.yAux = plc.add({
-      positions: [],  // 初始为空，拖拽时动态更新
+      positions: [], // 初始为空，拖拽时动态更新
       width: this.lineWidth,
       material: this.getAxisMaterial(this.activeAxisColor, true),
     });
@@ -639,7 +644,7 @@ class EditCesium {
       new Cesium.Cartesian3(
         center.x,
         center.y,
-        Cesium.defaultValue(this.zAxisLength, lineLength) + center.z,  // Z轴向正方向延伸
+        Cesium.defaultValue(this.zAxisLength, lineLength) + center.z, // Z轴向正方向延伸
       ),
     ];
     // 创建Z轴线条图元
@@ -654,14 +659,14 @@ class EditCesium {
     Cesium.Cartesian3.normalize(this.zNormal, this.zNormal);
     // 创建Z轴的辅助线（拖拽时显示）
     this.zAux = plc.add({
-      positions: [],  // 初始为空，拖拽时动态更新
+      positions: [], // 初始为空，拖拽时动态更新
       width: this.lineWidth,
       material: this.getAxisMaterial(this.activeAxisColor, true),
     });
     // 设置轴属性
     this.zAxis.axis = "Z";
     this.zAxis.color = this.zAxisColor;
-    
+
     // 将三个坐标轴添加到图元数组中，用于事件处理
     this._primitives.push(this.xAxis, this.yAxis, this.zAxis);
   }
@@ -675,18 +680,22 @@ class EditCesium {
    * @param dashLength 虚线的段长度
    * @returns 配置好的材质对象
    */
-  private getAxisMaterial(color: Cesium.Color, dash: boolean = false, dashLength: number = 16): Cesium.Material {
+  private getAxisMaterial(
+    color: Cesium.Color,
+    dash: boolean = false,
+    dashLength: number = 16,
+  ): Cesium.Material {
     if (dash) {
       // 创建虚线箭头材质，用于辅助线和旋转控制器
       return new Cesium.Material({
         fabric: {
           type: "dasharrow",
-          source: polylineAntialiasingMaterial,  // 使用自定义的抗锯齿虚线材质
+          source: polylineAntialiasingMaterial, // 使用自定义的抗锯齿虚线材质
           uniforms: {
-            color: color,                         // 线条颜色
-            gapColor: Cesium.Color.TRANSPARENT,   // 间隙颜色（透明）
-            dashLength: dashLength,               // 虚线段长度
-            dashPattern: 255,                     // 虚线模式
+            color: color, // 线条颜色
+            gapColor: Cesium.Color.TRANSPARENT, // 间隙颜色（透明）
+            dashLength: dashLength, // 虚线段长度
+            dashPattern: 255, // 虚线模式
           },
         },
       });
@@ -696,7 +705,7 @@ class EditCesium {
         fabric: {
           type: "PolylineArrow",
           uniforms: {
-            color: color,  // 箭头颜色
+            color: color, // 箭头颜色
           },
         },
       });
@@ -711,7 +720,7 @@ class EditCesium {
     if (!this.xAxis || !this.yAxis || !this.zAxis) {
       return;
     }
-    
+
     this.XOYPlane = this.primitivesList.add(
       new AxisPlane({
         color: this.zAxisColor,
@@ -723,7 +732,7 @@ class EditCesium {
       }),
     ) as AxisPrimitive;
     this.XOYPlane.relativeAxis = [this.xAxis, this.yAxis];
-    
+
     this.XOZPlane = this.primitivesList.add(
       new AxisPlane({
         color: this.yAxisColor,
@@ -735,7 +744,7 @@ class EditCesium {
       }),
     ) as AxisPrimitive;
     this.XOZPlane.relativeAxis = [this.xAxis, this.zAxis];
-    
+
     this.YOZPlane = this.primitivesList.add(
       new AxisPlane({
         color: this.xAxisColor,
@@ -747,7 +756,7 @@ class EditCesium {
       }),
     ) as AxisPrimitive;
     this.YOZPlane.relativeAxis = [this.yAxis, this.zAxis];
-    
+
     this._primitives.push(this.XOYPlane, this.YOZPlane, this.XOZPlane);
   }
 
@@ -876,7 +885,7 @@ class EditCesium {
   private addEventListener(): void {
     const viewer = this.viewer;
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
-    
+
     // === 鼠标按下事件 ===
     handler.setInputAction((e: any) => {
       if (!this.hasBindObject) {
@@ -889,17 +898,17 @@ class EditCesium {
       }
       // 如果点击的是编辑器的控制器
       if (this._primitives.includes(feat.primitive)) {
-        this.mousedownPixel = e.position;              // 记录按下位置
-        this.active(feat.primitive);                   // 激活被点击的控制器
-        this.offset = new Cesium.Cartesian3();         // 重置偏移量
-        this.angle = 0;                                // 重置旋转角度
-        
+        this.mousedownPixel = e.position; // 记录按下位置
+        this.active(feat.primitive); // 激活被点击的控制器
+        this.offset = new Cesium.Cartesian3(); // 重置偏移量
+        this.angle = 0; // 重置旋转角度
+
         // 注册鼠标移动事件监听器
         handler.setInputAction((e: any) => {
           const { startPosition, endPosition } = e;
-          this.transform(startPosition, endPosition);   // 执行变换操作
+          this.transform(startPosition, endPosition); // 执行变换操作
         }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
-        
+
         // 禁用相机旋转，避免与编辑操作冲突
         viewer.scene.screenSpaceCameraController.enableRotate = false;
       }
@@ -915,7 +924,7 @@ class EditCesium {
       handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
       // 重新启用相机旋转
       viewer.scene.screenSpaceCameraController.enableRotate = true;
-      
+
       // 清空平移辅助线
       if (this.translateEnabled && this.xAux && this.yAux && this.zAux) {
         this.xAux.positions = [];
@@ -942,12 +951,17 @@ class EditCesium {
    * @param startPosition 鼠标开始位置（屏幕坐标）
    * @param endPosition 鼠标结束位置（屏幕坐标）
    */
-  private transform(startPosition: Cesium.Cartesian2, endPosition: Cesium.Cartesian2): void {
+  private transform(
+    startPosition: Cesium.Cartesian2,
+    endPosition: Cesium.Cartesian2,
+  ): void {
     // 触发变换前事件
     if (this.modelMatrix) {
-      this.preTranformEvent.raise(Cesium.Matrix4.clone(this.modelMatrix, new Cesium.Matrix4()));
+      this.preTranformEvent.raise(
+        Cesium.Matrix4.clone(this.modelMatrix, new Cesium.Matrix4()),
+      );
     }
-    
+
     // === 处理原点拖拽（整体移动） ===
     if (this.activePrimitive === this.originPoint) {
       // 将屏幕坐标转换为地理坐标
@@ -971,12 +985,16 @@ class EditCesium {
           }
         }
       }
-    } 
+    }
     // === 处理平移操作 ===
     else if (this.mode === EModel.T) {
-      this.computeOffset(startPosition, endPosition, _offset as OffsetCartesian3);
+      this.computeOffset(
+        startPosition,
+        endPosition,
+        _offset as OffsetCartesian3,
+      );
       this.translate(_offset);
-    } 
+    }
     // === 处理旋转操作 ===
     else if (this.mode === EModel.R) {
       const startLocalPosition = this.getPositionInPlane(startPosition);
@@ -985,22 +1003,31 @@ class EditCesium {
         const angle = this.computeAngle(startLocalPosition, endLocalPosition);
         this.rotate(angle);
       }
-    } 
+    }
     // === 处理缩放操作 ===
     else if (this.mode === EModel.S && this.scaleAxis) {
-      this.computeOffset(startPosition, endPosition, _offset as OffsetCartesian3);
+      this.computeOffset(
+        startPosition,
+        endPosition,
+        _offset as OffsetCartesian3,
+      );
       const offsetExtended = _offset as OffsetCartesian3;
       if (offsetExtended.sxyz !== undefined) {
         // 根据拖拽距离计算缩放比例
-        const distance = Cesium.Cartesian3.distance(this.scaleAxis.positions[0], this.scaleAxis.positions[1]);
+        const distance = Cesium.Cartesian3.distance(
+          this.scaleAxis.positions[0],
+          this.scaleAxis.positions[1],
+        );
         const s = -offsetExtended.sxyz / distance + 1;
         this.scale(new Cesium.Cartesian3(s, s, s));
       }
     }
-    
+
     // 触发变换后事件
     if (this.modelMatrix) {
-      this.postTransformEvent.raise(Cesium.Matrix4.clone(this.modelMatrix, new Cesium.Matrix4()));
+      this.postTransformEvent.raise(
+        Cesium.Matrix4.clone(this.modelMatrix, new Cesium.Matrix4()),
+      );
     }
   }
 
@@ -1049,7 +1076,11 @@ class EditCesium {
    * @param endPosition 结束位置
    * @param offset 偏移量输出
    */
-  private computeOffset(startPosition: Cesium.Cartesian2, endPosition: Cesium.Cartesian2, offset: OffsetCartesian3): OffsetCartesian3 {
+  private computeOffset(
+    startPosition: Cesium.Cartesian2,
+    endPosition: Cesium.Cartesian2,
+    offset: OffsetCartesian3,
+  ): OffsetCartesian3 {
     if (!this.activePrimitive) {
       return offset;
     }
@@ -1073,13 +1104,23 @@ class EditCesium {
           new Cesium.Cartesian3(),
         ),
       );
-      const pixelList = cartList.map((cart: Cesium.Cartesian3) =>
-        LonLat.toPixel(cart, this.viewer.scene),
-      ).filter(pixel => pixel !== undefined) as Cesium.Cartesian2[];
-      
+      const pixelList = cartList
+        .map((cart: Cesium.Cartesian3) =>
+          LonLat.toPixel(cart, this.viewer.scene),
+        )
+        .filter((pixel) => pixel !== undefined) as Cesium.Cartesian2[];
+
       if (pixelList.length >= 2) {
-        const axisVector = Cesium.Cartesian2.subtract(pixelList[1], pixelList[0], new Cesium.Cartesian2());
-        const moveVector = Cesium.Cartesian2.subtract(endPosition, startPosition, new Cesium.Cartesian2());
+        const axisVector = Cesium.Cartesian2.subtract(
+          pixelList[1],
+          pixelList[0],
+          new Cesium.Cartesian2(),
+        );
+        const moveVector = Cesium.Cartesian2.subtract(
+          endPosition,
+          startPosition,
+          new Cesium.Cartesian2(),
+        );
         const length = this.projectInAxis(axisVector, moveVector);
         offset[axis.axis.toLowerCase()] = length * delta;
       }
@@ -1093,24 +1134,49 @@ class EditCesium {
    * @param endPosition 结束位置
    * @returns 旋转角度（弧度）
    */
-  private computeAngle(startPosition: Cesium.Cartesian3, endPosition: Cesium.Cartesian3): number {
+  private computeAngle(
+    startPosition: Cesium.Cartesian3,
+    endPosition: Cesium.Cartesian3,
+  ): number {
     if (!this.activePrimitive || !this.activePrimitive.normal) {
       return 0;
     }
     const center = this.center;
-    const startVec = Cesium.Cartesian3.subtract(startPosition, center, new Cesium.Cartesian3());
-    const endVec = Cesium.Cartesian3.subtract(endPosition, center, new Cesium.Cartesian3());
-    
-    const normalizedStart = Cesium.Cartesian3.normalize(startVec, new Cesium.Cartesian3());
-    const normalizedEnd = Cesium.Cartesian3.normalize(endVec, new Cesium.Cartesian3());
-    
+    const startVec = Cesium.Cartesian3.subtract(
+      startPosition,
+      center,
+      new Cesium.Cartesian3(),
+    );
+    const endVec = Cesium.Cartesian3.subtract(
+      endPosition,
+      center,
+      new Cesium.Cartesian3(),
+    );
+
+    const normalizedStart = Cesium.Cartesian3.normalize(
+      startVec,
+      new Cesium.Cartesian3(),
+    );
+    const normalizedEnd = Cesium.Cartesian3.normalize(
+      endVec,
+      new Cesium.Cartesian3(),
+    );
+
     const angle = Cesium.Cartesian3.dot(normalizedStart, normalizedEnd);
-    
+
     // 计算旋转方向
-    const v1 = Cesium.Cartesian3.subtract(startVec, endVec, new Cesium.Cartesian3());
-    const cross = Cesium.Cartesian3.cross(v1, startVec, new Cesium.Cartesian3());
+    const v1 = Cesium.Cartesian3.subtract(
+      startVec,
+      endVec,
+      new Cesium.Cartesian3(),
+    );
+    const cross = Cesium.Cartesian3.cross(
+      v1,
+      startVec,
+      new Cesium.Cartesian3(),
+    );
     const normal = this.activePrimitive.normal;
-    
+
     const sign = Cesium.Math.sign(Cesium.Cartesian3.dot(cross, normal));
     return Math.acos(Cesium.Math.clamp(angle, -1, 1)) * sign;
   }
@@ -1121,8 +1187,14 @@ class EditCesium {
    * @param vector 要投影的向量
    * @returns 投影长度
    */
-  private projectInAxis(normal: Cesium.Cartesian2, vector: Cesium.Cartesian2): number {
-    const normalizedNormal = Cesium.Cartesian2.normalize(normal, new Cesium.Cartesian2());
+  private projectInAxis(
+    normal: Cesium.Cartesian2,
+    vector: Cesium.Cartesian2,
+  ): number {
+    const normalizedNormal = Cesium.Cartesian2.normalize(
+      normal,
+      new Cesium.Cartesian2(),
+    );
     return Cesium.Cartesian2.dot(normalizedNormal, vector);
   }
 
@@ -1132,7 +1204,11 @@ class EditCesium {
    * @param angle 旋转角度（弧度）
    */
   private rotate(angle: number): void {
-    if (!this.activePrimitive || !this.activePrimitive.normal || !this.modelMatrix) {
+    if (
+      !this.activePrimitive ||
+      !this.activePrimitive.normal ||
+      !this.modelMatrix
+    ) {
       return;
     }
     this.angle += angle;
@@ -1162,7 +1238,7 @@ class EditCesium {
       inverseTranslation,
       this.modelMatrix,
     );
-    
+
     // 使用正确的方式访问图元集合
     const primitives = this.primitivesList as any;
     if (primitives._primitives) {
@@ -1198,7 +1274,7 @@ class EditCesium {
     }
     const scaleMatrix = Cesium.Matrix4.fromScale(scale, new Cesium.Matrix4());
     Cesium.Matrix4.multiply(this.modelMatrix, scaleMatrix, this.modelMatrix);
-    
+
     // 使用正确的方式访问图元集合
     const primitives = this.primitivesList as any;
     if (primitives._primitives) {
@@ -1226,7 +1302,10 @@ class EditCesium {
       if (color) {
         this.setColorForPrimitive(this.activePrimitive, color);
       }
-      if (this.activePrimitive.isAxisPlane && this.activePrimitive.relativeAxis) {
+      if (
+        this.activePrimitive.isAxisPlane &&
+        this.activePrimitive.relativeAxis
+      ) {
         for (const a of this.activePrimitive.relativeAxis) {
           if (a.color) {
             this.setColorForPrimitive(a, a.color);
@@ -1252,7 +1331,9 @@ class EditCesium {
       if (geometry.axis.includes("R")) {
         this.mode = EModel.R;
         if (this.mousedownPixel && this.rAxuStart) {
-          const mousedownCartesian = this.getPositionInPlane(this.mousedownPixel);
+          const mousedownCartesian = this.getPositionInPlane(
+            this.mousedownPixel,
+          );
           if (mousedownCartesian) {
             this.rAxuStart.positions = [this.center, mousedownCartesian];
             this.startLocalPosition = mousedownCartesian;
@@ -1272,10 +1353,17 @@ class EditCesium {
    * @param offset 偏移量
    */
   private createAux(offset: Cesium.Cartesian3): void {
-    if (!this.xAxis || !this.yAxis || !this.zAxis || !this.xAux || !this.yAux || !this.zAux) {
+    if (
+      !this.xAxis ||
+      !this.yAxis ||
+      !this.zAxis ||
+      !this.xAux ||
+      !this.yAux ||
+      !this.zAux
+    ) {
       return;
     }
-    
+
     if (offset.x > 0) {
       const p1 = Cesium.Cartesian3.clone(this.xAxis.positions[0]);
       const p2 = Cesium.Cartesian3.clone(this.xAxis.positions[0]);
@@ -1317,9 +1405,18 @@ class EditCesium {
    * @param startLocalPosition 开始本地位置
    * @param angle 旋转角度
    */
-  private createRotateAux(startLocalPosition?: Cesium.Cartesian3, angle?: number): void {
+  private createRotateAux(
+    startLocalPosition?: Cesium.Cartesian3,
+    angle?: number,
+  ): void {
     const startPosition = this.startLocalPosition;
-    if (!startPosition || !this.activePrimitive || !this.activePrimitive.normal || !this.rAxuEnd || angle === undefined) {
+    if (
+      !startPosition ||
+      !this.activePrimitive ||
+      !this.activePrimitive.normal ||
+      !this.rAxuEnd ||
+      angle === undefined
+    ) {
       return;
     }
     const q = Cesium.Quaternion.fromAxisAngle(
@@ -1359,8 +1456,15 @@ class EditCesium {
    * @param pixel 像素坐标
    * @returns 平面上的位置
    */
-  private getPositionInPlane(pixel: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    if (!this.activePrimitive || !this.activePrimitive.normal || !this._modelMatrix || !this._inverseModelMatrix) {
+  private getPositionInPlane(
+    pixel: Cesium.Cartesian2,
+  ): Cesium.Cartesian3 | undefined {
+    if (
+      !this.activePrimitive ||
+      !this.activePrimitive.normal ||
+      !this._modelMatrix ||
+      !this._inverseModelMatrix
+    ) {
       return undefined;
     }
     const mousedownCartesian = new Cesium.Cartesian3();
@@ -1375,7 +1479,11 @@ class EditCesium {
       plane,
     );
     Cesium.Plane.transform(plane, this._modelMatrix, plane);
-    const intersection = Cesium.IntersectionTests.rayPlane(ray, plane, mousedownCartesian);
+    const intersection = Cesium.IntersectionTests.rayPlane(
+      ray,
+      plane,
+      mousedownCartesian,
+    );
     if (!intersection) {
       return undefined;
     }
@@ -1397,7 +1505,7 @@ class EditCesium {
     this.bindObject = undefined;
     // 移除所有图元
     this.primitivesList.removeAll();
-    
+
     // === 清空图元引用 ===
     this.originPoint = undefined;
     this.xAxis = undefined;
@@ -1406,7 +1514,7 @@ class EditCesium {
     this.xAux = undefined;
     this.yAux = undefined;
     this.zAux = undefined;
-    
+
     // 清空变换矩阵
     this.modelMatrix = undefined;
     // 标记为未绑定状态
