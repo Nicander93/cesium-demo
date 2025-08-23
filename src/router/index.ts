@@ -183,6 +183,13 @@ const routes: RouteRecordRaw[] = [
       title: '自定义Cesium事件处理器',
     },
   },
+  {
+    path: '/draw-command-primitive',
+    component: () => import('@/views/draw-command-primitive/index.vue'),
+    meta: {
+      title: '绘制命令Primitive',
+    },
+  },
 ]
 
 export default createRouter({
