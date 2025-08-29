@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@types/cesium':
+        specifier: ^1.70.4
+        version: 1.70.4
       '@types/heatmap.js':
         specifier: ^2.0.41
         version: 2.0.41
-      cesium:
-        specifier: ^1.132.0
-        version: 1.132.0
       heatmap.js:
         specifier: ^2.0.5
         version: 2.0.5
@@ -429,6 +429,10 @@ packages:
 
   '@tweenjs/tween.js@25.0.0':
     resolution: {integrity: sha512-XKLA6syeBUaPzx4j3qwMqzzq+V4uo72BnlbOjmuljLrRqdsd3qnzvZZoxvMHZ23ndsRS4aufU6JOZYpCbU6T1A==}
+
+  '@types/cesium@1.70.4':
+    resolution: {integrity: sha512-dSBhF5qftTCyB8xYRpumjzeEdEiV0wjDfmLtXF+1cNYUHvn2xs2HcvxCKFCqH6hEcATPWDP0WW6aaCCqrUo9dQ==}
+    deprecated: This is a stub types definition. cesium provides its own type definitions, so you do not need this installed.
 
   '@types/chai@5.2.2':
     resolution: {integrity: sha512-8kB30R7Hwqf40JPiKhVzodJs2Qc1ZJ5zuT3uzw5Hq/dhNCl3G3l83jfpdI1e20BP348+fV7VIL/+FxaXkqBmWg==, tarball: https://registry.npmjs.org/@types/chai/-/chai-5.2.2.tgz}
@@ -1445,6 +1449,10 @@ snapshots:
   '@spz-loader/core@0.3.0': {}
 
   '@tweenjs/tween.js@25.0.0': {}
+
+  '@types/cesium@1.70.4':
+    dependencies:
+      cesium: 1.132.0
 
   '@types/chai@5.2.2':
     dependencies:

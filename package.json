@@ -12,8 +12,8 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "@types/cesium": "^1.70.4",
     "@types/heatmap.js": "^2.0.41",
-    "cesium": "^1.132.0",
     "heatmap.js": "^2.0.5",
     "lil-gui": "^0.20.0",
     "vite-plugin-cesium": "^1.2.23",
