@@ -22,7 +22,7 @@
  * Portions licensed separately.
  * See https://github.com/CesiumGS/cesium/blob/main/LICENSE.md for full licensing details.
  */
-console.log('Cesium loaded')
+
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -34417,6 +34417,7 @@ function createUniform2(gl, activeUniform, uniformName, location2) {
       return new UniformFloatVec4(gl, activeUniform, uniformName, location2);
     case gl.SAMPLER_2D:
     case gl.SAMPLER_CUBE:
+    case gl.SAMPLER_3D:
       return new UniformSampler(gl, activeUniform, uniformName, location2);
     case gl.INT:
     case gl.BOOL:
@@ -85296,22 +85297,22 @@ SceneTransforms.transformWindowToDrawingBuffer = function(scene, windowPosition,
 };
 var scratchNDC = new Cartesian4_default();
 var scratchWorldCoords = new Cartesian4_default();
-SceneTransforms.drawingBufferToWorldCoordinates = function(scene, drawingBufferPosition, depth, result) {
+SceneTransforms.drawingBufferToWorldCoordinates = function(scene, drawingBufferPosition, depth2, result) {
   const context = scene.context;
   const uniformState = context.uniformState;
   const currentFrustum = uniformState.currentFrustum;
   const near = currentFrustum.x;
   const far = currentFrustum.y;
   if (scene.frameState.useLogDepth) {
-    const log2Depth = depth * uniformState.log2FarDepthFromNearPlusOne;
+    const log2Depth = depth2 * uniformState.log2FarDepthFromNearPlusOne;
     const depthFromNear = Math.pow(2, log2Depth) - 1;
-    depth = far * (1 - near / (depthFromNear + near)) / (far - near);
+    depth2 = far * (1 - near / (depthFromNear + near)) / (far - near);
   }
   const viewport = scene.view.passState.viewport;
   const ndc = Cartesian4_default.clone(Cartesian4_default.UNIT_W, scratchNDC);
   ndc.x = (drawingBufferPosition.x - viewport.x) / viewport.width * 2 - 1;
   ndc.y = (drawingBufferPosition.y - viewport.y) / viewport.height * 2 - 1;
-  ndc.z = depth * 2 - 1;
+  ndc.z = depth2 * 2 - 1;
   ndc.w = 1;
   let worldCoords;
   let frustum = scene.camera.frustum;
@@ -153854,10 +153855,10 @@ var DYN_TREES = 2;
 var MIN_MATCH = 3;
 var MAX_MATCH = 258;
 var MIN_LOOKAHEAD = MAX_MATCH + MIN_MATCH + 1;
-function smaller(tree, n, m, depth) {
+function smaller(tree, n, m, depth2) {
   const tn2 = tree[n * 2];
   const tm2 = tree[m * 2];
-  return tn2 < tm2 || tn2 == tm2 && depth[n] <= depth[m];
+  return tn2 < tm2 || tn2 == tm2 && depth2[n] <= depth2[m];
 }
 function Deflate() {
   const that = this;
@@ -183859,3273 +183860,6 @@ function wrapFunction(obj, oldFunction, newFunction) {
   };
 }
 var wrapFunction_default = wrapFunction;
-
-// packages/engine/Source/Shaders/ViewportQuadVS.js
-var ViewportQuadVS_default = "in vec4 position;\nin vec2 textureCoordinates;\n\nout vec2 v_textureCoordinates;\n\nvoid main() \n{\n    gl_Position = position;\n    v_textureCoordinates = textureCoordinates;\n}\n";
-
-// packages/engine/Source/Renderer/ComputeEngine.js
-function ComputeEngine(context) {
-  this._context = context;
-}
-var renderStateScratch;
-var drawCommandScratch = new DrawCommand_default({
-  primitiveType: PrimitiveType_default.TRIANGLES
-});
-var clearCommandScratch = new ClearCommand_default({
-  color: new Color_default(0, 0, 0, 0)
-});
-function createFramebuffer(context, outputTexture) {
-  return new Framebuffer_default({
-    context,
-    colorTextures: [outputTexture],
-    destroyAttachments: false
-  });
-}
-function createViewportQuadShader(context, fragmentShaderSource) {
-  return ShaderProgram_default.fromCache({
-    context,
-    vertexShaderSource: ViewportQuadVS_default,
-    fragmentShaderSource,
-    attributeLocations: {
-      position: 0,
-      textureCoordinates: 1
-    }
-  });
-}
-function createRenderState(width, height) {
-  if (!defined_default(renderStateScratch) || renderStateScratch.viewport.width !== width || renderStateScratch.viewport.height !== height) {
-    renderStateScratch = RenderState_default.fromCache({
-      viewport: new BoundingRectangle_default(0, 0, width, height)
-    });
-  }
-  return renderStateScratch;
-}
-ComputeEngine.prototype.execute = function(computeCommand) {
-  Check_default.defined("computeCommand", computeCommand);
-  if (defined_default(computeCommand.preExecute)) {
-    computeCommand.preExecute(computeCommand);
-  }
-  if (!defined_default(computeCommand.fragmentShaderSource) && !defined_default(computeCommand.shaderProgram)) {
-    throw new DeveloperError_default(
-      "computeCommand.fragmentShaderSource or computeCommand.shaderProgram is required."
-    );
-  }
-  Check_default.defined("computeCommand.outputTexture", computeCommand.outputTexture);
-  const outputTexture = computeCommand.outputTexture;
-  const width = outputTexture.width;
-  const height = outputTexture.height;
-  const context = this._context;
-  const vertexArray = defined_default(computeCommand.vertexArray) ? computeCommand.vertexArray : context.getViewportQuadVertexArray();
-  const shaderProgram = defined_default(computeCommand.shaderProgram) ? computeCommand.shaderProgram : createViewportQuadShader(context, computeCommand.fragmentShaderSource);
-  const framebuffer = createFramebuffer(context, outputTexture);
-  const renderState = createRenderState(width, height);
-  const uniformMap2 = computeCommand.uniformMap;
-  const clearCommand = clearCommandScratch;
-  clearCommand.framebuffer = framebuffer;
-  clearCommand.renderState = renderState;
-  clearCommand.execute(context);
-  const drawCommand = drawCommandScratch;
-  drawCommand.vertexArray = vertexArray;
-  drawCommand.renderState = renderState;
-  drawCommand.shaderProgram = shaderProgram;
-  drawCommand.uniformMap = uniformMap2;
-  drawCommand.framebuffer = framebuffer;
-  drawCommand.execute(context);
-  framebuffer.destroy();
-  if (!computeCommand.persists) {
-    shaderProgram.destroy();
-    if (defined_default(computeCommand.vertexArray)) {
-      vertexArray.destroy();
-    }
-  }
-  if (defined_default(computeCommand.postExecute)) {
-    computeCommand.postExecute(outputTexture);
-  }
-};
-ComputeEngine.prototype.isDestroyed = function() {
-  return false;
-};
-ComputeEngine.prototype.destroy = function() {
-  return destroyObject_default(this);
-};
-var ComputeEngine_default = ComputeEngine;
-
-// packages/engine/Source/Renderer/PassState.js
-function PassState(context) {
-  this.context = context;
-  this.framebuffer = void 0;
-  this.blendingEnabled = void 0;
-  this.scissorTest = void 0;
-  this.viewport = void 0;
-}
-var PassState_default = PassState;
-
-// packages/engine/Source/Renderer/ShaderCache.js
-function ShaderCache(context) {
-  this._context = context;
-  this._shaders = {};
-  this._numberOfShaders = 0;
-  this._shadersToRelease = {};
-}
-Object.defineProperties(ShaderCache.prototype, {
-  numberOfShaders: {
-    get: function() {
-      return this._numberOfShaders;
-    }
-  }
-});
-ShaderCache.prototype.replaceShaderProgram = function(options) {
-  if (defined_default(options.shaderProgram)) {
-    options.shaderProgram.destroy();
-  }
-  return this.getShaderProgram(options);
-};
-function toSortedJson(dictionary) {
-  const sortedKeys = Object.keys(dictionary).sort();
-  return JSON.stringify(dictionary, sortedKeys);
-}
-ShaderCache.prototype.getShaderProgram = function(options) {
-  let vertexShaderSource = options.vertexShaderSource;
-  let fragmentShaderSource = options.fragmentShaderSource;
-  const attributeLocations8 = options.attributeLocations;
-  if (typeof vertexShaderSource === "string") {
-    vertexShaderSource = new ShaderSource_default({
-      sources: [vertexShaderSource]
-    });
-  }
-  if (typeof fragmentShaderSource === "string") {
-    fragmentShaderSource = new ShaderSource_default({
-      sources: [fragmentShaderSource]
-    });
-  }
-  const vertexShaderKey = vertexShaderSource.getCacheKey();
-  const fragmentShaderKey = fragmentShaderSource.getCacheKey();
-  const attributeLocationKey = defined_default(attributeLocations8) ? toSortedJson(attributeLocations8) : "";
-  const keyword = `${vertexShaderKey}:${fragmentShaderKey}:${attributeLocationKey}`;
-  let cachedShader;
-  if (defined_default(this._shaders[keyword])) {
-    cachedShader = this._shaders[keyword];
-    delete this._shadersToRelease[keyword];
-  } else {
-    const context = this._context;
-    const vertexShaderText = vertexShaderSource.createCombinedVertexShader(
-      context
-    );
-    const fragmentShaderText = fragmentShaderSource.createCombinedFragmentShader(
-      context
-    );
-    const shaderProgram = new ShaderProgram_default({
-      gl: context._gl,
-      logShaderCompilation: context.logShaderCompilation,
-      debugShaders: context.debugShaders,
-      vertexShaderSource,
-      vertexShaderText,
-      fragmentShaderSource,
-      fragmentShaderText,
-      attributeLocations: attributeLocations8
-    });
-    cachedShader = {
-      cache: this,
-      shaderProgram,
-      keyword,
-      derivedKeywords: [],
-      count: 0
-    };
-    shaderProgram._cachedShader = cachedShader;
-    this._shaders[keyword] = cachedShader;
-    ++this._numberOfShaders;
-  }
-  ++cachedShader.count;
-  return cachedShader.shaderProgram;
-};
-ShaderCache.prototype.replaceDerivedShaderProgram = function(shaderProgram, keyword, options) {
-  const cachedShader = shaderProgram._cachedShader;
-  const derivedKeyword = keyword + cachedShader.keyword;
-  const cachedDerivedShader = this._shaders[derivedKeyword];
-  if (defined_default(cachedDerivedShader)) {
-    destroyShader(this, cachedDerivedShader);
-    const index = cachedShader.derivedKeywords.indexOf(keyword);
-    if (index > -1) {
-      cachedShader.derivedKeywords.splice(index, 1);
-    }
-  }
-  return this.createDerivedShaderProgram(shaderProgram, keyword, options);
-};
-ShaderCache.prototype.getDerivedShaderProgram = function(shaderProgram, keyword) {
-  const cachedShader = shaderProgram._cachedShader;
-  const derivedKeyword = keyword + cachedShader.keyword;
-  const cachedDerivedShader = this._shaders[derivedKeyword];
-  if (!defined_default(cachedDerivedShader)) {
-    return void 0;
-  }
-  return cachedDerivedShader.shaderProgram;
-};
-ShaderCache.prototype.createDerivedShaderProgram = function(shaderProgram, keyword, options) {
-  const cachedShader = shaderProgram._cachedShader;
-  const derivedKeyword = keyword + cachedShader.keyword;
-  let vertexShaderSource = options.vertexShaderSource;
-  let fragmentShaderSource = options.fragmentShaderSource;
-  const attributeLocations8 = options.attributeLocations;
-  if (typeof vertexShaderSource === "string") {
-    vertexShaderSource = new ShaderSource_default({
-      sources: [vertexShaderSource]
-    });
-  }
-  if (typeof fragmentShaderSource === "string") {
-    fragmentShaderSource = new ShaderSource_default({
-      sources: [fragmentShaderSource]
-    });
-  }
-  const context = this._context;
-  const vertexShaderText = vertexShaderSource.createCombinedVertexShader(
-    context
-  );
-  const fragmentShaderText = fragmentShaderSource.createCombinedFragmentShader(
-    context
-  );
-  const derivedShaderProgram = new ShaderProgram_default({
-    gl: context._gl,
-    logShaderCompilation: context.logShaderCompilation,
-    debugShaders: context.debugShaders,
-    vertexShaderSource,
-    vertexShaderText,
-    fragmentShaderSource,
-    fragmentShaderText,
-    attributeLocations: attributeLocations8
-  });
-  const derivedCachedShader = {
-    cache: this,
-    shaderProgram: derivedShaderProgram,
-    keyword: derivedKeyword,
-    derivedKeywords: [],
-    count: 0
-  };
-  cachedShader.derivedKeywords.push(keyword);
-  derivedShaderProgram._cachedShader = derivedCachedShader;
-  this._shaders[derivedKeyword] = derivedCachedShader;
-  return derivedShaderProgram;
-};
-function destroyShader(cache, cachedShader) {
-  const derivedKeywords = cachedShader.derivedKeywords;
-  const length2 = derivedKeywords.length;
-  for (let i = 0; i < length2; ++i) {
-    const keyword = derivedKeywords[i] + cachedShader.keyword;
-    const derivedCachedShader = cache._shaders[keyword];
-    destroyShader(cache, derivedCachedShader);
-  }
-  delete cache._shaders[cachedShader.keyword];
-  cachedShader.shaderProgram.finalDestroy();
-}
-ShaderCache.prototype.destroyReleasedShaderPrograms = function() {
-  const shadersToRelease = this._shadersToRelease;
-  for (const keyword in shadersToRelease) {
-    if (shadersToRelease.hasOwnProperty(keyword)) {
-      const cachedShader = shadersToRelease[keyword];
-      destroyShader(this, cachedShader);
-      --this._numberOfShaders;
-    }
-  }
-  this._shadersToRelease = {};
-};
-ShaderCache.prototype.releaseShaderProgram = function(shaderProgram) {
-  if (defined_default(shaderProgram)) {
-    const cachedShader = shaderProgram._cachedShader;
-    if (cachedShader && --cachedShader.count === 0) {
-      this._shadersToRelease[cachedShader.keyword] = cachedShader;
-    }
-  }
-};
-ShaderCache.prototype.isDestroyed = function() {
-  return false;
-};
-ShaderCache.prototype.destroy = function() {
-  const shaders = this._shaders;
-  for (const keyword in shaders) {
-    if (shaders.hasOwnProperty(keyword)) {
-      shaders[keyword].shaderProgram.finalDestroy();
-    }
-  }
-  return destroyObject_default(this);
-};
-var ShaderCache_default = ShaderCache;
-
-// packages/engine/Source/Renderer/TextureCache.js
-function TextureCache() {
-  this._textures = {};
-  this._numberOfTextures = 0;
-  this._texturesToRelease = {};
-}
-Object.defineProperties(TextureCache.prototype, {
-  numberOfTextures: {
-    get: function() {
-      return this._numberOfTextures;
-    }
-  }
-});
-TextureCache.prototype.getTexture = function(keyword) {
-  const cachedTexture = this._textures[keyword];
-  if (!defined_default(cachedTexture)) {
-    return void 0;
-  }
-  delete this._texturesToRelease[keyword];
-  ++cachedTexture.count;
-  return cachedTexture.texture;
-};
-TextureCache.prototype.addTexture = function(keyword, texture) {
-  const cachedTexture = {
-    texture,
-    count: 1
-  };
-  texture.finalDestroy = texture.destroy;
-  const that = this;
-  texture.destroy = function() {
-    if (--cachedTexture.count === 0) {
-      that._texturesToRelease[keyword] = cachedTexture;
-    }
-  };
-  this._textures[keyword] = cachedTexture;
-  ++this._numberOfTextures;
-};
-TextureCache.prototype.destroyReleasedTextures = function() {
-  const texturesToRelease = this._texturesToRelease;
-  for (const keyword in texturesToRelease) {
-    if (texturesToRelease.hasOwnProperty(keyword)) {
-      const cachedTexture = texturesToRelease[keyword];
-      delete this._textures[keyword];
-      cachedTexture.texture.finalDestroy();
-      --this._numberOfTextures;
-    }
-  }
-  this._texturesToRelease = {};
-};
-TextureCache.prototype.isDestroyed = function() {
-  return false;
-};
-TextureCache.prototype.destroy = function() {
-  const textures = this._textures;
-  for (const keyword in textures) {
-    if (textures.hasOwnProperty(keyword)) {
-      textures[keyword].texture.finalDestroy();
-    }
-  }
-  return destroyObject_default(this);
-};
-var TextureCache_default = TextureCache;
-
-// packages/engine/Source/Scene/SunLight.js
-function SunLight(options) {
-  options = defaultValue_default(options, defaultValue_default.EMPTY_OBJECT);
-  this.color = Color_default.clone(defaultValue_default(options.color, Color_default.WHITE));
-  this.intensity = defaultValue_default(options.intensity, 2);
-}
-var SunLight_default = SunLight;
-
-// packages/engine/Source/Renderer/UniformState.js
-function UniformState() {
-  this.globeDepthTexture = void 0;
-  this.gamma = void 0;
-  this._viewport = new BoundingRectangle_default();
-  this._viewportCartesian4 = new Cartesian4_default();
-  this._viewportDirty = false;
-  this._viewportOrthographicMatrix = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._viewportTransformation = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._model = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._view = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._inverseView = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._projection = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._infiniteProjection = Matrix4_default.clone(Matrix4_default.IDENTITY);
-  this._entireFrustum = new Cartesian2_default();
-  this._currentFrustum = new Cartesian2_default();
-  this._frustumPlanes = new Cartesian4_default();
-  this._farDepthFromNearPlusOne = void 0;
-  this._log2FarDepthFromNearPlusOne = void 0;
-  this._oneOverLog2FarDepthFromNearPlusOne = void 0;
-  this._frameState = void 0;
-  this._temeToPseudoFixed = Matrix3_default.clone(Matrix4_default.IDENTITY);
-  this._view3DDirty = true;
-  this._view3D = new Matrix4_default();
-  this._inverseView3DDirty = true;
-  this._inverseView3D = new Matrix4_default();
-  this._inverseModelDirty = true;
-  this._inverseModel = new Matrix4_default();
-  this._inverseTransposeModelDirty = true;
-  this._inverseTransposeModel = new Matrix3_default();
-  this._viewRotation = new Matrix3_default();
-  this._inverseViewRotation = new Matrix3_default();
-  this._viewRotation3D = new Matrix3_default();
-  this._inverseViewRotation3D = new Matrix3_default();
-  this._inverseProjectionDirty = true;
-  this._inverseProjection = new Matrix4_default();
-  this._modelViewDirty = true;
-  this._modelView = new Matrix4_default();
-  this._modelView3DDirty = true;
-  this._modelView3D = new Matrix4_default();
-  this._modelViewRelativeToEyeDirty = true;
-  this._modelViewRelativeToEye = new Matrix4_default();
-  this._inverseModelViewDirty = true;
-  this._inverseModelView = new Matrix4_default();
-  this._inverseModelView3DDirty = true;
-  this._inverseModelView3D = new Matrix4_default();
-  this._viewProjectionDirty = true;
-  this._viewProjection = new Matrix4_default();
-  this._inverseViewProjectionDirty = true;
-  this._inverseViewProjection = new Matrix4_default();
-  this._modelViewProjectionDirty = true;
-  this._modelViewProjection = new Matrix4_default();
-  this._inverseModelViewProjectionDirty = true;
-  this._inverseModelViewProjection = new Matrix4_default();
-  this._modelViewProjectionRelativeToEyeDirty = true;
-  this._modelViewProjectionRelativeToEye = new Matrix4_default();
-  this._modelViewInfiniteProjectionDirty = true;
-  this._modelViewInfiniteProjection = new Matrix4_default();
-  this._normalDirty = true;
-  this._normal = new Matrix3_default();
-  this._normal3DDirty = true;
-  this._normal3D = new Matrix3_default();
-  this._inverseNormalDirty = true;
-  this._inverseNormal = new Matrix3_default();
-  this._inverseNormal3DDirty = true;
-  this._inverseNormal3D = new Matrix3_default();
-  this._encodedCameraPositionMCDirty = true;
-  this._encodedCameraPositionMC = new EncodedCartesian3_default();
-  this._cameraPosition = new Cartesian3_default();
-  this._sunPositionWC = new Cartesian3_default();
-  this._sunPositionColumbusView = new Cartesian3_default();
-  this._sunDirectionWC = new Cartesian3_default();
-  this._sunDirectionEC = new Cartesian3_default();
-  this._moonDirectionEC = new Cartesian3_default();
-  this._lightDirectionWC = new Cartesian3_default();
-  this._lightDirectionEC = new Cartesian3_default();
-  this._lightColor = new Cartesian3_default();
-  this._lightColorHdr = new Cartesian3_default();
-  this._pass = void 0;
-  this._mode = void 0;
-  this._mapProjection = void 0;
-  this._ellipsoid = void 0;
-  this._cameraDirection = new Cartesian3_default();
-  this._cameraRight = new Cartesian3_default();
-  this._cameraUp = new Cartesian3_default();
-  this._frustum2DWidth = 0;
-  this._eyeHeight = 0;
-  this._eyeHeight2D = new Cartesian2_default();
-  this._eyeEllipsoidNormalEC = new Cartesian3_default();
-  this._eyeEllipsoidCurvature = new Cartesian2_default();
-  this._modelToEnu = new Matrix4_default();
-  this._enuToModel = new Matrix4_default();
-  this._pixelRatio = 1;
-  this._orthographicIn3D = false;
-  this._backgroundColor = new Color_default();
-  this._brdfLut = void 0;
-  this._environmentMap = void 0;
-  this._sphericalHarmonicCoefficients = void 0;
-  this._specularEnvironmentMaps = void 0;
-  this._specularEnvironmentMapsMaximumLOD = void 0;
-  this._fogDensity = void 0;
-  this._fogMinimumBrightness = void 0;
-  this._atmosphereHsbShift = void 0;
-  this._atmosphereLightIntensity = void 0;
-  this._atmosphereRayleighCoefficient = new Cartesian3_default();
-  this._atmosphereRayleighScaleHeight = new Cartesian3_default();
-  this._atmosphereMieCoefficient = new Cartesian3_default();
-  this._atmosphereMieScaleHeight = void 0;
-  this._atmosphereMieAnisotropy = void 0;
-  this._atmosphereDynamicLighting = void 0;
-  this._invertClassificationColor = void 0;
-  this._splitPosition = 0;
-  this._pixelSizePerMeter = void 0;
-  this._geometricToleranceOverMeter = void 0;
-  this._minimumDisableDepthTestDistance = void 0;
-}
-Object.defineProperties(UniformState.prototype, {
-  /**
-   * @memberof UniformState.prototype
-   * @type {FrameState}
-   * @readonly
-   */
-  frameState: {
-    get: function() {
-      return this._frameState;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {BoundingRectangle}
-   */
-  viewport: {
-    get: function() {
-      return this._viewport;
-    },
-    set: function(viewport) {
-      if (!BoundingRectangle_default.equals(viewport, this._viewport)) {
-        BoundingRectangle_default.clone(viewport, this._viewport);
-        const v3 = this._viewport;
-        const vc = this._viewportCartesian4;
-        vc.x = v3.x;
-        vc.y = v3.y;
-        vc.z = v3.width;
-        vc.w = v3.height;
-        this._viewportDirty = true;
-      }
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @private
-   */
-  viewportCartesian4: {
-    get: function() {
-      return this._viewportCartesian4;
-    }
-  },
-  viewportOrthographic: {
-    get: function() {
-      cleanViewport(this);
-      return this._viewportOrthographicMatrix;
-    }
-  },
-  viewportTransformation: {
-    get: function() {
-      cleanViewport(this);
-      return this._viewportTransformation;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  model: {
-    get: function() {
-      return this._model;
-    },
-    set: function(matrix) {
-      Matrix4_default.clone(matrix, this._model);
-      this._modelView3DDirty = true;
-      this._inverseModelView3DDirty = true;
-      this._inverseModelDirty = true;
-      this._inverseTransposeModelDirty = true;
-      this._modelViewDirty = true;
-      this._inverseModelViewDirty = true;
-      this._modelViewRelativeToEyeDirty = true;
-      this._inverseModelViewDirty = true;
-      this._modelViewProjectionDirty = true;
-      this._inverseModelViewProjectionDirty = true;
-      this._modelViewProjectionRelativeToEyeDirty = true;
-      this._modelViewInfiniteProjectionDirty = true;
-      this._normalDirty = true;
-      this._inverseNormalDirty = true;
-      this._normal3DDirty = true;
-      this._inverseNormal3DDirty = true;
-      this._encodedCameraPositionMCDirty = true;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseModel: {
-    get: function() {
-      if (this._inverseModelDirty) {
-        this._inverseModelDirty = false;
-        Matrix4_default.inverse(this._model, this._inverseModel);
-      }
-      return this._inverseModel;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @private
-   */
-  inverseTransposeModel: {
-    get: function() {
-      const m = this._inverseTransposeModel;
-      if (this._inverseTransposeModelDirty) {
-        this._inverseTransposeModelDirty = false;
-        Matrix4_default.getMatrix3(this.inverseModel, m);
-        Matrix3_default.transpose(m, m);
-      }
-      return m;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  view: {
-    get: function() {
-      return this._view;
-    }
-  },
-  /**
-   * The 3D view matrix.  In 3D mode, this is identical to {@link UniformState#view},
-   * but in 2D and Columbus View it is a synthetic matrix based on the equivalent position
-   * of the camera in the 3D world.
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  view3D: {
-    get: function() {
-      updateView3D(this);
-      return this._view3D;
-    }
-  },
-  /**
-   * The 3x3 rotation matrix of the current view matrix ({@link UniformState#view}).
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  viewRotation: {
-    get: function() {
-      updateView3D(this);
-      return this._viewRotation;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  viewRotation3D: {
-    get: function() {
-      updateView3D(this);
-      return this._viewRotation3D;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseView: {
-    get: function() {
-      return this._inverseView;
-    }
-  },
-  /**
-   * the 4x4 inverse-view matrix that transforms from eye to 3D world coordinates.  In 3D mode, this is
-   * identical to {@link UniformState#inverseView}, but in 2D and Columbus View it is a synthetic matrix
-   * based on the equivalent position of the camera in the 3D world.
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseView3D: {
-    get: function() {
-      updateInverseView3D(this);
-      return this._inverseView3D;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  inverseViewRotation: {
-    get: function() {
-      return this._inverseViewRotation;
-    }
-  },
-  /**
-   * The 3x3 rotation matrix of the current 3D inverse-view matrix ({@link UniformState#inverseView3D}).
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  inverseViewRotation3D: {
-    get: function() {
-      updateInverseView3D(this);
-      return this._inverseViewRotation3D;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  projection: {
-    get: function() {
-      return this._projection;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseProjection: {
-    get: function() {
-      cleanInverseProjection(this);
-      return this._inverseProjection;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  infiniteProjection: {
-    get: function() {
-      return this._infiniteProjection;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelView: {
-    get: function() {
-      cleanModelView(this);
-      return this._modelView;
-    }
-  },
-  /**
-   * The 3D model-view matrix.  In 3D mode, this is equivalent to {@link UniformState#modelView}.  In 2D and
-   * Columbus View, however, it is a synthetic matrix based on the equivalent position of the camera in the 3D world.
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelView3D: {
-    get: function() {
-      cleanModelView3D(this);
-      return this._modelView3D;
-    }
-  },
-  /**
-   * Model-view relative to eye matrix.
-   *
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelViewRelativeToEye: {
-    get: function() {
-      cleanModelViewRelativeToEye(this);
-      return this._modelViewRelativeToEye;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseModelView: {
-    get: function() {
-      cleanInverseModelView(this);
-      return this._inverseModelView;
-    }
-  },
-  /**
-   * The inverse of the 3D model-view matrix.  In 3D mode, this is equivalent to {@link UniformState#inverseModelView}.
-   * In 2D and Columbus View, however, it is a synthetic matrix based on the equivalent position of the camera in the 3D world.
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseModelView3D: {
-    get: function() {
-      cleanInverseModelView3D(this);
-      return this._inverseModelView3D;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  viewProjection: {
-    get: function() {
-      cleanViewProjection(this);
-      return this._viewProjection;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseViewProjection: {
-    get: function() {
-      cleanInverseViewProjection(this);
-      return this._inverseViewProjection;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelViewProjection: {
-    get: function() {
-      cleanModelViewProjection(this);
-      return this._modelViewProjection;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  inverseModelViewProjection: {
-    get: function() {
-      cleanInverseModelViewProjection(this);
-      return this._inverseModelViewProjection;
-    }
-  },
-  /**
-   * Model-view-projection relative to eye matrix.
-   *
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelViewProjectionRelativeToEye: {
-    get: function() {
-      cleanModelViewProjectionRelativeToEye(this);
-      return this._modelViewProjectionRelativeToEye;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelViewInfiniteProjection: {
-    get: function() {
-      cleanModelViewInfiniteProjection(this);
-      return this._modelViewInfiniteProjection;
-    }
-  },
-  /**
-   * A 3x3 normal transformation matrix that transforms normal vectors in model coordinates to
-   * eye coordinates.
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  normal: {
-    get: function() {
-      cleanNormal(this);
-      return this._normal;
-    }
-  },
-  /**
-   * A 3x3 normal transformation matrix that transforms normal vectors in 3D model
-   * coordinates to eye coordinates.  In 3D mode, this is identical to
-   * {@link UniformState#normal}, but in 2D and Columbus View it represents the normal transformation
-   * matrix as if the camera were at an equivalent location in 3D mode.
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  normal3D: {
-    get: function() {
-      cleanNormal3D(this);
-      return this._normal3D;
-    }
-  },
-  /**
-   * An inverse 3x3 normal transformation matrix that transforms normal vectors in model coordinates
-   * to eye coordinates.
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  inverseNormal: {
-    get: function() {
-      cleanInverseNormal(this);
-      return this._inverseNormal;
-    }
-  },
-  /**
-   * An inverse 3x3 normal transformation matrix that transforms normal vectors in eye coordinates
-   * to 3D model coordinates.  In 3D mode, this is identical to
-   * {@link UniformState#inverseNormal}, but in 2D and Columbus View it represents the normal transformation
-   * matrix as if the camera were at an equivalent location in 3D mode.
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  inverseNormal3D: {
-    get: function() {
-      cleanInverseNormal3D(this);
-      return this._inverseNormal3D;
-    }
-  },
-  /**
-   * The near distance (<code>x</code>) and the far distance (<code>y</code>) of the frustum defined by the camera.
-   * This is the largest possible frustum, not an individual frustum used for multi-frustum rendering.
-   * @memberof UniformState.prototype
-   * @type {Cartesian2}
-   */
-  entireFrustum: {
-    get: function() {
-      return this._entireFrustum;
-    }
-  },
-  /**
-   * The near distance (<code>x</code>) and the far distance (<code>y</code>) of the frustum defined by the camera.
-   * This is the individual frustum used for multi-frustum rendering.
-   * @memberof UniformState.prototype
-   * @type {Cartesian2}
-   */
-  currentFrustum: {
-    get: function() {
-      return this._currentFrustum;
-    }
-  },
-  /**
-   * The distances to the frustum planes. The top, bottom, left and right distances are
-   * the x, y, z, and w components, respectively.
-   * @memberof UniformState.prototype
-   * @type {Cartesian4}
-   */
-  frustumPlanes: {
-    get: function() {
-      return this._frustumPlanes;
-    }
-  },
-  /**
-   * The far plane's distance from the near plane, plus 1.0.
-   *
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  farDepthFromNearPlusOne: {
-    get: function() {
-      return this._farDepthFromNearPlusOne;
-    }
-  },
-  /**
-   * The log2 of {@link UniformState#farDepthFromNearPlusOne}.
-   *
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  log2FarDepthFromNearPlusOne: {
-    get: function() {
-      return this._log2FarDepthFromNearPlusOne;
-    }
-  },
-  /**
-   * 1.0 divided by {@link UniformState#log2FarDepthFromNearPlusOne}.
-   *
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  oneOverLog2FarDepthFromNearPlusOne: {
-    get: function() {
-      return this._oneOverLog2FarDepthFromNearPlusOne;
-    }
-  },
-  /**
-   * The height in meters of the eye (camera) above or below the ellipsoid.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  eyeHeight: {
-    get: function() {
-      return this._eyeHeight;
-    }
-  },
-  /**
-   * The height (<code>x</code>) and the height squared (<code>y</code>)
-   * in meters of the eye (camera) above the 2D world plane. This uniform is only valid
-   * when the {@link SceneMode} is <code>SCENE2D</code>.
-   * @memberof UniformState.prototype
-   * @type {Cartesian2}
-   */
-  eyeHeight2D: {
-    get: function() {
-      return this._eyeHeight2D;
-    }
-  },
-  /**
-   * The ellipsoid surface normal at the camera position, in model coordinates.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  eyeEllipsoidNormalEC: {
-    get: function() {
-      return this._eyeEllipsoidNormalEC;
-    }
-  },
-  /**
-   * The ellipsoid radii of curvature at the camera position.
-   * The .x component is the prime vertical radius, .y is the meridional.
-   * @memberof UniformState.prototype
-   * @type {Cartesian2}
-   */
-  eyeEllipsoidCurvature: {
-    get: function() {
-      return this._eyeEllipsoidCurvature;
-    }
-  },
-  /**
-   * A transform from model coordinates to an east-north-up coordinate system
-   * centered at the position on the ellipsoid below the camera
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  modelToEnu: {
-    get: function() {
-      return this._modelToEnu;
-    }
-  },
-  /**
-   * The inverse of {@link UniformState.prototype.modelToEnu}
-   * @memberof UniformState.prototype
-   * @type {Matrix4}
-   */
-  enuToModel: {
-    get: function() {
-      return this._enuToModel;
-    }
-  },
-  /**
-   * The sun position in 3D world coordinates at the current scene time.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  sunPositionWC: {
-    get: function() {
-      return this._sunPositionWC;
-    }
-  },
-  /**
-   * The sun position in 2D world coordinates at the current scene time.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  sunPositionColumbusView: {
-    get: function() {
-      return this._sunPositionColumbusView;
-    }
-  },
-  /**
-   * A normalized vector to the sun in 3D world coordinates at the current scene time.  Even in 2D or
-   * Columbus View mode, this returns the direction to the sun in the 3D scene.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  sunDirectionWC: {
-    get: function() {
-      return this._sunDirectionWC;
-    }
-  },
-  /**
-   * A normalized vector to the sun in eye coordinates at the current scene time.  In 3D mode, this
-   * returns the actual vector from the camera position to the sun position.  In 2D and Columbus View, it returns
-   * the vector from the equivalent 3D camera position to the position of the sun in the 3D scene.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  sunDirectionEC: {
-    get: function() {
-      return this._sunDirectionEC;
-    }
-  },
-  /**
-   * A normalized vector to the moon in eye coordinates at the current scene time.  In 3D mode, this
-   * returns the actual vector from the camera position to the moon position.  In 2D and Columbus View, it returns
-   * the vector from the equivalent 3D camera position to the position of the moon in the 3D scene.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  moonDirectionEC: {
-    get: function() {
-      return this._moonDirectionEC;
-    }
-  },
-  /**
-   * A normalized vector to the scene's light source in 3D world coordinates.  Even in 2D or
-   * Columbus View mode, this returns the direction to the light in the 3D scene.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  lightDirectionWC: {
-    get: function() {
-      return this._lightDirectionWC;
-    }
-  },
-  /**
-   * A normalized vector to the scene's light source in eye coordinates.  In 3D mode, this
-   * returns the actual vector from the camera position to the light.  In 2D and Columbus View, it returns
-   * the vector from the equivalent 3D camera position in the 3D scene.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  lightDirectionEC: {
-    get: function() {
-      return this._lightDirectionEC;
-    }
-  },
-  /**
-   * The color of light emitted by the scene's light source. This is equivalent to the light
-   * color multiplied by the light intensity limited to a maximum luminance of 1.0 suitable
-   * for non-HDR lighting.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  lightColor: {
-    get: function() {
-      return this._lightColor;
-    }
-  },
-  /**
-   * The high dynamic range color of light emitted by the scene's light source. This is equivalent to
-   * the light color multiplied by the light intensity suitable for HDR lighting.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  lightColorHdr: {
-    get: function() {
-      return this._lightColorHdr;
-    }
-  },
-  /**
-   * The high bits of the camera position.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  encodedCameraPositionMCHigh: {
-    get: function() {
-      cleanEncodedCameraPositionMC(this);
-      return this._encodedCameraPositionMC.high;
-    }
-  },
-  /**
-   * The low bits of the camera position.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  encodedCameraPositionMCLow: {
-    get: function() {
-      cleanEncodedCameraPositionMC(this);
-      return this._encodedCameraPositionMC.low;
-    }
-  },
-  /**
-   * A 3x3 matrix that transforms from True Equator Mean Equinox (TEME) axes to the
-   * pseudo-fixed axes at the Scene's current time.
-   * @memberof UniformState.prototype
-   * @type {Matrix3}
-   */
-  temeToPseudoFixedMatrix: {
-    get: function() {
-      return this._temeToPseudoFixed;
-    }
-  },
-  /**
-   * Gets the scaling factor for transforming from the canvas
-   * pixel space to canvas coordinate space.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  pixelRatio: {
-    get: function() {
-      return this._pixelRatio;
-    }
-  },
-  /**
-   * A scalar used to mix a color with the fog color based on the distance to the camera.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  fogDensity: {
-    get: function() {
-      return this._fogDensity;
-    }
-  },
-  /**
-   * A scalar used as a minimum value when brightening fog
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  fogMinimumBrightness: {
-    get: function() {
-      return this._fogMinimumBrightness;
-    }
-  },
-  /**
-   * A color shift to apply to the atmosphere color in HSB.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  atmosphereHsbShift: {
-    get: function() {
-      return this._atmosphereHsbShift;
-    }
-  },
-  /**
-   * The intensity of the light that is used for computing the atmosphere color
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  atmosphereLightIntensity: {
-    get: function() {
-      return this._atmosphereLightIntensity;
-    }
-  },
-  /**
-   * The Rayleigh scattering coefficient used in the atmospheric scattering equations for the sky atmosphere.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  atmosphereRayleighCoefficient: {
-    get: function() {
-      return this._atmosphereRayleighCoefficient;
-    }
-  },
-  /**
-   * The Rayleigh scale height used in the atmospheric scattering equations for the sky atmosphere, in meters.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  atmosphereRayleighScaleHeight: {
-    get: function() {
-      return this._atmosphereRayleighScaleHeight;
-    }
-  },
-  /**
-   * The Mie scattering coefficient used in the atmospheric scattering equations for the sky atmosphere.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3}
-   */
-  atmosphereMieCoefficient: {
-    get: function() {
-      return this._atmosphereMieCoefficient;
-    }
-  },
-  /**
-   * The Mie scale height used in the atmospheric scattering equations for the sky atmosphere, in meters.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  atmosphereMieScaleHeight: {
-    get: function() {
-      return this._atmosphereMieScaleHeight;
-    }
-  },
-  /**
-   * The anisotropy of the medium to consider for Mie scattering.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  atmosphereMieAnisotropy: {
-    get: function() {
-      return this._atmosphereMieAnisotropy;
-    }
-  },
-  /**
-   * Which light source to use for dynamically lighting the atmosphere
-   *
-   * @memberof UniformState.prototype
-   * @type {DynamicAtmosphereLightingType}
-   */
-  atmosphereDynamicLighting: {
-    get: function() {
-      return this._atmosphereDynamicLighting;
-    }
-  },
-  /**
-   * A scalar that represents the geometric tolerance per meter
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  geometricToleranceOverMeter: {
-    get: function() {
-      return this._geometricToleranceOverMeter;
-    }
-  },
-  /**
-   * @memberof UniformState.prototype
-   * @type {Pass}
-   */
-  pass: {
-    get: function() {
-      return this._pass;
-    }
-  },
-  /**
-   * The current background color
-   * @memberof UniformState.prototype
-   * @type {Color}
-   */
-  backgroundColor: {
-    get: function() {
-      return this._backgroundColor;
-    }
-  },
-  /**
-   * The look up texture used to find the BRDF for a material
-   * @memberof UniformState.prototype
-   * @type {Texture}
-   */
-  brdfLut: {
-    get: function() {
-      return this._brdfLut;
-    }
-  },
-  /**
-   * The environment map of the scene
-   * @memberof UniformState.prototype
-   * @type {CubeMap}
-   */
-  environmentMap: {
-    get: function() {
-      return this._environmentMap;
-    }
-  },
-  /**
-   * The spherical harmonic coefficients of the scene.
-   * @memberof UniformState.prototype
-   * @type {Cartesian3[]}
-   */
-  sphericalHarmonicCoefficients: {
-    get: function() {
-      return this._sphericalHarmonicCoefficients;
-    }
-  },
-  /**
-   * The specular environment cube map of the scene.
-   * @memberof UniformState.prototype
-   * @type {Texture}
-   */
-  specularEnvironmentMaps: {
-    get: function() {
-      return this._specularEnvironmentMaps;
-    }
-  },
-  /**
-   * The maximum level-of-detail of the specular environment cube map of the scene.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  specularEnvironmentMapsMaximumLOD: {
-    get: function() {
-      return this._specularEnvironmentMapsMaximumLOD;
-    }
-  },
-  /**
-   * The splitter position to use when rendering with a splitter. This will be in pixel coordinates relative to the canvas.
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  splitPosition: {
-    get: function() {
-      return this._splitPosition;
-    }
-  },
-  /**
-   * The distance from the camera at which to disable the depth test of billboards, labels and points
-   * to, for example, prevent clipping against terrain. When set to zero, the depth test should always
-   * be applied. When less than zero, the depth test should never be applied.
-   *
-   * @memberof UniformState.prototype
-   * @type {number}
-   */
-  minimumDisableDepthTestDistance: {
-    get: function() {
-      return this._minimumDisableDepthTestDistance;
-    }
-  },
-  /**
-   * The highlight color of unclassified 3D Tiles.
-   *
-   * @memberof UniformState.prototype
-   * @type {Color}
-   */
-  invertClassificationColor: {
-    get: function() {
-      return this._invertClassificationColor;
-    }
-  },
-  /**
-   * Whether or not the current projection is orthographic in 3D.
-   *
-   * @memberOf UniformState.prototype
-   * @type {boolean}
-   */
-  orthographicIn3D: {
-    get: function() {
-      return this._orthographicIn3D;
-    }
-  },
-  /**
-   * The current ellipsoid.
-   *
-   * @memberOf UniformState.prototype
-   * @type {Ellipsoid}
-   */
-  ellipsoid: {
-    get: function() {
-      return defaultValue_default(this._ellipsoid, Ellipsoid_default.default);
-    }
-  }
-});
-function setView(uniformState, matrix) {
-  Matrix4_default.clone(matrix, uniformState._view);
-  Matrix4_default.getMatrix3(matrix, uniformState._viewRotation);
-  uniformState._view3DDirty = true;
-  uniformState._inverseView3DDirty = true;
-  uniformState._modelViewDirty = true;
-  uniformState._modelView3DDirty = true;
-  uniformState._modelViewRelativeToEyeDirty = true;
-  uniformState._inverseModelViewDirty = true;
-  uniformState._inverseModelView3DDirty = true;
-  uniformState._viewProjectionDirty = true;
-  uniformState._inverseViewProjectionDirty = true;
-  uniformState._modelViewProjectionDirty = true;
-  uniformState._modelViewProjectionRelativeToEyeDirty = true;
-  uniformState._modelViewInfiniteProjectionDirty = true;
-  uniformState._normalDirty = true;
-  uniformState._inverseNormalDirty = true;
-  uniformState._normal3DDirty = true;
-  uniformState._inverseNormal3DDirty = true;
-}
-function setInverseView(uniformState, matrix) {
-  Matrix4_default.clone(matrix, uniformState._inverseView);
-  Matrix4_default.getMatrix3(matrix, uniformState._inverseViewRotation);
-}
-function setProjection(uniformState, matrix) {
-  Matrix4_default.clone(matrix, uniformState._projection);
-  uniformState._inverseProjectionDirty = true;
-  uniformState._viewProjectionDirty = true;
-  uniformState._inverseViewProjectionDirty = true;
-  uniformState._modelViewProjectionDirty = true;
-  uniformState._modelViewProjectionRelativeToEyeDirty = true;
-}
-function setInfiniteProjection(uniformState, matrix) {
-  Matrix4_default.clone(matrix, uniformState._infiniteProjection);
-  uniformState._modelViewInfiniteProjectionDirty = true;
-}
-var surfacePositionScratch = new Cartesian3_default();
-var enuTransformScratch = new Matrix4_default();
-function setCamera(uniformState, camera) {
-  Cartesian3_default.clone(camera.positionWC, uniformState._cameraPosition);
-  Cartesian3_default.clone(camera.directionWC, uniformState._cameraDirection);
-  Cartesian3_default.clone(camera.rightWC, uniformState._cameraRight);
-  Cartesian3_default.clone(camera.upWC, uniformState._cameraUp);
-  const ellipsoid = uniformState._ellipsoid;
-  let surfacePosition;
-  const positionCartographic = camera.positionCartographic;
-  if (!defined_default(positionCartographic)) {
-    uniformState._eyeHeight = -ellipsoid.maximumRadius;
-    if (Cartesian3_default.magnitude(camera.positionWC) > 0) {
-      uniformState._eyeEllipsoidNormalEC = Cartesian3_default.normalize(
-        camera.positionWC,
-        uniformState._eyeEllipsoidNormalEC
-      );
-    }
-    surfacePosition = ellipsoid.scaleToGeodeticSurface(
-      camera.positionWC,
-      surfacePositionScratch
-    );
-  } else {
-    uniformState._eyeHeight = positionCartographic.height;
-    uniformState._eyeEllipsoidNormalEC = ellipsoid.geodeticSurfaceNormalCartographic(
-      positionCartographic,
-      uniformState._eyeEllipsoidNormalEC
-    );
-    surfacePosition = Cartesian3_default.fromRadians(
-      positionCartographic.longitude,
-      positionCartographic.latitude,
-      0,
-      ellipsoid,
-      surfacePositionScratch
-    );
-  }
-  uniformState._encodedCameraPositionMCDirty = true;
-  if (!defined_default(surfacePosition)) {
-    return;
-  }
-  uniformState._eyeEllipsoidNormalEC = Matrix3_default.multiplyByVector(
-    uniformState._viewRotation,
-    uniformState._eyeEllipsoidNormalEC,
-    uniformState._eyeEllipsoidNormalEC
-  );
-  const enuToWorld = Transforms_default.eastNorthUpToFixedFrame(
-    surfacePosition,
-    ellipsoid,
-    enuTransformScratch
-  );
-  uniformState._enuToModel = Matrix4_default.multiplyTransformation(
-    uniformState.inverseModel,
-    enuToWorld,
-    uniformState._enuToModel
-  );
-  uniformState._modelToEnu = Matrix4_default.inverseTransformation(
-    uniformState._enuToModel,
-    uniformState._modelToEnu
-  );
-  if (!Math_default.equalsEpsilon(
-    ellipsoid._radii.x,
-    ellipsoid._radii.y,
-    Math_default.EPSILON15
-  )) {
-    return;
-  }
-  uniformState._eyeEllipsoidCurvature = ellipsoid.getLocalCurvature(
-    surfacePosition,
-    uniformState._eyeEllipsoidCurvature
-  );
-}
-var transformMatrix = new Matrix3_default();
-var sunCartographicScratch = new Cartographic_default();
-function setSunAndMoonDirections(uniformState, frameState) {
-  Transforms_default.computeIcrfToCentralBodyFixedMatrix(
-    frameState.time,
-    transformMatrix
-  );
-  let position = Simon1994PlanetaryPositions_default.computeSunPositionInEarthInertialFrame(
-    frameState.time,
-    uniformState._sunPositionWC
-  );
-  Matrix3_default.multiplyByVector(transformMatrix, position, position);
-  Cartesian3_default.normalize(position, uniformState._sunDirectionWC);
-  position = Matrix3_default.multiplyByVector(
-    uniformState.viewRotation3D,
-    position,
-    uniformState._sunDirectionEC
-  );
-  Cartesian3_default.normalize(position, position);
-  position = Simon1994PlanetaryPositions_default.computeMoonPositionInEarthInertialFrame(
-    frameState.time,
-    uniformState._moonDirectionEC
-  );
-  Matrix3_default.multiplyByVector(transformMatrix, position, position);
-  Matrix3_default.multiplyByVector(uniformState.viewRotation3D, position, position);
-  Cartesian3_default.normalize(position, position);
-  const projection = frameState.mapProjection;
-  const ellipsoid = projection.ellipsoid;
-  const sunCartographic = ellipsoid.cartesianToCartographic(
-    uniformState._sunPositionWC,
-    sunCartographicScratch
-  );
-  projection.project(sunCartographic, uniformState._sunPositionColumbusView);
-}
-UniformState.prototype.updateCamera = function(camera) {
-  setView(this, camera.viewMatrix);
-  setInverseView(this, camera.inverseViewMatrix);
-  setCamera(this, camera);
-  this._entireFrustum.x = camera.frustum.near;
-  this._entireFrustum.y = camera.frustum.far;
-  this.updateFrustum(camera.frustum);
-  this._orthographicIn3D = this._mode !== SceneMode_default.SCENE2D && camera.frustum instanceof OrthographicFrustum_default;
-};
-UniformState.prototype.updateFrustum = function(frustum) {
-  setProjection(this, frustum.projectionMatrix);
-  if (defined_default(frustum.infiniteProjectionMatrix)) {
-    setInfiniteProjection(this, frustum.infiniteProjectionMatrix);
-  }
-  this._currentFrustum.x = frustum.near;
-  this._currentFrustum.y = frustum.far;
-  this._farDepthFromNearPlusOne = frustum.far - frustum.near + 1;
-  this._log2FarDepthFromNearPlusOne = Math_default.log2(
-    this._farDepthFromNearPlusOne
-  );
-  this._oneOverLog2FarDepthFromNearPlusOne = 1 / this._log2FarDepthFromNearPlusOne;
-  const offCenterFrustum = frustum.offCenterFrustum;
-  if (defined_default(offCenterFrustum)) {
-    frustum = offCenterFrustum;
-  }
-  this._frustumPlanes.x = frustum.top;
-  this._frustumPlanes.y = frustum.bottom;
-  this._frustumPlanes.z = frustum.left;
-  this._frustumPlanes.w = frustum.right;
-};
-UniformState.prototype.updatePass = function(pass) {
-  this._pass = pass;
-};
-var EMPTY_ARRAY = [];
-var defaultLight = new SunLight_default();
-UniformState.prototype.update = function(frameState) {
-  this._mode = frameState.mode;
-  this._mapProjection = frameState.mapProjection;
-  this._ellipsoid = frameState.mapProjection.ellipsoid;
-  this._pixelRatio = frameState.pixelRatio;
-  const camera = frameState.camera;
-  this.updateCamera(camera);
-  if (frameState.mode === SceneMode_default.SCENE2D) {
-    this._frustum2DWidth = camera.frustum.right - camera.frustum.left;
-    this._eyeHeight2D.x = this._frustum2DWidth * 0.5;
-    this._eyeHeight2D.y = this._eyeHeight2D.x * this._eyeHeight2D.x;
-  } else {
-    this._frustum2DWidth = 0;
-    this._eyeHeight2D.x = 0;
-    this._eyeHeight2D.y = 0;
-  }
-  setSunAndMoonDirections(this, frameState);
-  const light = defaultValue_default(frameState.light, defaultLight);
-  if (light instanceof SunLight_default) {
-    this._lightDirectionWC = Cartesian3_default.clone(
-      this._sunDirectionWC,
-      this._lightDirectionWC
-    );
-    this._lightDirectionEC = Cartesian3_default.clone(
-      this._sunDirectionEC,
-      this._lightDirectionEC
-    );
-  } else {
-    this._lightDirectionWC = Cartesian3_default.normalize(
-      Cartesian3_default.negate(light.direction, this._lightDirectionWC),
-      this._lightDirectionWC
-    );
-    this._lightDirectionEC = Matrix3_default.multiplyByVector(
-      this.viewRotation3D,
-      this._lightDirectionWC,
-      this._lightDirectionEC
-    );
-  }
-  const lightColor = light.color;
-  let lightColorHdr = Cartesian3_default.fromElements(
-    lightColor.red,
-    lightColor.green,
-    lightColor.blue,
-    this._lightColorHdr
-  );
-  lightColorHdr = Cartesian3_default.multiplyByScalar(
-    lightColorHdr,
-    light.intensity,
-    lightColorHdr
-  );
-  const maximumComponent = Cartesian3_default.maximumComponent(lightColorHdr);
-  if (maximumComponent > 1) {
-    Cartesian3_default.divideByScalar(
-      lightColorHdr,
-      maximumComponent,
-      this._lightColor
-    );
-  } else {
-    Cartesian3_default.clone(lightColorHdr, this._lightColor);
-  }
-  const brdfLutGenerator = frameState.brdfLutGenerator;
-  const brdfLut = defined_default(brdfLutGenerator) ? brdfLutGenerator.colorTexture : void 0;
-  this._brdfLut = brdfLut;
-  this._environmentMap = defaultValue_default(
-    frameState.environmentMap,
-    frameState.context.defaultCubeMap
-  );
-  this._sphericalHarmonicCoefficients = defaultValue_default(
-    frameState.sphericalHarmonicCoefficients,
-    EMPTY_ARRAY
-  );
-  this._specularEnvironmentMaps = frameState.specularEnvironmentMaps;
-  this._specularEnvironmentMapsMaximumLOD = frameState.specularEnvironmentMapsMaximumLOD;
-  this._fogDensity = frameState.fog.density;
-  this._fogMinimumBrightness = frameState.fog.minimumBrightness;
-  const atmosphere = frameState.atmosphere;
-  if (defined_default(atmosphere)) {
-    this._atmosphereHsbShift = Cartesian3_default.fromElements(
-      atmosphere.hueShift,
-      atmosphere.saturationShift,
-      atmosphere.brightnessShift,
-      this._atmosphereHsbShift
-    );
-    this._atmosphereLightIntensity = atmosphere.lightIntensity;
-    this._atmosphereRayleighCoefficient = Cartesian3_default.clone(
-      atmosphere.rayleighCoefficient,
-      this._atmosphereRayleighCoefficient
-    );
-    this._atmosphereRayleighScaleHeight = atmosphere.rayleighScaleHeight;
-    this._atmosphereMieCoefficient = Cartesian3_default.clone(
-      atmosphere.mieCoefficient,
-      this._atmosphereMieCoefficient
-    );
-    this._atmosphereMieScaleHeight = atmosphere.mieScaleHeight;
-    this._atmosphereMieAnisotropy = atmosphere.mieAnisotropy;
-    this._atmosphereDynamicLighting = atmosphere.dynamicLighting;
-  }
-  this._invertClassificationColor = frameState.invertClassificationColor;
-  this._frameState = frameState;
-  this._temeToPseudoFixed = Transforms_default.computeTemeToPseudoFixedMatrix(
-    frameState.time,
-    this._temeToPseudoFixed
-  );
-  this._splitPosition = frameState.splitPosition * frameState.context.drawingBufferWidth;
-  const fov = camera.frustum.fov;
-  const viewport = this._viewport;
-  let pixelSizePerMeter;
-  if (defined_default(fov)) {
-    if (viewport.height > viewport.width) {
-      pixelSizePerMeter = Math.tan(0.5 * fov) * 2 / viewport.height;
-    } else {
-      pixelSizePerMeter = Math.tan(0.5 * fov) * 2 / viewport.width;
-    }
-  } else {
-    pixelSizePerMeter = 1 / Math.max(viewport.width, viewport.height);
-  }
-  this._geometricToleranceOverMeter = pixelSizePerMeter * frameState.maximumScreenSpaceError;
-  Color_default.clone(frameState.backgroundColor, this._backgroundColor);
-  this._minimumDisableDepthTestDistance = frameState.minimumDisableDepthTestDistance;
-  this._minimumDisableDepthTestDistance *= this._minimumDisableDepthTestDistance;
-  if (this._minimumDisableDepthTestDistance === Number.POSITIVE_INFINITY) {
-    this._minimumDisableDepthTestDistance = -1;
-  }
-};
-function cleanViewport(uniformState) {
-  if (uniformState._viewportDirty) {
-    const v3 = uniformState._viewport;
-    Matrix4_default.computeOrthographicOffCenter(
-      v3.x,
-      v3.x + v3.width,
-      v3.y,
-      v3.y + v3.height,
-      0,
-      1,
-      uniformState._viewportOrthographicMatrix
-    );
-    Matrix4_default.computeViewportTransformation(
-      v3,
-      0,
-      1,
-      uniformState._viewportTransformation
-    );
-    uniformState._viewportDirty = false;
-  }
-}
-function cleanInverseProjection(uniformState) {
-  if (uniformState._inverseProjectionDirty) {
-    uniformState._inverseProjectionDirty = false;
-    if (uniformState._mode !== SceneMode_default.SCENE2D && uniformState._mode !== SceneMode_default.MORPHING && !uniformState._orthographicIn3D) {
-      Matrix4_default.inverse(
-        uniformState._projection,
-        uniformState._inverseProjection
-      );
-    } else {
-      Matrix4_default.clone(Matrix4_default.ZERO, uniformState._inverseProjection);
-    }
-  }
-}
-function cleanModelView(uniformState) {
-  if (uniformState._modelViewDirty) {
-    uniformState._modelViewDirty = false;
-    Matrix4_default.multiplyTransformation(
-      uniformState._view,
-      uniformState._model,
-      uniformState._modelView
-    );
-  }
-}
-function cleanModelView3D(uniformState) {
-  if (uniformState._modelView3DDirty) {
-    uniformState._modelView3DDirty = false;
-    Matrix4_default.multiplyTransformation(
-      uniformState.view3D,
-      uniformState._model,
-      uniformState._modelView3D
-    );
-  }
-}
-function cleanInverseModelView(uniformState) {
-  if (uniformState._inverseModelViewDirty) {
-    uniformState._inverseModelViewDirty = false;
-    Matrix4_default.inverse(uniformState.modelView, uniformState._inverseModelView);
-  }
-}
-function cleanInverseModelView3D(uniformState) {
-  if (uniformState._inverseModelView3DDirty) {
-    uniformState._inverseModelView3DDirty = false;
-    Matrix4_default.inverse(uniformState.modelView3D, uniformState._inverseModelView3D);
-  }
-}
-function cleanViewProjection(uniformState) {
-  if (uniformState._viewProjectionDirty) {
-    uniformState._viewProjectionDirty = false;
-    Matrix4_default.multiply(
-      uniformState._projection,
-      uniformState._view,
-      uniformState._viewProjection
-    );
-  }
-}
-function cleanInverseViewProjection(uniformState) {
-  if (uniformState._inverseViewProjectionDirty) {
-    uniformState._inverseViewProjectionDirty = false;
-    Matrix4_default.inverse(
-      uniformState.viewProjection,
-      uniformState._inverseViewProjection
-    );
-  }
-}
-function cleanModelViewProjection(uniformState) {
-  if (uniformState._modelViewProjectionDirty) {
-    uniformState._modelViewProjectionDirty = false;
-    Matrix4_default.multiply(
-      uniformState._projection,
-      uniformState.modelView,
-      uniformState._modelViewProjection
-    );
-  }
-}
-function cleanModelViewRelativeToEye(uniformState) {
-  if (uniformState._modelViewRelativeToEyeDirty) {
-    uniformState._modelViewRelativeToEyeDirty = false;
-    const mv = uniformState.modelView;
-    const mvRte = uniformState._modelViewRelativeToEye;
-    mvRte[0] = mv[0];
-    mvRte[1] = mv[1];
-    mvRte[2] = mv[2];
-    mvRte[3] = mv[3];
-    mvRte[4] = mv[4];
-    mvRte[5] = mv[5];
-    mvRte[6] = mv[6];
-    mvRte[7] = mv[7];
-    mvRte[8] = mv[8];
-    mvRte[9] = mv[9];
-    mvRte[10] = mv[10];
-    mvRte[11] = mv[11];
-    mvRte[12] = 0;
-    mvRte[13] = 0;
-    mvRte[14] = 0;
-    mvRte[15] = mv[15];
-  }
-}
-function cleanInverseModelViewProjection(uniformState) {
-  if (uniformState._inverseModelViewProjectionDirty) {
-    uniformState._inverseModelViewProjectionDirty = false;
-    Matrix4_default.inverse(
-      uniformState.modelViewProjection,
-      uniformState._inverseModelViewProjection
-    );
-  }
-}
-function cleanModelViewProjectionRelativeToEye(uniformState) {
-  if (uniformState._modelViewProjectionRelativeToEyeDirty) {
-    uniformState._modelViewProjectionRelativeToEyeDirty = false;
-    Matrix4_default.multiply(
-      uniformState._projection,
-      uniformState.modelViewRelativeToEye,
-      uniformState._modelViewProjectionRelativeToEye
-    );
-  }
-}
-function cleanModelViewInfiniteProjection(uniformState) {
-  if (uniformState._modelViewInfiniteProjectionDirty) {
-    uniformState._modelViewInfiniteProjectionDirty = false;
-    Matrix4_default.multiply(
-      uniformState._infiniteProjection,
-      uniformState.modelView,
-      uniformState._modelViewInfiniteProjection
-    );
-  }
-}
-function cleanNormal(uniformState) {
-  if (uniformState._normalDirty) {
-    uniformState._normalDirty = false;
-    const m = uniformState._normal;
-    Matrix4_default.getMatrix3(uniformState.inverseModelView, m);
-    Matrix3_default.transpose(m, m);
-  }
-}
-function cleanNormal3D(uniformState) {
-  if (uniformState._normal3DDirty) {
-    uniformState._normal3DDirty = false;
-    const m = uniformState._normal3D;
-    Matrix4_default.getMatrix3(uniformState.inverseModelView3D, m);
-    Matrix3_default.transpose(m, m);
-  }
-}
-function cleanInverseNormal(uniformState) {
-  if (uniformState._inverseNormalDirty) {
-    uniformState._inverseNormalDirty = false;
-    const m = uniformState._inverseNormal;
-    Matrix4_default.getMatrix3(uniformState.modelView, m);
-    Matrix3_default.transpose(m, m);
-  }
-}
-function cleanInverseNormal3D(uniformState) {
-  if (uniformState._inverseNormal3DDirty) {
-    uniformState._inverseNormal3DDirty = false;
-    const m = uniformState._inverseNormal3D;
-    Matrix4_default.getMatrix3(uniformState.modelView3D, m);
-    Matrix3_default.transpose(m, m);
-  }
-}
-var cameraPositionMC = new Cartesian3_default();
-function cleanEncodedCameraPositionMC(uniformState) {
-  if (uniformState._encodedCameraPositionMCDirty) {
-    uniformState._encodedCameraPositionMCDirty = false;
-    Matrix4_default.multiplyByPoint(
-      uniformState.inverseModel,
-      uniformState._cameraPosition,
-      cameraPositionMC
-    );
-    EncodedCartesian3_default.fromCartesian(
-      cameraPositionMC,
-      uniformState._encodedCameraPositionMC
-    );
-  }
-}
-var view2Dto3DPScratch = new Cartesian3_default();
-var view2Dto3DRScratch = new Cartesian3_default();
-var view2Dto3DUScratch = new Cartesian3_default();
-var view2Dto3DDScratch = new Cartesian3_default();
-var view2Dto3DCartographicScratch = new Cartographic_default();
-var view2Dto3DCartesian3Scratch = new Cartesian3_default();
-var view2Dto3DMatrix4Scratch = new Matrix4_default();
-function view2Dto3D(position2D, direction2D, right2D, up2D, frustum2DWidth, mode2, projection, result) {
-  const p = view2Dto3DPScratch;
-  p.x = position2D.y;
-  p.y = position2D.z;
-  p.z = position2D.x;
-  const r = view2Dto3DRScratch;
-  r.x = right2D.y;
-  r.y = right2D.z;
-  r.z = right2D.x;
-  const u3 = view2Dto3DUScratch;
-  u3.x = up2D.y;
-  u3.y = up2D.z;
-  u3.z = up2D.x;
-  const d = view2Dto3DDScratch;
-  d.x = direction2D.y;
-  d.y = direction2D.z;
-  d.z = direction2D.x;
-  if (mode2 === SceneMode_default.SCENE2D) {
-    p.z = frustum2DWidth * 0.5;
-  }
-  const cartographic2 = projection.unproject(p, view2Dto3DCartographicScratch);
-  cartographic2.longitude = Math_default.clamp(
-    cartographic2.longitude,
-    -Math.PI,
-    Math.PI
-  );
-  cartographic2.latitude = Math_default.clamp(
-    cartographic2.latitude,
-    -Math_default.PI_OVER_TWO,
-    Math_default.PI_OVER_TWO
-  );
-  const ellipsoid = projection.ellipsoid;
-  const position3D = ellipsoid.cartographicToCartesian(
-    cartographic2,
-    view2Dto3DCartesian3Scratch
-  );
-  const enuToFixed = Transforms_default.eastNorthUpToFixedFrame(
-    position3D,
-    ellipsoid,
-    view2Dto3DMatrix4Scratch
-  );
-  Matrix4_default.multiplyByPointAsVector(enuToFixed, r, r);
-  Matrix4_default.multiplyByPointAsVector(enuToFixed, u3, u3);
-  Matrix4_default.multiplyByPointAsVector(enuToFixed, d, d);
-  if (!defined_default(result)) {
-    result = new Matrix4_default();
-  }
-  result[0] = r.x;
-  result[1] = u3.x;
-  result[2] = -d.x;
-  result[3] = 0;
-  result[4] = r.y;
-  result[5] = u3.y;
-  result[6] = -d.y;
-  result[7] = 0;
-  result[8] = r.z;
-  result[9] = u3.z;
-  result[10] = -d.z;
-  result[11] = 0;
-  result[12] = -Cartesian3_default.dot(r, position3D);
-  result[13] = -Cartesian3_default.dot(u3, position3D);
-  result[14] = Cartesian3_default.dot(d, position3D);
-  result[15] = 1;
-  return result;
-}
-function updateView3D(that) {
-  if (that._view3DDirty) {
-    if (that._mode === SceneMode_default.SCENE3D) {
-      Matrix4_default.clone(that._view, that._view3D);
-    } else {
-      view2Dto3D(
-        that._cameraPosition,
-        that._cameraDirection,
-        that._cameraRight,
-        that._cameraUp,
-        that._frustum2DWidth,
-        that._mode,
-        that._mapProjection,
-        that._view3D
-      );
-    }
-    Matrix4_default.getMatrix3(that._view3D, that._viewRotation3D);
-    that._view3DDirty = false;
-  }
-}
-function updateInverseView3D(that) {
-  if (that._inverseView3DDirty) {
-    Matrix4_default.inverseTransformation(that.view3D, that._inverseView3D);
-    Matrix4_default.getMatrix3(that._inverseView3D, that._inverseViewRotation3D);
-    that._inverseView3DDirty = false;
-  }
-}
-var UniformState_default = UniformState;
-
-// packages/engine/Source/Renderer/Context.js
-function Context(canvas, options) {
-  Check_default.defined("canvas", canvas);
-  const {
-    getWebGLStub,
-    requestWebgl1,
-    webgl: webglOptions = {},
-    allowTextureFilterAnisotropic = true
-  } = defaultValue_default(options, {});
-  webglOptions.alpha = defaultValue_default(webglOptions.alpha, false);
-  webglOptions.stencil = defaultValue_default(webglOptions.stencil, true);
-  webglOptions.powerPreference = defaultValue_default(
-    webglOptions.powerPreference,
-    "high-performance"
-  );
-  const glContext = defined_default(getWebGLStub) ? getWebGLStub(canvas, webglOptions) : getWebGLContext(canvas, webglOptions, requestWebgl1);
-  const webgl2Supported = typeof WebGL2RenderingContext !== "undefined";
-  const webgl2 = webgl2Supported && glContext instanceof WebGL2RenderingContext;
-  this._canvas = canvas;
-  this._originalGLContext = glContext;
-  this._gl = glContext;
-  this._webgl2 = webgl2;
-  this._id = createGuid_default();
-  this.validateFramebuffer = false;
-  this.validateShaderProgram = false;
-  this.logShaderCompilation = false;
-  this._throwOnWebGLError = false;
-  this._shaderCache = new ShaderCache_default(this);
-  this._textureCache = new TextureCache_default();
-  const gl = glContext;
-  this._stencilBits = gl.getParameter(gl.STENCIL_BITS);
-  ContextLimits_default._maximumCombinedTextureImageUnits = gl.getParameter(
-    gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS
-  );
-  ContextLimits_default._maximumCubeMapSize = gl.getParameter(
-    gl.MAX_CUBE_MAP_TEXTURE_SIZE
-  );
-  ContextLimits_default._maximumFragmentUniformVectors = gl.getParameter(
-    gl.MAX_FRAGMENT_UNIFORM_VECTORS
-  );
-  ContextLimits_default._maximumTextureImageUnits = gl.getParameter(
-    gl.MAX_TEXTURE_IMAGE_UNITS
-  );
-  ContextLimits_default._maximumRenderbufferSize = gl.getParameter(
-    gl.MAX_RENDERBUFFER_SIZE
-  );
-  ContextLimits_default._maximumTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  ContextLimits_default._maximumVaryingVectors = gl.getParameter(
-    gl.MAX_VARYING_VECTORS
-  );
-  ContextLimits_default._maximumVertexAttributes = gl.getParameter(
-    gl.MAX_VERTEX_ATTRIBS
-  );
-  ContextLimits_default._maximumVertexTextureImageUnits = gl.getParameter(
-    gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS
-  );
-  ContextLimits_default._maximumVertexUniformVectors = gl.getParameter(
-    gl.MAX_VERTEX_UNIFORM_VECTORS
-  );
-  ContextLimits_default._maximumSamples = this._webgl2 ? gl.getParameter(gl.MAX_SAMPLES) : 0;
-  const aliasedLineWidthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
-  ContextLimits_default._minimumAliasedLineWidth = aliasedLineWidthRange[0];
-  ContextLimits_default._maximumAliasedLineWidth = aliasedLineWidthRange[1];
-  const aliasedPointSizeRange = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
-  ContextLimits_default._minimumAliasedPointSize = aliasedPointSizeRange[0];
-  ContextLimits_default._maximumAliasedPointSize = aliasedPointSizeRange[1];
-  const maximumViewportDimensions = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
-  ContextLimits_default._maximumViewportWidth = maximumViewportDimensions[0];
-  ContextLimits_default._maximumViewportHeight = maximumViewportDimensions[1];
-  const highpFloat = gl.getShaderPrecisionFormat(
-    gl.FRAGMENT_SHADER,
-    gl.HIGH_FLOAT
-  );
-  ContextLimits_default._highpFloatSupported = highpFloat.precision !== 0;
-  const highpInt = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_INT);
-  ContextLimits_default._highpIntSupported = highpInt.rangeMax !== 0;
-  this._antialias = gl.getContextAttributes().antialias;
-  this._standardDerivatives = !!getExtension(gl, ["OES_standard_derivatives"]);
-  this._blendMinmax = !!getExtension(gl, ["EXT_blend_minmax"]);
-  this._elementIndexUint = !!getExtension(gl, ["OES_element_index_uint"]);
-  this._depthTexture = !!getExtension(gl, [
-    "WEBGL_depth_texture",
-    "WEBKIT_WEBGL_depth_texture"
-  ]);
-  this._fragDepth = !!getExtension(gl, ["EXT_frag_depth"]);
-  this._debugShaders = getExtension(gl, ["WEBGL_debug_shaders"]);
-  this._textureFloat = !!getExtension(gl, ["OES_texture_float"]);
-  this._textureHalfFloat = !!getExtension(gl, ["OES_texture_half_float"]);
-  this._textureFloatLinear = !!getExtension(gl, ["OES_texture_float_linear"]);
-  this._textureHalfFloatLinear = !!getExtension(gl, [
-    "OES_texture_half_float_linear"
-  ]);
-  this._supportsTextureLod = !!getExtension(gl, ["EXT_shader_texture_lod"]);
-  this._colorBufferFloat = !!getExtension(gl, [
-    "EXT_color_buffer_float",
-    "WEBGL_color_buffer_float"
-  ]);
-  this._floatBlend = !!getExtension(gl, ["EXT_float_blend"]);
-  this._colorBufferHalfFloat = !!getExtension(gl, [
-    "EXT_color_buffer_half_float"
-  ]);
-  this._s3tc = !!getExtension(gl, [
-    "WEBGL_compressed_texture_s3tc",
-    "MOZ_WEBGL_compressed_texture_s3tc",
-    "WEBKIT_WEBGL_compressed_texture_s3tc"
-  ]);
-  this._pvrtc = !!getExtension(gl, [
-    "WEBGL_compressed_texture_pvrtc",
-    "WEBKIT_WEBGL_compressed_texture_pvrtc"
-  ]);
-  this._astc = !!getExtension(gl, ["WEBGL_compressed_texture_astc"]);
-  this._etc = !!getExtension(gl, ["WEBG_compressed_texture_etc"]);
-  this._etc1 = !!getExtension(gl, ["WEBGL_compressed_texture_etc1"]);
-  this._bc7 = !!getExtension(gl, ["EXT_texture_compression_bptc"]);
-  loadKTX2_default.setKTX2SupportedFormats(
-    this._s3tc,
-    this._pvrtc,
-    this._astc,
-    this._etc,
-    this._etc1,
-    this._bc7
-  );
-  const textureFilterAnisotropic = allowTextureFilterAnisotropic ? getExtension(gl, [
-    "EXT_texture_filter_anisotropic",
-    "WEBKIT_EXT_texture_filter_anisotropic"
-  ]) : void 0;
-  this._textureFilterAnisotropic = textureFilterAnisotropic;
-  ContextLimits_default._maximumTextureFilterAnisotropy = defined_default(
-    textureFilterAnisotropic
-  ) ? gl.getParameter(textureFilterAnisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : 1;
-  let glCreateVertexArray;
-  let glBindVertexArray;
-  let glDeleteVertexArray;
-  let glDrawElementsInstanced;
-  let glDrawArraysInstanced;
-  let glVertexAttribDivisor;
-  let glDrawBuffers;
-  let vertexArrayObject;
-  let instancedArrays;
-  let drawBuffers;
-  if (webgl2) {
-    const that = this;
-    glCreateVertexArray = function() {
-      return that._gl.createVertexArray();
-    };
-    glBindVertexArray = function(vao) {
-      that._gl.bindVertexArray(vao);
-    };
-    glDeleteVertexArray = function(vao) {
-      that._gl.deleteVertexArray(vao);
-    };
-    glDrawElementsInstanced = function(mode2, count, type, offset, instanceCount) {
-      gl.drawElementsInstanced(mode2, count, type, offset, instanceCount);
-    };
-    glDrawArraysInstanced = function(mode2, first, count, instanceCount) {
-      gl.drawArraysInstanced(mode2, first, count, instanceCount);
-    };
-    glVertexAttribDivisor = function(index, divisor) {
-      gl.vertexAttribDivisor(index, divisor);
-    };
-    glDrawBuffers = function(buffers) {
-      gl.drawBuffers(buffers);
-    };
-  } else {
-    vertexArrayObject = getExtension(gl, ["OES_vertex_array_object"]);
-    if (defined_default(vertexArrayObject)) {
-      glCreateVertexArray = function() {
-        return vertexArrayObject.createVertexArrayOES();
-      };
-      glBindVertexArray = function(vertexArray) {
-        vertexArrayObject.bindVertexArrayOES(vertexArray);
-      };
-      glDeleteVertexArray = function(vertexArray) {
-        vertexArrayObject.deleteVertexArrayOES(vertexArray);
-      };
-    }
-    instancedArrays = getExtension(gl, ["ANGLE_instanced_arrays"]);
-    if (defined_default(instancedArrays)) {
-      glDrawElementsInstanced = function(mode2, count, type, offset, instanceCount) {
-        instancedArrays.drawElementsInstancedANGLE(
-          mode2,
-          count,
-          type,
-          offset,
-          instanceCount
-        );
-      };
-      glDrawArraysInstanced = function(mode2, first, count, instanceCount) {
-        instancedArrays.drawArraysInstancedANGLE(
-          mode2,
-          first,
-          count,
-          instanceCount
-        );
-      };
-      glVertexAttribDivisor = function(index, divisor) {
-        instancedArrays.vertexAttribDivisorANGLE(index, divisor);
-      };
-    }
-    drawBuffers = getExtension(gl, ["WEBGL_draw_buffers"]);
-    if (defined_default(drawBuffers)) {
-      glDrawBuffers = function(buffers) {
-        drawBuffers.drawBuffersWEBGL(buffers);
-      };
-    }
-  }
-  this.glCreateVertexArray = glCreateVertexArray;
-  this.glBindVertexArray = glBindVertexArray;
-  this.glDeleteVertexArray = glDeleteVertexArray;
-  this.glDrawElementsInstanced = glDrawElementsInstanced;
-  this.glDrawArraysInstanced = glDrawArraysInstanced;
-  this.glVertexAttribDivisor = glVertexAttribDivisor;
-  this.glDrawBuffers = glDrawBuffers;
-  this._vertexArrayObject = !!vertexArrayObject;
-  this._instancedArrays = !!instancedArrays;
-  this._drawBuffers = !!drawBuffers;
-  ContextLimits_default._maximumDrawBuffers = this.drawBuffers ? gl.getParameter(WebGLConstants_default.MAX_DRAW_BUFFERS) : 1;
-  ContextLimits_default._maximumColorAttachments = this.drawBuffers ? gl.getParameter(WebGLConstants_default.MAX_COLOR_ATTACHMENTS) : 1;
-  this._clearColor = new Color_default(0, 0, 0, 0);
-  this._clearDepth = 1;
-  this._clearStencil = 0;
-  const us = new UniformState_default();
-  const ps = new PassState_default(this);
-  const rs = RenderState_default.fromCache();
-  this._defaultPassState = ps;
-  this._defaultRenderState = rs;
-  this._defaultTexture = void 0;
-  this._defaultEmissiveTexture = void 0;
-  this._defaultNormalTexture = void 0;
-  this._defaultCubeMap = void 0;
-  this._us = us;
-  this._currentRenderState = rs;
-  this._currentPassState = ps;
-  this._currentFramebuffer = void 0;
-  this._maxFrameTextureUnitIndex = 0;
-  this._vertexAttribDivisors = [];
-  this._previousDrawInstanced = false;
-  for (let i = 0; i < ContextLimits_default._maximumVertexAttributes; i++) {
-    this._vertexAttribDivisors.push(0);
-  }
-  this._pickObjects = {};
-  this._nextPickColor = new Uint32Array(1);
-  this.options = {
-    getWebGLStub,
-    requestWebgl1,
-    webgl: webglOptions,
-    allowTextureFilterAnisotropic
-  };
-  this.cache = {};
-  RenderState_default.apply(gl, rs, ps);
-}
-function getWebGLContext(canvas, webglOptions, requestWebgl1) {
-  if (typeof WebGLRenderingContext === "undefined") {
-    throw new RuntimeError_default(
-      "The browser does not support WebGL.  Visit http://get.webgl.org."
-    );
-  }
-  const webgl2Supported = typeof WebGL2RenderingContext !== "undefined";
-  if (!requestWebgl1 && !webgl2Supported) {
-    requestWebgl1 = true;
-  }
-  const contextType = requestWebgl1 ? "webgl" : "webgl2";
-  const glContext = canvas.getContext(contextType, webglOptions);
-  if (!defined_default(glContext)) {
-    throw new RuntimeError_default(
-      "The browser supports WebGL, but initialization failed."
-    );
-  }
-  return glContext;
-}
-function errorToString(gl, error) {
-  let message = "WebGL Error:  ";
-  switch (error) {
-    case gl.INVALID_ENUM:
-      message += "INVALID_ENUM";
-      break;
-    case gl.INVALID_VALUE:
-      message += "INVALID_VALUE";
-      break;
-    case gl.INVALID_OPERATION:
-      message += "INVALID_OPERATION";
-      break;
-    case gl.OUT_OF_MEMORY:
-      message += "OUT_OF_MEMORY";
-      break;
-    case gl.CONTEXT_LOST_WEBGL:
-      message += "CONTEXT_LOST_WEBGL lost";
-      break;
-    default:
-      message += `Unknown (${error})`;
-  }
-  return message;
-}
-function createErrorMessage(gl, glFunc, glFuncArguments, error) {
-  let message = `${errorToString(gl, error)}: ${glFunc.name}(`;
-  for (let i = 0; i < glFuncArguments.length; ++i) {
-    if (i !== 0) {
-      message += ", ";
-    }
-    message += glFuncArguments[i];
-  }
-  message += ");";
-  return message;
-}
-function throwOnError(gl, glFunc, glFuncArguments) {
-  const error = gl.getError();
-  if (error !== gl.NO_ERROR) {
-    throw new RuntimeError_default(
-      createErrorMessage(gl, glFunc, glFuncArguments, error)
-    );
-  }
-}
-function makeGetterSetter(gl, propertyName, logFunction) {
-  return {
-    get: function() {
-      const value = gl[propertyName];
-      logFunction(gl, `get: ${propertyName}`, value);
-      return gl[propertyName];
-    },
-    set: function(value) {
-      gl[propertyName] = value;
-      logFunction(gl, `set: ${propertyName}`, value);
-    }
-  };
-}
-function wrapGL(gl, logFunction) {
-  if (!defined_default(logFunction)) {
-    return gl;
-  }
-  function wrapFunction2(property) {
-    return function() {
-      const result = property.apply(gl, arguments);
-      logFunction(gl, property, arguments);
-      return result;
-    };
-  }
-  const glWrapper = {};
-  for (const propertyName in gl) {
-    const property = gl[propertyName];
-    if (property instanceof Function) {
-      glWrapper[propertyName] = wrapFunction2(property);
-    } else {
-      Object.defineProperty(
-        glWrapper,
-        propertyName,
-        makeGetterSetter(gl, propertyName, logFunction)
-      );
-    }
-  }
-  return glWrapper;
-}
-function getExtension(gl, names) {
-  const length2 = names.length;
-  for (let i = 0; i < length2; ++i) {
-    const extension = gl.getExtension(names[i]);
-    if (extension) {
-      return extension;
-    }
-  }
-  return void 0;
-}
-var defaultFramebufferMarker = {};
-Object.defineProperties(Context.prototype, {
-  id: {
-    get: function() {
-      return this._id;
-    }
-  },
-  webgl2: {
-    get: function() {
-      return this._webgl2;
-    }
-  },
-  canvas: {
-    get: function() {
-      return this._canvas;
-    }
-  },
-  shaderCache: {
-    get: function() {
-      return this._shaderCache;
-    }
-  },
-  textureCache: {
-    get: function() {
-      return this._textureCache;
-    }
-  },
-  uniformState: {
-    get: function() {
-      return this._us;
-    }
-  },
-  /**
-   * The number of stencil bits per pixel in the default bound framebuffer.  The minimum is eight bits.
-   * @memberof Context.prototype
-   * @type {number}
-   * @see {@link https://www.khronos.org/opengles/sdk/docs/man/xhtml/glGet.xml|glGet} with <code>STENCIL_BITS</code>.
-   */
-  stencilBits: {
-    get: function() {
-      return this._stencilBits;
-    }
-  },
-  /**
-   * <code>true</code> if the WebGL context supports stencil buffers.
-   * Stencil buffers are not supported by all systems.
-   * @memberof Context.prototype
-   * @type {boolean}
-   */
-  stencilBuffer: {
-    get: function() {
-      return this._stencilBits >= 8;
-    }
-  },
-  /**
-   * <code>true</code> if the WebGL context supports antialiasing.  By default
-   * antialiasing is requested, but it is not supported by all systems.
-   * @memberof Context.prototype
-   * @type {boolean}
-   */
-  antialias: {
-    get: function() {
-      return this._antialias;
-    }
-  },
-  /**
-   * <code>true</code> if the WebGL context supports multisample antialiasing. Requires
-   * WebGL2.
-   * @memberof Context.prototype
-   * @type {boolean}
-   */
-  msaa: {
-    get: function() {
-      return this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if the OES_standard_derivatives extension is supported.  This
-   * extension provides access to <code>dFdx</code>, <code>dFdy</code>, and <code>fwidth</code>
-   * functions from GLSL.  A shader using these functions still needs to explicitly enable the
-   * extension with <code>#extension GL_OES_standard_derivatives : enable</code>.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link http://www.khronos.org/registry/gles/extensions/OES/OES_standard_derivatives.txt|OES_standard_derivatives}
-   */
-  standardDerivatives: {
-    get: function() {
-      return this._standardDerivatives || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if the EXT_float_blend extension is supported. This
-   * extension enables blending with 32-bit float values.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_float_blend/}
-   */
-  floatBlend: {
-    get: function() {
-      return this._floatBlend;
-    }
-  },
-  /**
-   * <code>true</code> if the EXT_blend_minmax extension is supported.  This
-   * extension extends blending capabilities by adding two new blend equations:
-   * the minimum or maximum color components of the source and destination colors.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_blend_minmax/}
-   */
-  blendMinmax: {
-    get: function() {
-      return this._blendMinmax || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if the OES_element_index_uint extension is supported.  This
-   * extension allows the use of unsigned int indices, which can improve performance by
-   * eliminating batch breaking caused by unsigned short indices.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link http://www.khronos.org/registry/webgl/extensions/OES_element_index_uint/|OES_element_index_uint}
-   */
-  elementIndexUint: {
-    get: function() {
-      return this._elementIndexUint || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if WEBGL_depth_texture is supported.  This extension provides
-   * access to depth textures that, for example, can be attached to framebuffers for shadow mapping.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link http://www.khronos.org/registry/webgl/extensions/WEBGL_depth_texture/|WEBGL_depth_texture}
-   */
-  depthTexture: {
-    get: function() {
-      return this._depthTexture || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if OES_texture_float is supported. This extension provides
-   * access to floating point textures that, for example, can be attached to framebuffers for high dynamic range.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_float/}
-   */
-  floatingPointTexture: {
-    get: function() {
-      return this._webgl2 || this._textureFloat;
-    }
-  },
-  /**
-   * <code>true</code> if OES_texture_half_float is supported. This extension provides
-   * access to floating point textures that, for example, can be attached to framebuffers for high dynamic range.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_half_float/}
-   */
-  halfFloatingPointTexture: {
-    get: function() {
-      return this._webgl2 || this._textureHalfFloat;
-    }
-  },
-  /**
-   * <code>true</code> if OES_texture_float_linear is supported. This extension provides
-   * access to linear sampling methods for minification and magnification filters of floating-point textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_float_linear/}
-   */
-  textureFloatLinear: {
-    get: function() {
-      return this._textureFloatLinear;
-    }
-  },
-  /**
-   * <code>true</code> if OES_texture_half_float_linear is supported. This extension provides
-   * access to linear sampling methods for minification and magnification filters of half floating-point textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_half_float_linear/}
-   */
-  textureHalfFloatLinear: {
-    get: function() {
-      return this._webgl2 && this._textureFloatLinear || !this._webgl2 && this._textureHalfFloatLinear;
-    }
-  },
-  /**
-   * <code>true</code> if EXT_shader_texture_lod is supported. This extension provides
-   * access to explicit LOD selection in texture sampling functions.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://registry.khronos.org/webgl/extensions/EXT_shader_texture_lod/}
-   */
-  supportsTextureLod: {
-    get: function() {
-      return this._webgl2 || this._supportsTextureLod;
-    }
-  },
-  /**
-   * <code>true</code> if EXT_texture_filter_anisotropic is supported. This extension provides
-   * access to anisotropic filtering for textured surfaces at an oblique angle from the viewer.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_texture_filter_anisotropic/}
-   */
-  textureFilterAnisotropic: {
-    get: function() {
-      return !!this._textureFilterAnisotropic;
-    }
-  },
-  /**
-   * <code>true</code> if WEBGL_compressed_texture_s3tc is supported.  This extension provides
-   * access to DXT compressed textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_s3tc/}
-   */
-  s3tc: {
-    get: function() {
-      return this._s3tc;
-    }
-  },
-  /**
-   * <code>true</code> if WEBGL_compressed_texture_pvrtc is supported.  This extension provides
-   * access to PVR compressed textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_pvrtc/}
-   */
-  pvrtc: {
-    get: function() {
-      return this._pvrtc;
-    }
-  },
-  /**
-   * <code>true</code> if WEBGL_compressed_texture_astc is supported.  This extension provides
-   * access to ASTC compressed textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_astc/}
-   */
-  astc: {
-    get: function() {
-      return this._astc;
-    }
-  },
-  /**
-   * <code>true</code> if WEBGL_compressed_texture_etc is supported.  This extension provides
-   * access to ETC compressed textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_etc/}
-   */
-  etc: {
-    get: function() {
-      return this._etc;
-    }
-  },
-  /**
-   * <code>true</code> if WEBGL_compressed_texture_etc1 is supported.  This extension provides
-   * access to ETC1 compressed textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_etc1/}
-   */
-  etc1: {
-    get: function() {
-      return this._etc1;
-    }
-  },
-  /**
-   * <code>true</code> if EXT_texture_compression_bptc is supported.  This extension provides
-   * access to BC7 compressed textures.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_texture_compression_bptc/}
-   */
-  bc7: {
-    get: function() {
-      return this._bc7;
-    }
-  },
-  /**
-   * <code>true</code> if S3TC, PVRTC, ASTC, ETC, ETC1, or BC7 compression is supported.
-   * @memberof Context.prototype
-   * @type {boolean}
-   */
-  supportsBasis: {
-    get: function() {
-      return this._s3tc || this._pvrtc || this._astc || this._etc || this._etc1 || this._bc7;
-    }
-  },
-  /**
-   * <code>true</code> if the OES_vertex_array_object extension is supported.  This
-   * extension can improve performance by reducing the overhead of switching vertex arrays.
-   * When enabled, this extension is automatically used by {@link VertexArray}.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link http://www.khronos.org/registry/webgl/extensions/OES_vertex_array_object/|OES_vertex_array_object}
-   */
-  vertexArrayObject: {
-    get: function() {
-      return this._vertexArrayObject || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if the EXT_frag_depth extension is supported.  This
-   * extension provides access to the <code>gl_FragDepthEXT</code> built-in output variable
-   * from GLSL fragment shaders.  A shader using these functions still needs to explicitly enable the
-   * extension with <code>#extension GL_EXT_frag_depth : enable</code>.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link http://www.khronos.org/registry/webgl/extensions/EXT_frag_depth/|EXT_frag_depth}
-   */
-  fragmentDepth: {
-    get: function() {
-      return this._fragDepth || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if the ANGLE_instanced_arrays extension is supported.  This
-   * extension provides access to instanced rendering.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays}
-   */
-  instancedArrays: {
-    get: function() {
-      return this._instancedArrays || this._webgl2;
-    }
-  },
-  /**
-   * <code>true</code> if the EXT_color_buffer_float extension is supported.  This
-   * extension makes the gl.RGBA32F format color renderable.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_color_buffer_float/}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_float/}
-   */
-  colorBufferFloat: {
-    get: function() {
-      return this._colorBufferFloat;
-    }
-  },
-  /**
-   * <code>true</code> if the EXT_color_buffer_half_float extension is supported.  This
-   * extension makes the format gl.RGBA16F format color renderable.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_half_float/}
-   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_float/}
-   */
-  colorBufferHalfFloat: {
-    get: function() {
-      return this._webgl2 && this._colorBufferFloat || !this._webgl2 && this._colorBufferHalfFloat;
-    }
-  },
-  /**
-   * <code>true</code> if the WEBGL_draw_buffers extension is supported. This
-   * extensions provides support for multiple render targets. The framebuffer object can have mutiple
-   * color attachments and the GLSL fragment shader can write to the built-in output array <code>gl_FragData</code>.
-   * A shader using this feature needs to explicitly enable the extension with
-   * <code>#extension GL_EXT_draw_buffers : enable</code>.
-   * @memberof Context.prototype
-   * @type {boolean}
-   * @see {@link http://www.khronos.org/registry/webgl/extensions/WEBGL_draw_buffers/|WEBGL_draw_buffers}
-   */
-  drawBuffers: {
-    get: function() {
-      return this._drawBuffers || this._webgl2;
-    }
-  },
-  debugShaders: {
-    get: function() {
-      return this._debugShaders;
-    }
-  },
-  throwOnWebGLError: {
-    get: function() {
-      return this._throwOnWebGLError;
-    },
-    set: function(value) {
-      this._throwOnWebGLError = value;
-      this._gl = wrapGL(
-        this._originalGLContext,
-        value ? throwOnError : void 0
-      );
-    }
-  },
-  /**
-   * A 1x1 RGBA texture initialized to [255, 255, 255, 255].  This can
-   * be used as a placeholder texture while other textures are downloaded.
-   * @memberof Context.prototype
-   * @type {Texture}
-   */
-  defaultTexture: {
-    get: function() {
-      if (this._defaultTexture === void 0) {
-        this._defaultTexture = new Texture_default({
-          context: this,
-          source: {
-            width: 1,
-            height: 1,
-            arrayBufferView: new Uint8Array([255, 255, 255, 255])
-          },
-          flipY: false
-        });
-      }
-      return this._defaultTexture;
-    }
-  },
-  /**
-   * A 1x1 RGB texture initialized to [0, 0, 0] representing a material that is
-   * not emissive. This can be used as a placeholder texture for emissive
-   * textures while other textures are downloaded.
-   * @memberof Context.prototype
-   * @type {Texture}
-   */
-  defaultEmissiveTexture: {
-    get: function() {
-      if (this._defaultEmissiveTexture === void 0) {
-        this._defaultEmissiveTexture = new Texture_default({
-          context: this,
-          pixelFormat: PixelFormat_default.RGB,
-          source: {
-            width: 1,
-            height: 1,
-            arrayBufferView: new Uint8Array([0, 0, 0])
-          },
-          flipY: false
-        });
-      }
-      return this._defaultEmissiveTexture;
-    }
-  },
-  /**
-   * A 1x1 RGBA texture initialized to [128, 128, 255] to encode a tangent
-   * space normal pointing in the +z direction, i.e. (0, 0, 1). This can
-   * be used as a placeholder normal texture while other textures are
-   * downloaded.
-   * @memberof Context.prototype
-   * @type {Texture}
-   */
-  defaultNormalTexture: {
-    get: function() {
-      if (this._defaultNormalTexture === void 0) {
-        this._defaultNormalTexture = new Texture_default({
-          context: this,
-          pixelFormat: PixelFormat_default.RGB,
-          source: {
-            width: 1,
-            height: 1,
-            arrayBufferView: new Uint8Array([128, 128, 255])
-          },
-          flipY: false
-        });
-      }
-      return this._defaultNormalTexture;
-    }
-  },
-  /**
-   * A cube map, where each face is a 1x1 RGBA texture initialized to
-   * [255, 255, 255, 255].  This can be used as a placeholder cube map while
-   * other cube maps are downloaded.
-   * @memberof Context.prototype
-   * @type {CubeMap}
-   */
-  defaultCubeMap: {
-    get: function() {
-      if (this._defaultCubeMap === void 0) {
-        const face = {
-          width: 1,
-          height: 1,
-          arrayBufferView: new Uint8Array([255, 255, 255, 255])
-        };
-        this._defaultCubeMap = new CubeMap_default({
-          context: this,
-          source: {
-            positiveX: face,
-            negativeX: face,
-            positiveY: face,
-            negativeY: face,
-            positiveZ: face,
-            negativeZ: face
-          },
-          flipY: false
-        });
-      }
-      return this._defaultCubeMap;
-    }
-  },
-  /**
-   * The drawingBufferHeight of the underlying GL context.
-   * @memberof Context.prototype
-   * @type {number}
-   * @see {@link https://www.khronos.org/registry/webgl/specs/1.0/#DOM-WebGLRenderingContext-drawingBufferHeight|drawingBufferHeight}
-   */
-  drawingBufferHeight: {
-    get: function() {
-      return this._gl.drawingBufferHeight;
-    }
-  },
-  /**
-   * The drawingBufferWidth of the underlying GL context.
-   * @memberof Context.prototype
-   * @type {number}
-   * @see {@link https://www.khronos.org/registry/webgl/specs/1.0/#DOM-WebGLRenderingContext-drawingBufferWidth|drawingBufferWidth}
-   */
-  drawingBufferWidth: {
-    get: function() {
-      return this._gl.drawingBufferWidth;
-    }
-  },
-  /**
-   * Gets an object representing the currently bound framebuffer.  While this instance is not an actual
-   * {@link Framebuffer}, it is used to represent the default framebuffer in calls to
-   * {@link Texture.fromFramebuffer}.
-   * @memberof Context.prototype
-   * @type {object}
-   */
-  defaultFramebuffer: {
-    get: function() {
-      return defaultFramebufferMarker;
-    }
-  }
-});
-function validateFramebuffer(context) {
-  if (context.validateFramebuffer) {
-    const gl = context._gl;
-    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-    if (status !== gl.FRAMEBUFFER_COMPLETE) {
-      let message;
-      switch (status) {
-        case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-          message = "Framebuffer is not complete.  Incomplete attachment: at least one attachment point with a renderbuffer or texture attached has its attached object no longer in existence or has an attached image with a width or height of zero, or the color attachment point has a non-color-renderable image attached, or the depth attachment point has a non-depth-renderable image attached, or the stencil attachment point has a non-stencil-renderable image attached.  Color-renderable formats include GL_RGBA4, GL_RGB5_A1, and GL_RGB565. GL_DEPTH_COMPONENT16 is the only depth-renderable format. GL_STENCIL_INDEX8 is the only stencil-renderable format.";
-          break;
-        case gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
-          message = "Framebuffer is not complete.  Incomplete dimensions: not all attached images have the same width and height.";
-          break;
-        case gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-          message = "Framebuffer is not complete.  Missing attachment: no images are attached to the framebuffer.";
-          break;
-        case gl.FRAMEBUFFER_UNSUPPORTED:
-          message = "Framebuffer is not complete.  Unsupported: the combination of internal formats of the attached images violates an implementation-dependent set of restrictions.";
-          break;
-      }
-      throw new DeveloperError_default(message);
-    }
-  }
-}
-function applyRenderState(context, renderState, passState, clear2) {
-  const previousRenderState = context._currentRenderState;
-  const previousPassState = context._currentPassState;
-  context._currentRenderState = renderState;
-  context._currentPassState = passState;
-  RenderState_default.partialApply(
-    context._gl,
-    previousRenderState,
-    renderState,
-    previousPassState,
-    passState,
-    clear2
-  );
-}
-var scratchBackBufferArray;
-if (typeof WebGLRenderingContext !== "undefined") {
-  scratchBackBufferArray = [WebGLConstants_default.BACK];
-}
-function bindFramebuffer(context, framebuffer) {
-  if (framebuffer !== context._currentFramebuffer) {
-    context._currentFramebuffer = framebuffer;
-    let buffers = scratchBackBufferArray;
-    if (defined_default(framebuffer)) {
-      framebuffer._bind();
-      validateFramebuffer(context);
-      buffers = framebuffer._getActiveColorAttachments();
-    } else {
-      const gl = context._gl;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-    if (context.drawBuffers) {
-      context.glDrawBuffers(buffers);
-    }
-  }
-}
-var defaultClearCommand = new ClearCommand_default();
-Context.prototype.clear = function(clearCommand, passState) {
-  clearCommand = defaultValue_default(clearCommand, defaultClearCommand);
-  passState = defaultValue_default(passState, this._defaultPassState);
-  const gl = this._gl;
-  let bitmask = 0;
-  const c = clearCommand.color;
-  const d = clearCommand.depth;
-  const s = clearCommand.stencil;
-  if (defined_default(c)) {
-    if (!Color_default.equals(this._clearColor, c)) {
-      Color_default.clone(c, this._clearColor);
-      gl.clearColor(c.red, c.green, c.blue, c.alpha);
-    }
-    bitmask |= gl.COLOR_BUFFER_BIT;
-  }
-  if (defined_default(d)) {
-    if (d !== this._clearDepth) {
-      this._clearDepth = d;
-      gl.clearDepth(d);
-    }
-    bitmask |= gl.DEPTH_BUFFER_BIT;
-  }
-  if (defined_default(s)) {
-    if (s !== this._clearStencil) {
-      this._clearStencil = s;
-      gl.clearStencil(s);
-    }
-    bitmask |= gl.STENCIL_BUFFER_BIT;
-  }
-  const rs = defaultValue_default(clearCommand.renderState, this._defaultRenderState);
-  applyRenderState(this, rs, passState, true);
-  const framebuffer = defaultValue_default(
-    clearCommand.framebuffer,
-    passState.framebuffer
-  );
-  bindFramebuffer(this, framebuffer);
-  gl.clear(bitmask);
-};
-function beginDraw(context, framebuffer, passState, shaderProgram, renderState) {
-  if (defined_default(framebuffer) && renderState.depthTest) {
-    if (renderState.depthTest.enabled && !framebuffer.hasDepthAttachment) {
-      throw new DeveloperError_default(
-        "The depth test can not be enabled (drawCommand.renderState.depthTest.enabled) because the framebuffer (drawCommand.framebuffer) does not have a depth or depth-stencil renderbuffer."
-      );
-    }
-  }
-  bindFramebuffer(context, framebuffer);
-  applyRenderState(context, renderState, passState, false);
-  shaderProgram._bind();
-  context._maxFrameTextureUnitIndex = Math.max(
-    context._maxFrameTextureUnitIndex,
-    shaderProgram.maximumTextureUnitIndex
-  );
-}
-function continueDraw(context, drawCommand, shaderProgram, uniformMap2) {
-  const primitiveType = drawCommand._primitiveType;
-  const va = drawCommand._vertexArray;
-  let offset = drawCommand._offset;
-  let count = drawCommand._count;
-  const instanceCount = drawCommand.instanceCount;
-  if (!PrimitiveType_default.validate(primitiveType)) {
-    throw new DeveloperError_default(
-      "drawCommand.primitiveType is required and must be valid."
-    );
-  }
-  Check_default.defined("drawCommand.vertexArray", va);
-  Check_default.typeOf.number.greaterThanOrEquals("drawCommand.offset", offset, 0);
-  if (defined_default(count)) {
-    Check_default.typeOf.number.greaterThanOrEquals("drawCommand.count", count, 0);
-  }
-  Check_default.typeOf.number.greaterThanOrEquals(
-    "drawCommand.instanceCount",
-    instanceCount,
-    0
-  );
-  if (instanceCount > 0 && !context.instancedArrays) {
-    throw new DeveloperError_default("Instanced arrays extension is not supported");
-  }
-  context._us.model = defaultValue_default(drawCommand._modelMatrix, Matrix4_default.IDENTITY);
-  shaderProgram._setUniforms(
-    uniformMap2,
-    context._us,
-    context.validateShaderProgram
-  );
-  va._bind();
-  const indexBuffer = va.indexBuffer;
-  if (defined_default(indexBuffer)) {
-    offset = offset * indexBuffer.bytesPerIndex;
-    if (defined_default(count)) {
-      count = Math.min(count, indexBuffer.numberOfIndices);
-    } else {
-      count = indexBuffer.numberOfIndices;
-    }
-    if (instanceCount === 0) {
-      context._gl.drawElements(
-        primitiveType,
-        count,
-        indexBuffer.indexDatatype,
-        offset
-      );
-    } else {
-      context.glDrawElementsInstanced(
-        primitiveType,
-        count,
-        indexBuffer.indexDatatype,
-        offset,
-        instanceCount
-      );
-    }
-  } else {
-    if (defined_default(count)) {
-      count = Math.min(count, va.numberOfVertices);
-    } else {
-      count = va.numberOfVertices;
-    }
-    if (instanceCount === 0) {
-      context._gl.drawArrays(primitiveType, offset, count);
-    } else {
-      context.glDrawArraysInstanced(
-        primitiveType,
-        offset,
-        count,
-        instanceCount
-      );
-    }
-  }
-  va._unBind();
-}
-Context.prototype.draw = function(drawCommand, passState, shaderProgram, uniformMap2) {
-  Check_default.defined("drawCommand", drawCommand);
-  Check_default.defined("drawCommand.shaderProgram", drawCommand._shaderProgram);
-  passState = defaultValue_default(passState, this._defaultPassState);
-  const framebuffer = defaultValue_default(
-    drawCommand._framebuffer,
-    passState.framebuffer
-  );
-  const renderState = defaultValue_default(
-    drawCommand._renderState,
-    this._defaultRenderState
-  );
-  shaderProgram = defaultValue_default(shaderProgram, drawCommand._shaderProgram);
-  uniformMap2 = defaultValue_default(uniformMap2, drawCommand._uniformMap);
-  beginDraw(this, framebuffer, passState, shaderProgram, renderState);
-  continueDraw(this, drawCommand, shaderProgram, uniformMap2);
-};
-Context.prototype.endFrame = function() {
-  const gl = this._gl;
-  gl.useProgram(null);
-  this._currentFramebuffer = void 0;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  const buffers = scratchBackBufferArray;
-  if (this.drawBuffers) {
-    this.glDrawBuffers(buffers);
-  }
-  const length2 = this._maxFrameTextureUnitIndex;
-  this._maxFrameTextureUnitIndex = 0;
-  for (let i = 0; i < length2; ++i) {
-    gl.activeTexture(gl.TEXTURE0 + i);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
-  }
-};
-Context.prototype.readPixels = function(readState) {
-  const gl = this._gl;
-  readState = defaultValue_default(readState, defaultValue_default.EMPTY_OBJECT);
-  const x = Math.max(defaultValue_default(readState.x, 0), 0);
-  const y = Math.max(defaultValue_default(readState.y, 0), 0);
-  const width = defaultValue_default(readState.width, gl.drawingBufferWidth);
-  const height = defaultValue_default(readState.height, gl.drawingBufferHeight);
-  const framebuffer = readState.framebuffer;
-  Check_default.typeOf.number.greaterThan("readState.width", width, 0);
-  Check_default.typeOf.number.greaterThan("readState.height", height, 0);
-  let pixelDatatype = PixelDatatype_default.UNSIGNED_BYTE;
-  if (defined_default(framebuffer) && framebuffer.numberOfColorAttachments > 0) {
-    pixelDatatype = framebuffer.getColorTexture(0).pixelDatatype;
-  }
-  const pixels = PixelFormat_default.createTypedArray(
-    PixelFormat_default.RGBA,
-    pixelDatatype,
-    width,
-    height
-  );
-  bindFramebuffer(this, framebuffer);
-  gl.readPixels(
-    x,
-    y,
-    width,
-    height,
-    PixelFormat_default.RGBA,
-    PixelDatatype_default.toWebGLConstant(pixelDatatype, this),
-    pixels
-  );
-  return pixels;
-};
-var viewportQuadAttributeLocations = {
-  position: 0,
-  textureCoordinates: 1
-};
-Context.prototype.getViewportQuadVertexArray = function() {
-  let vertexArray = this.cache.viewportQuad_vertexArray;
-  if (!defined_default(vertexArray)) {
-    const geometry = new Geometry_default({
-      attributes: {
-        position: new GeometryAttribute_default({
-          componentDatatype: ComponentDatatype_default.FLOAT,
-          componentsPerAttribute: 2,
-          values: [-1, -1, 1, -1, 1, 1, -1, 1]
-        }),
-        textureCoordinates: new GeometryAttribute_default({
-          componentDatatype: ComponentDatatype_default.FLOAT,
-          componentsPerAttribute: 2,
-          values: [0, 0, 1, 0, 1, 1, 0, 1]
-        })
-      },
-      // Workaround Internet Explorer 11.0.8 lack of TRIANGLE_FAN
-      indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
-      primitiveType: PrimitiveType_default.TRIANGLES
-    });
-    vertexArray = VertexArray_default.fromGeometry({
-      context: this,
-      geometry,
-      attributeLocations: viewportQuadAttributeLocations,
-      bufferUsage: BufferUsage_default.STATIC_DRAW,
-      interleave: true
-    });
-    this.cache.viewportQuad_vertexArray = vertexArray;
-  }
-  return vertexArray;
-};
-Context.prototype.createViewportQuadCommand = function(fragmentShaderSource, overrides) {
-  overrides = defaultValue_default(overrides, defaultValue_default.EMPTY_OBJECT);
-  return new DrawCommand_default({
-    vertexArray: this.getViewportQuadVertexArray(),
-    primitiveType: PrimitiveType_default.TRIANGLES,
-    renderState: overrides.renderState,
-    shaderProgram: ShaderProgram_default.fromCache({
-      context: this,
-      vertexShaderSource: ViewportQuadVS_default,
-      fragmentShaderSource,
-      attributeLocations: viewportQuadAttributeLocations
-    }),
-    uniformMap: overrides.uniformMap,
-    owner: overrides.owner,
-    framebuffer: overrides.framebuffer,
-    pass: overrides.pass
-  });
-};
-Context.prototype.getObjectByPickColor = function(pickColor) {
-  Check_default.defined("pickColor", pickColor);
-  return this._pickObjects[pickColor.toRgba()];
-};
-function PickId(pickObjects, key, color) {
-  this._pickObjects = pickObjects;
-  this.key = key;
-  this.color = color;
-}
-Object.defineProperties(PickId.prototype, {
-  object: {
-    get: function() {
-      return this._pickObjects[this.key];
-    },
-    set: function(value) {
-      this._pickObjects[this.key] = value;
-    }
-  }
-});
-PickId.prototype.destroy = function() {
-  delete this._pickObjects[this.key];
-  return void 0;
-};
-Context.prototype.createPickId = function(object2) {
-  Check_default.defined("object", object2);
-  ++this._nextPickColor[0];
-  const key = this._nextPickColor[0];
-  if (key === 0) {
-    throw new RuntimeError_default("Out of unique Pick IDs.");
-  }
-  this._pickObjects[key] = object2;
-  return new PickId(this._pickObjects, key, Color_default.fromRgba(key));
-};
-Context.prototype.isDestroyed = function() {
-  return false;
-};
-Context.prototype.destroy = function() {
-  const cache = this.cache;
-  for (const property in cache) {
-    if (cache.hasOwnProperty(property)) {
-      const propertyValue = cache[property];
-      if (defined_default(propertyValue.destroy)) {
-        propertyValue.destroy();
-      }
-    }
-  }
-  this._shaderCache = this._shaderCache.destroy();
-  this._textureCache = this._textureCache.destroy();
-  this._defaultTexture = this._defaultTexture && this._defaultTexture.destroy();
-  this._defaultEmissiveTexture = this._defaultEmissiveTexture && this._defaultEmissiveTexture.destroy();
-  this._defaultNormalTexture = this._defaultNormalTexture && this._defaultNormalTexture.destroy();
-  this._defaultCubeMap = this._defaultCubeMap && this._defaultCubeMap.destroy();
-  return destroyObject_default(this);
-};
-Context._deprecationWarning = deprecationWarning_default;
-var Context_default = Context;
-
-// packages/engine/Source/Renderer/loadCubeMap.js
-function loadCubeMap(context, urls, skipColorSpaceConversion) {
-  Check_default.defined("context", context);
-  Check_default.defined("urls", urls);
-  if (Object.values(CubeMap_default.FaceName).some((faceName) => !defined_default(urls[faceName]))) {
-    throw new DeveloperError_default(
-      "urls must have positiveX, negativeX, positiveY, negativeY, positiveZ, and negativeZ properties."
-    );
-  }
-  const flipOptions = {
-    flipY: true,
-    skipColorSpaceConversion,
-    preferImageBitmap: true
-  };
-  const facePromises = [
-    Resource_default.createIfNeeded(urls.positiveX).fetchImage(flipOptions),
-    Resource_default.createIfNeeded(urls.negativeX).fetchImage(flipOptions),
-    Resource_default.createIfNeeded(urls.positiveY).fetchImage(flipOptions),
-    Resource_default.createIfNeeded(urls.negativeY).fetchImage(flipOptions),
-    Resource_default.createIfNeeded(urls.positiveZ).fetchImage(flipOptions),
-    Resource_default.createIfNeeded(urls.negativeZ).fetchImage(flipOptions)
-  ];
-  return Promise.all(facePromises).then(function(images) {
-    return new CubeMap_default({
-      context,
-      source: {
-        positiveX: images[0],
-        negativeX: images[1],
-        positiveY: images[2],
-        negativeY: images[3],
-        positiveZ: images[4],
-        negativeZ: images[5]
-      }
-    });
-  });
-}
-var loadCubeMap_default = loadCubeMap;
 
 // packages/engine/Source/Scene/ArcGisBaseMapType.js
 var ArcGisBaseMapType = {
@@ -220721,6 +217455,16 @@ PickDepth.prototype.destroy = function() {
 };
 var PickDepth_default = PickDepth;
 
+// packages/engine/Source/Renderer/PassState.js
+function PassState(context) {
+  this.context = context;
+  this.framebuffer = void 0;
+  this.blendingEnabled = void 0;
+  this.scissorTest = void 0;
+  this.viewport = void 0;
+}
+var PassState_default = PassState;
+
 // packages/engine/Source/Scene/PickDepthFramebuffer.js
 function PickDepthFramebuffer() {
   this._framebuffer = new FramebufferManager_default({
@@ -221296,7 +218040,7 @@ function ShadowPass(context) {
   this.commandList = [];
   this.cullingVolume = void 0;
 }
-function createRenderState2(colorMask, bias) {
+function createRenderState(colorMask, bias) {
   return RenderState_default.fromCache({
     cull: {
       enabled: true,
@@ -221321,15 +218065,15 @@ function createRenderState2(colorMask, bias) {
 }
 function createRenderStates6(shadowMap) {
   const colorMask = !shadowMap._usesDepthTexture;
-  shadowMap._primitiveRenderState = createRenderState2(
+  shadowMap._primitiveRenderState = createRenderState(
     colorMask,
     shadowMap._primitiveBias
   );
-  shadowMap._terrainRenderState = createRenderState2(
+  shadowMap._terrainRenderState = createRenderState(
     colorMask,
     shadowMap._terrainBias
   );
-  shadowMap._pointRenderState = createRenderState2(
+  shadowMap._pointRenderState = createRenderState(
     colorMask,
     shadowMap._pointBias
   );
@@ -221579,7 +218323,7 @@ function createFramebufferCube(shadowMap, context) {
   shadowMap._depthAttachment = depthRenderbuffer;
   shadowMap._colorAttachment = cubeMap;
 }
-function createFramebuffer2(shadowMap, context) {
+function createFramebuffer(shadowMap, context) {
   if (shadowMap._isPointLight) {
     createFramebufferCube(shadowMap, context);
   } else if (shadowMap._usesDepthTexture) {
@@ -221593,13 +218337,13 @@ function checkFramebuffer(shadowMap, context) {
     shadowMap._usesDepthTexture = false;
     createRenderStates6(shadowMap);
     destroyFramebuffer2(shadowMap);
-    createFramebuffer2(shadowMap, context);
+    createFramebuffer(shadowMap, context);
   }
 }
 function updateFramebuffer(shadowMap, context) {
   if (!defined_default(shadowMap._passes[0].framebuffer) || shadowMap._shadowMapTexture.width !== shadowMap._textureSize.x) {
     destroyFramebuffer2(shadowMap);
-    createFramebuffer2(shadowMap, context);
+    createFramebuffer(shadowMap, context);
     checkFramebuffer(shadowMap, context);
     clearFramebuffer(shadowMap, context);
   }
@@ -222092,14 +218836,14 @@ function fitShadowMapToScene(shadowMap, frameState) {
   lightView = Matrix4_default.multiply(translationMatrix, lightView, lightView);
   const halfWidth = 0.5 * (max3.x - min3.x);
   const halfHeight = 0.5 * (max3.y - min3.y);
-  const depth = max3.z - min3.z;
+  const depth2 = max3.z - min3.z;
   const frustum = shadowMapCamera.frustum;
   frustum.left = -halfWidth;
   frustum.right = halfWidth;
   frustum.bottom = -halfHeight;
   frustum.top = halfHeight;
   frustum.near = 0.01;
-  frustum.far = depth;
+  frustum.far = depth2;
   Matrix4_default.clone(lightView, shadowMapCamera.viewMatrix);
   Matrix4_default.inverse(lightView, shadowMapCamera.inverseViewMatrix);
   Matrix4_default.getTranslation(
@@ -223561,15 +220305,15 @@ Picking.prototype.pickPositionWorldCoordinates = function(scene, windowPosition,
   const numFrustums = frustumCommandsList.length;
   for (let i = 0; i < numFrustums; ++i) {
     const pickDepth = this.getPickDepth(scene, i);
-    const depth = pickDepth.getDepth(
+    const depth2 = pickDepth.getDepth(
       context,
       drawingBufferPosition.x,
       drawingBufferPosition.y
     );
-    if (!defined_default(depth)) {
+    if (!defined_default(depth2)) {
       continue;
     }
-    if (depth > 0 && depth < 1) {
+    if (depth2 > 0 && depth2 < 1) {
       const renderedFrustum = frustumCommandsList[i];
       let height2D;
       if (scene.mode === SceneMode_default.SCENE2D) {
@@ -223587,7 +220331,7 @@ Picking.prototype.pickPositionWorldCoordinates = function(scene, windowPosition,
       result = SceneTransforms_default.drawingBufferToWorldCoordinates(
         scene,
         drawingBufferPosition,
-        depth,
+        depth2,
         result
       );
       if (scene.mode === SceneMode_default.SCENE2D) {
@@ -223824,15 +220568,15 @@ function getRayIntersection(picking, scene, ray, objectsToExclude, width, requir
     const numFrustums = view.frustumCommandsList.length;
     for (let i = 0; i < numFrustums; ++i) {
       const pickDepth = picking.getPickDepth(scene, i);
-      const depth = pickDepth.getDepth(context, 0, 0);
-      if (!defined_default(depth)) {
+      const depth2 = pickDepth.getDepth(context, 0, 0);
+      if (!defined_default(depth2)) {
         continue;
       }
-      if (depth > 0 && depth < 1) {
+      if (depth2 > 0 && depth2 < 1) {
         const renderedFrustum = view.frustumCommandsList[i];
         const near = renderedFrustum.near * (i !== 0 ? scene.opaqueFrustumNearOffset : 1);
         const far = renderedFrustum.far;
-        const distance2 = near + depth * (far - near);
+        const distance2 = near + depth2 * (far - near);
         position = Ray_default.getPoint(ray, distance2);
         break;
       }
@@ -227858,6 +224602,3225 @@ QuadtreeTileProvider.prototype.computeDistanceToTile = DeveloperError_default.th
 QuadtreeTileProvider.prototype.isDestroyed = DeveloperError_default.throwInstantiationError;
 QuadtreeTileProvider.prototype.destroy = DeveloperError_default.throwInstantiationError;
 var QuadtreeTileProvider_default = QuadtreeTileProvider;
+
+// packages/engine/Source/Shaders/ViewportQuadVS.js
+var ViewportQuadVS_default = "in vec4 position;\nin vec2 textureCoordinates;\n\nout vec2 v_textureCoordinates;\n\nvoid main() \n{\n    gl_Position = position;\n    v_textureCoordinates = textureCoordinates;\n}\n";
+
+// packages/engine/Source/Renderer/ComputeEngine.js
+function ComputeEngine(context) {
+  this._context = context;
+}
+var renderStateScratch;
+var drawCommandScratch = new DrawCommand_default({
+  primitiveType: PrimitiveType_default.TRIANGLES
+});
+var clearCommandScratch = new ClearCommand_default({
+  color: new Color_default(0, 0, 0, 0)
+});
+function createFramebuffer2(context, outputTexture) {
+  return new Framebuffer_default({
+    context,
+    colorTextures: [outputTexture],
+    destroyAttachments: false
+  });
+}
+function createViewportQuadShader(context, fragmentShaderSource) {
+  return ShaderProgram_default.fromCache({
+    context,
+    vertexShaderSource: ViewportQuadVS_default,
+    fragmentShaderSource,
+    attributeLocations: {
+      position: 0,
+      textureCoordinates: 1
+    }
+  });
+}
+function createRenderState2(width, height) {
+  if (!defined_default(renderStateScratch) || renderStateScratch.viewport.width !== width || renderStateScratch.viewport.height !== height) {
+    renderStateScratch = RenderState_default.fromCache({
+      viewport: new BoundingRectangle_default(0, 0, width, height)
+    });
+  }
+  return renderStateScratch;
+}
+ComputeEngine.prototype.execute = function(computeCommand) {
+  Check_default.defined("computeCommand", computeCommand);
+  if (defined_default(computeCommand.preExecute)) {
+    computeCommand.preExecute(computeCommand);
+  }
+  if (!defined_default(computeCommand.fragmentShaderSource) && !defined_default(computeCommand.shaderProgram)) {
+    throw new DeveloperError_default(
+      "computeCommand.fragmentShaderSource or computeCommand.shaderProgram is required."
+    );
+  }
+  Check_default.defined("computeCommand.outputTexture", computeCommand.outputTexture);
+  const outputTexture = computeCommand.outputTexture;
+  const width = outputTexture.width;
+  const height = outputTexture.height;
+  const context = this._context;
+  const vertexArray = defined_default(computeCommand.vertexArray) ? computeCommand.vertexArray : context.getViewportQuadVertexArray();
+  const shaderProgram = defined_default(computeCommand.shaderProgram) ? computeCommand.shaderProgram : createViewportQuadShader(context, computeCommand.fragmentShaderSource);
+  const framebuffer = createFramebuffer2(context, outputTexture);
+  const renderState = createRenderState2(width, height);
+  const uniformMap2 = computeCommand.uniformMap;
+  const clearCommand = clearCommandScratch;
+  clearCommand.framebuffer = framebuffer;
+  clearCommand.renderState = renderState;
+  clearCommand.execute(context);
+  const drawCommand = drawCommandScratch;
+  drawCommand.vertexArray = vertexArray;
+  drawCommand.renderState = renderState;
+  drawCommand.shaderProgram = shaderProgram;
+  drawCommand.uniformMap = uniformMap2;
+  drawCommand.framebuffer = framebuffer;
+  drawCommand.execute(context);
+  framebuffer.destroy();
+  if (!computeCommand.persists) {
+    shaderProgram.destroy();
+    if (defined_default(computeCommand.vertexArray)) {
+      vertexArray.destroy();
+    }
+  }
+  if (defined_default(computeCommand.postExecute)) {
+    computeCommand.postExecute(outputTexture);
+  }
+};
+ComputeEngine.prototype.isDestroyed = function() {
+  return false;
+};
+ComputeEngine.prototype.destroy = function() {
+  return destroyObject_default(this);
+};
+var ComputeEngine_default = ComputeEngine;
+
+// packages/engine/Source/Renderer/ShaderCache.js
+function ShaderCache(context) {
+  this._context = context;
+  this._shaders = {};
+  this._numberOfShaders = 0;
+  this._shadersToRelease = {};
+}
+Object.defineProperties(ShaderCache.prototype, {
+  numberOfShaders: {
+    get: function() {
+      return this._numberOfShaders;
+    }
+  }
+});
+ShaderCache.prototype.replaceShaderProgram = function(options) {
+  if (defined_default(options.shaderProgram)) {
+    options.shaderProgram.destroy();
+  }
+  return this.getShaderProgram(options);
+};
+function toSortedJson(dictionary) {
+  const sortedKeys = Object.keys(dictionary).sort();
+  return JSON.stringify(dictionary, sortedKeys);
+}
+ShaderCache.prototype.getShaderProgram = function(options) {
+  let vertexShaderSource = options.vertexShaderSource;
+  let fragmentShaderSource = options.fragmentShaderSource;
+  const attributeLocations8 = options.attributeLocations;
+  if (typeof vertexShaderSource === "string") {
+    vertexShaderSource = new ShaderSource_default({
+      sources: [vertexShaderSource]
+    });
+  }
+  if (typeof fragmentShaderSource === "string") {
+    fragmentShaderSource = new ShaderSource_default({
+      sources: [fragmentShaderSource]
+    });
+  }
+  const vertexShaderKey = vertexShaderSource.getCacheKey();
+  const fragmentShaderKey = fragmentShaderSource.getCacheKey();
+  const attributeLocationKey = defined_default(attributeLocations8) ? toSortedJson(attributeLocations8) : "";
+  const keyword = `${vertexShaderKey}:${fragmentShaderKey}:${attributeLocationKey}`;
+  let cachedShader;
+  if (defined_default(this._shaders[keyword])) {
+    cachedShader = this._shaders[keyword];
+    delete this._shadersToRelease[keyword];
+  } else {
+    const context = this._context;
+    const vertexShaderText = vertexShaderSource.createCombinedVertexShader(
+      context
+    );
+    const fragmentShaderText = fragmentShaderSource.createCombinedFragmentShader(
+      context
+    );
+    const shaderProgram = new ShaderProgram_default({
+      gl: context._gl,
+      logShaderCompilation: context.logShaderCompilation,
+      debugShaders: context.debugShaders,
+      vertexShaderSource,
+      vertexShaderText,
+      fragmentShaderSource,
+      fragmentShaderText,
+      attributeLocations: attributeLocations8
+    });
+    cachedShader = {
+      cache: this,
+      shaderProgram,
+      keyword,
+      derivedKeywords: [],
+      count: 0
+    };
+    shaderProgram._cachedShader = cachedShader;
+    this._shaders[keyword] = cachedShader;
+    ++this._numberOfShaders;
+  }
+  ++cachedShader.count;
+  return cachedShader.shaderProgram;
+};
+ShaderCache.prototype.replaceDerivedShaderProgram = function(shaderProgram, keyword, options) {
+  const cachedShader = shaderProgram._cachedShader;
+  const derivedKeyword = keyword + cachedShader.keyword;
+  const cachedDerivedShader = this._shaders[derivedKeyword];
+  if (defined_default(cachedDerivedShader)) {
+    destroyShader(this, cachedDerivedShader);
+    const index = cachedShader.derivedKeywords.indexOf(keyword);
+    if (index > -1) {
+      cachedShader.derivedKeywords.splice(index, 1);
+    }
+  }
+  return this.createDerivedShaderProgram(shaderProgram, keyword, options);
+};
+ShaderCache.prototype.getDerivedShaderProgram = function(shaderProgram, keyword) {
+  const cachedShader = shaderProgram._cachedShader;
+  const derivedKeyword = keyword + cachedShader.keyword;
+  const cachedDerivedShader = this._shaders[derivedKeyword];
+  if (!defined_default(cachedDerivedShader)) {
+    return void 0;
+  }
+  return cachedDerivedShader.shaderProgram;
+};
+ShaderCache.prototype.createDerivedShaderProgram = function(shaderProgram, keyword, options) {
+  const cachedShader = shaderProgram._cachedShader;
+  const derivedKeyword = keyword + cachedShader.keyword;
+  let vertexShaderSource = options.vertexShaderSource;
+  let fragmentShaderSource = options.fragmentShaderSource;
+  const attributeLocations8 = options.attributeLocations;
+  if (typeof vertexShaderSource === "string") {
+    vertexShaderSource = new ShaderSource_default({
+      sources: [vertexShaderSource]
+    });
+  }
+  if (typeof fragmentShaderSource === "string") {
+    fragmentShaderSource = new ShaderSource_default({
+      sources: [fragmentShaderSource]
+    });
+  }
+  const context = this._context;
+  const vertexShaderText = vertexShaderSource.createCombinedVertexShader(
+    context
+  );
+  const fragmentShaderText = fragmentShaderSource.createCombinedFragmentShader(
+    context
+  );
+  const derivedShaderProgram = new ShaderProgram_default({
+    gl: context._gl,
+    logShaderCompilation: context.logShaderCompilation,
+    debugShaders: context.debugShaders,
+    vertexShaderSource,
+    vertexShaderText,
+    fragmentShaderSource,
+    fragmentShaderText,
+    attributeLocations: attributeLocations8
+  });
+  const derivedCachedShader = {
+    cache: this,
+    shaderProgram: derivedShaderProgram,
+    keyword: derivedKeyword,
+    derivedKeywords: [],
+    count: 0
+  };
+  cachedShader.derivedKeywords.push(keyword);
+  derivedShaderProgram._cachedShader = derivedCachedShader;
+  this._shaders[derivedKeyword] = derivedCachedShader;
+  return derivedShaderProgram;
+};
+function destroyShader(cache, cachedShader) {
+  const derivedKeywords = cachedShader.derivedKeywords;
+  const length2 = derivedKeywords.length;
+  for (let i = 0; i < length2; ++i) {
+    const keyword = derivedKeywords[i] + cachedShader.keyword;
+    const derivedCachedShader = cache._shaders[keyword];
+    destroyShader(cache, derivedCachedShader);
+  }
+  delete cache._shaders[cachedShader.keyword];
+  cachedShader.shaderProgram.finalDestroy();
+}
+ShaderCache.prototype.destroyReleasedShaderPrograms = function() {
+  const shadersToRelease = this._shadersToRelease;
+  for (const keyword in shadersToRelease) {
+    if (shadersToRelease.hasOwnProperty(keyword)) {
+      const cachedShader = shadersToRelease[keyword];
+      destroyShader(this, cachedShader);
+      --this._numberOfShaders;
+    }
+  }
+  this._shadersToRelease = {};
+};
+ShaderCache.prototype.releaseShaderProgram = function(shaderProgram) {
+  if (defined_default(shaderProgram)) {
+    const cachedShader = shaderProgram._cachedShader;
+    if (cachedShader && --cachedShader.count === 0) {
+      this._shadersToRelease[cachedShader.keyword] = cachedShader;
+    }
+  }
+};
+ShaderCache.prototype.isDestroyed = function() {
+  return false;
+};
+ShaderCache.prototype.destroy = function() {
+  const shaders = this._shaders;
+  for (const keyword in shaders) {
+    if (shaders.hasOwnProperty(keyword)) {
+      shaders[keyword].shaderProgram.finalDestroy();
+    }
+  }
+  return destroyObject_default(this);
+};
+var ShaderCache_default = ShaderCache;
+
+// packages/engine/Source/Renderer/TextureCache.js
+function TextureCache() {
+  this._textures = {};
+  this._numberOfTextures = 0;
+  this._texturesToRelease = {};
+}
+Object.defineProperties(TextureCache.prototype, {
+  numberOfTextures: {
+    get: function() {
+      return this._numberOfTextures;
+    }
+  }
+});
+TextureCache.prototype.getTexture = function(keyword) {
+  const cachedTexture = this._textures[keyword];
+  if (!defined_default(cachedTexture)) {
+    return void 0;
+  }
+  delete this._texturesToRelease[keyword];
+  ++cachedTexture.count;
+  return cachedTexture.texture;
+};
+TextureCache.prototype.addTexture = function(keyword, texture) {
+  const cachedTexture = {
+    texture,
+    count: 1
+  };
+  texture.finalDestroy = texture.destroy;
+  const that = this;
+  texture.destroy = function() {
+    if (--cachedTexture.count === 0) {
+      that._texturesToRelease[keyword] = cachedTexture;
+    }
+  };
+  this._textures[keyword] = cachedTexture;
+  ++this._numberOfTextures;
+};
+TextureCache.prototype.destroyReleasedTextures = function() {
+  const texturesToRelease = this._texturesToRelease;
+  for (const keyword in texturesToRelease) {
+    if (texturesToRelease.hasOwnProperty(keyword)) {
+      const cachedTexture = texturesToRelease[keyword];
+      delete this._textures[keyword];
+      cachedTexture.texture.finalDestroy();
+      --this._numberOfTextures;
+    }
+  }
+  this._texturesToRelease = {};
+};
+TextureCache.prototype.isDestroyed = function() {
+  return false;
+};
+TextureCache.prototype.destroy = function() {
+  const textures = this._textures;
+  for (const keyword in textures) {
+    if (textures.hasOwnProperty(keyword)) {
+      textures[keyword].texture.finalDestroy();
+    }
+  }
+  return destroyObject_default(this);
+};
+var TextureCache_default = TextureCache;
+
+// packages/engine/Source/Scene/SunLight.js
+function SunLight(options) {
+  options = defaultValue_default(options, defaultValue_default.EMPTY_OBJECT);
+  this.color = Color_default.clone(defaultValue_default(options.color, Color_default.WHITE));
+  this.intensity = defaultValue_default(options.intensity, 2);
+}
+var SunLight_default = SunLight;
+
+// packages/engine/Source/Renderer/UniformState.js
+function UniformState() {
+  this.globeDepthTexture = void 0;
+  this.gamma = void 0;
+  this._viewport = new BoundingRectangle_default();
+  this._viewportCartesian4 = new Cartesian4_default();
+  this._viewportDirty = false;
+  this._viewportOrthographicMatrix = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._viewportTransformation = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._model = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._view = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._inverseView = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._projection = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._infiniteProjection = Matrix4_default.clone(Matrix4_default.IDENTITY);
+  this._entireFrustum = new Cartesian2_default();
+  this._currentFrustum = new Cartesian2_default();
+  this._frustumPlanes = new Cartesian4_default();
+  this._farDepthFromNearPlusOne = void 0;
+  this._log2FarDepthFromNearPlusOne = void 0;
+  this._oneOverLog2FarDepthFromNearPlusOne = void 0;
+  this._frameState = void 0;
+  this._temeToPseudoFixed = Matrix3_default.clone(Matrix4_default.IDENTITY);
+  this._view3DDirty = true;
+  this._view3D = new Matrix4_default();
+  this._inverseView3DDirty = true;
+  this._inverseView3D = new Matrix4_default();
+  this._inverseModelDirty = true;
+  this._inverseModel = new Matrix4_default();
+  this._inverseTransposeModelDirty = true;
+  this._inverseTransposeModel = new Matrix3_default();
+  this._viewRotation = new Matrix3_default();
+  this._inverseViewRotation = new Matrix3_default();
+  this._viewRotation3D = new Matrix3_default();
+  this._inverseViewRotation3D = new Matrix3_default();
+  this._inverseProjectionDirty = true;
+  this._inverseProjection = new Matrix4_default();
+  this._modelViewDirty = true;
+  this._modelView = new Matrix4_default();
+  this._modelView3DDirty = true;
+  this._modelView3D = new Matrix4_default();
+  this._modelViewRelativeToEyeDirty = true;
+  this._modelViewRelativeToEye = new Matrix4_default();
+  this._inverseModelViewDirty = true;
+  this._inverseModelView = new Matrix4_default();
+  this._inverseModelView3DDirty = true;
+  this._inverseModelView3D = new Matrix4_default();
+  this._viewProjectionDirty = true;
+  this._viewProjection = new Matrix4_default();
+  this._inverseViewProjectionDirty = true;
+  this._inverseViewProjection = new Matrix4_default();
+  this._modelViewProjectionDirty = true;
+  this._modelViewProjection = new Matrix4_default();
+  this._inverseModelViewProjectionDirty = true;
+  this._inverseModelViewProjection = new Matrix4_default();
+  this._modelViewProjectionRelativeToEyeDirty = true;
+  this._modelViewProjectionRelativeToEye = new Matrix4_default();
+  this._modelViewInfiniteProjectionDirty = true;
+  this._modelViewInfiniteProjection = new Matrix4_default();
+  this._normalDirty = true;
+  this._normal = new Matrix3_default();
+  this._normal3DDirty = true;
+  this._normal3D = new Matrix3_default();
+  this._inverseNormalDirty = true;
+  this._inverseNormal = new Matrix3_default();
+  this._inverseNormal3DDirty = true;
+  this._inverseNormal3D = new Matrix3_default();
+  this._encodedCameraPositionMCDirty = true;
+  this._encodedCameraPositionMC = new EncodedCartesian3_default();
+  this._cameraPosition = new Cartesian3_default();
+  this._sunPositionWC = new Cartesian3_default();
+  this._sunPositionColumbusView = new Cartesian3_default();
+  this._sunDirectionWC = new Cartesian3_default();
+  this._sunDirectionEC = new Cartesian3_default();
+  this._moonDirectionEC = new Cartesian3_default();
+  this._lightDirectionWC = new Cartesian3_default();
+  this._lightDirectionEC = new Cartesian3_default();
+  this._lightColor = new Cartesian3_default();
+  this._lightColorHdr = new Cartesian3_default();
+  this._pass = void 0;
+  this._mode = void 0;
+  this._mapProjection = void 0;
+  this._ellipsoid = void 0;
+  this._cameraDirection = new Cartesian3_default();
+  this._cameraRight = new Cartesian3_default();
+  this._cameraUp = new Cartesian3_default();
+  this._frustum2DWidth = 0;
+  this._eyeHeight = 0;
+  this._eyeHeight2D = new Cartesian2_default();
+  this._eyeEllipsoidNormalEC = new Cartesian3_default();
+  this._eyeEllipsoidCurvature = new Cartesian2_default();
+  this._modelToEnu = new Matrix4_default();
+  this._enuToModel = new Matrix4_default();
+  this._pixelRatio = 1;
+  this._orthographicIn3D = false;
+  this._backgroundColor = new Color_default();
+  this._brdfLut = void 0;
+  this._environmentMap = void 0;
+  this._sphericalHarmonicCoefficients = void 0;
+  this._specularEnvironmentMaps = void 0;
+  this._specularEnvironmentMapsMaximumLOD = void 0;
+  this._fogDensity = void 0;
+  this._fogMinimumBrightness = void 0;
+  this._atmosphereHsbShift = void 0;
+  this._atmosphereLightIntensity = void 0;
+  this._atmosphereRayleighCoefficient = new Cartesian3_default();
+  this._atmosphereRayleighScaleHeight = new Cartesian3_default();
+  this._atmosphereMieCoefficient = new Cartesian3_default();
+  this._atmosphereMieScaleHeight = void 0;
+  this._atmosphereMieAnisotropy = void 0;
+  this._atmosphereDynamicLighting = void 0;
+  this._invertClassificationColor = void 0;
+  this._splitPosition = 0;
+  this._pixelSizePerMeter = void 0;
+  this._geometricToleranceOverMeter = void 0;
+  this._minimumDisableDepthTestDistance = void 0;
+}
+Object.defineProperties(UniformState.prototype, {
+  /**
+   * @memberof UniformState.prototype
+   * @type {FrameState}
+   * @readonly
+   */
+  frameState: {
+    get: function() {
+      return this._frameState;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {BoundingRectangle}
+   */
+  viewport: {
+    get: function() {
+      return this._viewport;
+    },
+    set: function(viewport) {
+      if (!BoundingRectangle_default.equals(viewport, this._viewport)) {
+        BoundingRectangle_default.clone(viewport, this._viewport);
+        const v3 = this._viewport;
+        const vc = this._viewportCartesian4;
+        vc.x = v3.x;
+        vc.y = v3.y;
+        vc.z = v3.width;
+        vc.w = v3.height;
+        this._viewportDirty = true;
+      }
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @private
+   */
+  viewportCartesian4: {
+    get: function() {
+      return this._viewportCartesian4;
+    }
+  },
+  viewportOrthographic: {
+    get: function() {
+      cleanViewport(this);
+      return this._viewportOrthographicMatrix;
+    }
+  },
+  viewportTransformation: {
+    get: function() {
+      cleanViewport(this);
+      return this._viewportTransformation;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  model: {
+    get: function() {
+      return this._model;
+    },
+    set: function(matrix) {
+      Matrix4_default.clone(matrix, this._model);
+      this._modelView3DDirty = true;
+      this._inverseModelView3DDirty = true;
+      this._inverseModelDirty = true;
+      this._inverseTransposeModelDirty = true;
+      this._modelViewDirty = true;
+      this._inverseModelViewDirty = true;
+      this._modelViewRelativeToEyeDirty = true;
+      this._inverseModelViewDirty = true;
+      this._modelViewProjectionDirty = true;
+      this._inverseModelViewProjectionDirty = true;
+      this._modelViewProjectionRelativeToEyeDirty = true;
+      this._modelViewInfiniteProjectionDirty = true;
+      this._normalDirty = true;
+      this._inverseNormalDirty = true;
+      this._normal3DDirty = true;
+      this._inverseNormal3DDirty = true;
+      this._encodedCameraPositionMCDirty = true;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseModel: {
+    get: function() {
+      if (this._inverseModelDirty) {
+        this._inverseModelDirty = false;
+        Matrix4_default.inverse(this._model, this._inverseModel);
+      }
+      return this._inverseModel;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @private
+   */
+  inverseTransposeModel: {
+    get: function() {
+      const m = this._inverseTransposeModel;
+      if (this._inverseTransposeModelDirty) {
+        this._inverseTransposeModelDirty = false;
+        Matrix4_default.getMatrix3(this.inverseModel, m);
+        Matrix3_default.transpose(m, m);
+      }
+      return m;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  view: {
+    get: function() {
+      return this._view;
+    }
+  },
+  /**
+   * The 3D view matrix.  In 3D mode, this is identical to {@link UniformState#view},
+   * but in 2D and Columbus View it is a synthetic matrix based on the equivalent position
+   * of the camera in the 3D world.
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  view3D: {
+    get: function() {
+      updateView3D(this);
+      return this._view3D;
+    }
+  },
+  /**
+   * The 3x3 rotation matrix of the current view matrix ({@link UniformState#view}).
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  viewRotation: {
+    get: function() {
+      updateView3D(this);
+      return this._viewRotation;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  viewRotation3D: {
+    get: function() {
+      updateView3D(this);
+      return this._viewRotation3D;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseView: {
+    get: function() {
+      return this._inverseView;
+    }
+  },
+  /**
+   * the 4x4 inverse-view matrix that transforms from eye to 3D world coordinates.  In 3D mode, this is
+   * identical to {@link UniformState#inverseView}, but in 2D and Columbus View it is a synthetic matrix
+   * based on the equivalent position of the camera in the 3D world.
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseView3D: {
+    get: function() {
+      updateInverseView3D(this);
+      return this._inverseView3D;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  inverseViewRotation: {
+    get: function() {
+      return this._inverseViewRotation;
+    }
+  },
+  /**
+   * The 3x3 rotation matrix of the current 3D inverse-view matrix ({@link UniformState#inverseView3D}).
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  inverseViewRotation3D: {
+    get: function() {
+      updateInverseView3D(this);
+      return this._inverseViewRotation3D;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  projection: {
+    get: function() {
+      return this._projection;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseProjection: {
+    get: function() {
+      cleanInverseProjection(this);
+      return this._inverseProjection;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  infiniteProjection: {
+    get: function() {
+      return this._infiniteProjection;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelView: {
+    get: function() {
+      cleanModelView(this);
+      return this._modelView;
+    }
+  },
+  /**
+   * The 3D model-view matrix.  In 3D mode, this is equivalent to {@link UniformState#modelView}.  In 2D and
+   * Columbus View, however, it is a synthetic matrix based on the equivalent position of the camera in the 3D world.
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelView3D: {
+    get: function() {
+      cleanModelView3D(this);
+      return this._modelView3D;
+    }
+  },
+  /**
+   * Model-view relative to eye matrix.
+   *
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelViewRelativeToEye: {
+    get: function() {
+      cleanModelViewRelativeToEye(this);
+      return this._modelViewRelativeToEye;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseModelView: {
+    get: function() {
+      cleanInverseModelView(this);
+      return this._inverseModelView;
+    }
+  },
+  /**
+   * The inverse of the 3D model-view matrix.  In 3D mode, this is equivalent to {@link UniformState#inverseModelView}.
+   * In 2D and Columbus View, however, it is a synthetic matrix based on the equivalent position of the camera in the 3D world.
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseModelView3D: {
+    get: function() {
+      cleanInverseModelView3D(this);
+      return this._inverseModelView3D;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  viewProjection: {
+    get: function() {
+      cleanViewProjection(this);
+      return this._viewProjection;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseViewProjection: {
+    get: function() {
+      cleanInverseViewProjection(this);
+      return this._inverseViewProjection;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelViewProjection: {
+    get: function() {
+      cleanModelViewProjection(this);
+      return this._modelViewProjection;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  inverseModelViewProjection: {
+    get: function() {
+      cleanInverseModelViewProjection(this);
+      return this._inverseModelViewProjection;
+    }
+  },
+  /**
+   * Model-view-projection relative to eye matrix.
+   *
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelViewProjectionRelativeToEye: {
+    get: function() {
+      cleanModelViewProjectionRelativeToEye(this);
+      return this._modelViewProjectionRelativeToEye;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelViewInfiniteProjection: {
+    get: function() {
+      cleanModelViewInfiniteProjection(this);
+      return this._modelViewInfiniteProjection;
+    }
+  },
+  /**
+   * A 3x3 normal transformation matrix that transforms normal vectors in model coordinates to
+   * eye coordinates.
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  normal: {
+    get: function() {
+      cleanNormal(this);
+      return this._normal;
+    }
+  },
+  /**
+   * A 3x3 normal transformation matrix that transforms normal vectors in 3D model
+   * coordinates to eye coordinates.  In 3D mode, this is identical to
+   * {@link UniformState#normal}, but in 2D and Columbus View it represents the normal transformation
+   * matrix as if the camera were at an equivalent location in 3D mode.
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  normal3D: {
+    get: function() {
+      cleanNormal3D(this);
+      return this._normal3D;
+    }
+  },
+  /**
+   * An inverse 3x3 normal transformation matrix that transforms normal vectors in model coordinates
+   * to eye coordinates.
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  inverseNormal: {
+    get: function() {
+      cleanInverseNormal(this);
+      return this._inverseNormal;
+    }
+  },
+  /**
+   * An inverse 3x3 normal transformation matrix that transforms normal vectors in eye coordinates
+   * to 3D model coordinates.  In 3D mode, this is identical to
+   * {@link UniformState#inverseNormal}, but in 2D and Columbus View it represents the normal transformation
+   * matrix as if the camera were at an equivalent location in 3D mode.
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  inverseNormal3D: {
+    get: function() {
+      cleanInverseNormal3D(this);
+      return this._inverseNormal3D;
+    }
+  },
+  /**
+   * The near distance (<code>x</code>) and the far distance (<code>y</code>) of the frustum defined by the camera.
+   * This is the largest possible frustum, not an individual frustum used for multi-frustum rendering.
+   * @memberof UniformState.prototype
+   * @type {Cartesian2}
+   */
+  entireFrustum: {
+    get: function() {
+      return this._entireFrustum;
+    }
+  },
+  /**
+   * The near distance (<code>x</code>) and the far distance (<code>y</code>) of the frustum defined by the camera.
+   * This is the individual frustum used for multi-frustum rendering.
+   * @memberof UniformState.prototype
+   * @type {Cartesian2}
+   */
+  currentFrustum: {
+    get: function() {
+      return this._currentFrustum;
+    }
+  },
+  /**
+   * The distances to the frustum planes. The top, bottom, left and right distances are
+   * the x, y, z, and w components, respectively.
+   * @memberof UniformState.prototype
+   * @type {Cartesian4}
+   */
+  frustumPlanes: {
+    get: function() {
+      return this._frustumPlanes;
+    }
+  },
+  /**
+   * The far plane's distance from the near plane, plus 1.0.
+   *
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  farDepthFromNearPlusOne: {
+    get: function() {
+      return this._farDepthFromNearPlusOne;
+    }
+  },
+  /**
+   * The log2 of {@link UniformState#farDepthFromNearPlusOne}.
+   *
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  log2FarDepthFromNearPlusOne: {
+    get: function() {
+      return this._log2FarDepthFromNearPlusOne;
+    }
+  },
+  /**
+   * 1.0 divided by {@link UniformState#log2FarDepthFromNearPlusOne}.
+   *
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  oneOverLog2FarDepthFromNearPlusOne: {
+    get: function() {
+      return this._oneOverLog2FarDepthFromNearPlusOne;
+    }
+  },
+  /**
+   * The height in meters of the eye (camera) above or below the ellipsoid.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  eyeHeight: {
+    get: function() {
+      return this._eyeHeight;
+    }
+  },
+  /**
+   * The height (<code>x</code>) and the height squared (<code>y</code>)
+   * in meters of the eye (camera) above the 2D world plane. This uniform is only valid
+   * when the {@link SceneMode} is <code>SCENE2D</code>.
+   * @memberof UniformState.prototype
+   * @type {Cartesian2}
+   */
+  eyeHeight2D: {
+    get: function() {
+      return this._eyeHeight2D;
+    }
+  },
+  /**
+   * The ellipsoid surface normal at the camera position, in model coordinates.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  eyeEllipsoidNormalEC: {
+    get: function() {
+      return this._eyeEllipsoidNormalEC;
+    }
+  },
+  /**
+   * The ellipsoid radii of curvature at the camera position.
+   * The .x component is the prime vertical radius, .y is the meridional.
+   * @memberof UniformState.prototype
+   * @type {Cartesian2}
+   */
+  eyeEllipsoidCurvature: {
+    get: function() {
+      return this._eyeEllipsoidCurvature;
+    }
+  },
+  /**
+   * A transform from model coordinates to an east-north-up coordinate system
+   * centered at the position on the ellipsoid below the camera
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  modelToEnu: {
+    get: function() {
+      return this._modelToEnu;
+    }
+  },
+  /**
+   * The inverse of {@link UniformState.prototype.modelToEnu}
+   * @memberof UniformState.prototype
+   * @type {Matrix4}
+   */
+  enuToModel: {
+    get: function() {
+      return this._enuToModel;
+    }
+  },
+  /**
+   * The sun position in 3D world coordinates at the current scene time.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  sunPositionWC: {
+    get: function() {
+      return this._sunPositionWC;
+    }
+  },
+  /**
+   * The sun position in 2D world coordinates at the current scene time.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  sunPositionColumbusView: {
+    get: function() {
+      return this._sunPositionColumbusView;
+    }
+  },
+  /**
+   * A normalized vector to the sun in 3D world coordinates at the current scene time.  Even in 2D or
+   * Columbus View mode, this returns the direction to the sun in the 3D scene.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  sunDirectionWC: {
+    get: function() {
+      return this._sunDirectionWC;
+    }
+  },
+  /**
+   * A normalized vector to the sun in eye coordinates at the current scene time.  In 3D mode, this
+   * returns the actual vector from the camera position to the sun position.  In 2D and Columbus View, it returns
+   * the vector from the equivalent 3D camera position to the position of the sun in the 3D scene.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  sunDirectionEC: {
+    get: function() {
+      return this._sunDirectionEC;
+    }
+  },
+  /**
+   * A normalized vector to the moon in eye coordinates at the current scene time.  In 3D mode, this
+   * returns the actual vector from the camera position to the moon position.  In 2D and Columbus View, it returns
+   * the vector from the equivalent 3D camera position to the position of the moon in the 3D scene.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  moonDirectionEC: {
+    get: function() {
+      return this._moonDirectionEC;
+    }
+  },
+  /**
+   * A normalized vector to the scene's light source in 3D world coordinates.  Even in 2D or
+   * Columbus View mode, this returns the direction to the light in the 3D scene.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  lightDirectionWC: {
+    get: function() {
+      return this._lightDirectionWC;
+    }
+  },
+  /**
+   * A normalized vector to the scene's light source in eye coordinates.  In 3D mode, this
+   * returns the actual vector from the camera position to the light.  In 2D and Columbus View, it returns
+   * the vector from the equivalent 3D camera position in the 3D scene.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  lightDirectionEC: {
+    get: function() {
+      return this._lightDirectionEC;
+    }
+  },
+  /**
+   * The color of light emitted by the scene's light source. This is equivalent to the light
+   * color multiplied by the light intensity limited to a maximum luminance of 1.0 suitable
+   * for non-HDR lighting.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  lightColor: {
+    get: function() {
+      return this._lightColor;
+    }
+  },
+  /**
+   * The high dynamic range color of light emitted by the scene's light source. This is equivalent to
+   * the light color multiplied by the light intensity suitable for HDR lighting.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  lightColorHdr: {
+    get: function() {
+      return this._lightColorHdr;
+    }
+  },
+  /**
+   * The high bits of the camera position.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  encodedCameraPositionMCHigh: {
+    get: function() {
+      cleanEncodedCameraPositionMC(this);
+      return this._encodedCameraPositionMC.high;
+    }
+  },
+  /**
+   * The low bits of the camera position.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  encodedCameraPositionMCLow: {
+    get: function() {
+      cleanEncodedCameraPositionMC(this);
+      return this._encodedCameraPositionMC.low;
+    }
+  },
+  /**
+   * A 3x3 matrix that transforms from True Equator Mean Equinox (TEME) axes to the
+   * pseudo-fixed axes at the Scene's current time.
+   * @memberof UniformState.prototype
+   * @type {Matrix3}
+   */
+  temeToPseudoFixedMatrix: {
+    get: function() {
+      return this._temeToPseudoFixed;
+    }
+  },
+  /**
+   * Gets the scaling factor for transforming from the canvas
+   * pixel space to canvas coordinate space.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  pixelRatio: {
+    get: function() {
+      return this._pixelRatio;
+    }
+  },
+  /**
+   * A scalar used to mix a color with the fog color based on the distance to the camera.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  fogDensity: {
+    get: function() {
+      return this._fogDensity;
+    }
+  },
+  /**
+   * A scalar used as a minimum value when brightening fog
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  fogMinimumBrightness: {
+    get: function() {
+      return this._fogMinimumBrightness;
+    }
+  },
+  /**
+   * A color shift to apply to the atmosphere color in HSB.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  atmosphereHsbShift: {
+    get: function() {
+      return this._atmosphereHsbShift;
+    }
+  },
+  /**
+   * The intensity of the light that is used for computing the atmosphere color
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  atmosphereLightIntensity: {
+    get: function() {
+      return this._atmosphereLightIntensity;
+    }
+  },
+  /**
+   * The Rayleigh scattering coefficient used in the atmospheric scattering equations for the sky atmosphere.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  atmosphereRayleighCoefficient: {
+    get: function() {
+      return this._atmosphereRayleighCoefficient;
+    }
+  },
+  /**
+   * The Rayleigh scale height used in the atmospheric scattering equations for the sky atmosphere, in meters.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  atmosphereRayleighScaleHeight: {
+    get: function() {
+      return this._atmosphereRayleighScaleHeight;
+    }
+  },
+  /**
+   * The Mie scattering coefficient used in the atmospheric scattering equations for the sky atmosphere.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3}
+   */
+  atmosphereMieCoefficient: {
+    get: function() {
+      return this._atmosphereMieCoefficient;
+    }
+  },
+  /**
+   * The Mie scale height used in the atmospheric scattering equations for the sky atmosphere, in meters.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  atmosphereMieScaleHeight: {
+    get: function() {
+      return this._atmosphereMieScaleHeight;
+    }
+  },
+  /**
+   * The anisotropy of the medium to consider for Mie scattering.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  atmosphereMieAnisotropy: {
+    get: function() {
+      return this._atmosphereMieAnisotropy;
+    }
+  },
+  /**
+   * Which light source to use for dynamically lighting the atmosphere
+   *
+   * @memberof UniformState.prototype
+   * @type {DynamicAtmosphereLightingType}
+   */
+  atmosphereDynamicLighting: {
+    get: function() {
+      return this._atmosphereDynamicLighting;
+    }
+  },
+  /**
+   * A scalar that represents the geometric tolerance per meter
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  geometricToleranceOverMeter: {
+    get: function() {
+      return this._geometricToleranceOverMeter;
+    }
+  },
+  /**
+   * @memberof UniformState.prototype
+   * @type {Pass}
+   */
+  pass: {
+    get: function() {
+      return this._pass;
+    }
+  },
+  /**
+   * The current background color
+   * @memberof UniformState.prototype
+   * @type {Color}
+   */
+  backgroundColor: {
+    get: function() {
+      return this._backgroundColor;
+    }
+  },
+  /**
+   * The look up texture used to find the BRDF for a material
+   * @memberof UniformState.prototype
+   * @type {Texture}
+   */
+  brdfLut: {
+    get: function() {
+      return this._brdfLut;
+    }
+  },
+  /**
+   * The environment map of the scene
+   * @memberof UniformState.prototype
+   * @type {CubeMap}
+   */
+  environmentMap: {
+    get: function() {
+      return this._environmentMap;
+    }
+  },
+  /**
+   * The spherical harmonic coefficients of the scene.
+   * @memberof UniformState.prototype
+   * @type {Cartesian3[]}
+   */
+  sphericalHarmonicCoefficients: {
+    get: function() {
+      return this._sphericalHarmonicCoefficients;
+    }
+  },
+  /**
+   * The specular environment cube map of the scene.
+   * @memberof UniformState.prototype
+   * @type {Texture}
+   */
+  specularEnvironmentMaps: {
+    get: function() {
+      return this._specularEnvironmentMaps;
+    }
+  },
+  /**
+   * The maximum level-of-detail of the specular environment cube map of the scene.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  specularEnvironmentMapsMaximumLOD: {
+    get: function() {
+      return this._specularEnvironmentMapsMaximumLOD;
+    }
+  },
+  /**
+   * The splitter position to use when rendering with a splitter. This will be in pixel coordinates relative to the canvas.
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  splitPosition: {
+    get: function() {
+      return this._splitPosition;
+    }
+  },
+  /**
+   * The distance from the camera at which to disable the depth test of billboards, labels and points
+   * to, for example, prevent clipping against terrain. When set to zero, the depth test should always
+   * be applied. When less than zero, the depth test should never be applied.
+   *
+   * @memberof UniformState.prototype
+   * @type {number}
+   */
+  minimumDisableDepthTestDistance: {
+    get: function() {
+      return this._minimumDisableDepthTestDistance;
+    }
+  },
+  /**
+   * The highlight color of unclassified 3D Tiles.
+   *
+   * @memberof UniformState.prototype
+   * @type {Color}
+   */
+  invertClassificationColor: {
+    get: function() {
+      return this._invertClassificationColor;
+    }
+  },
+  /**
+   * Whether or not the current projection is orthographic in 3D.
+   *
+   * @memberOf UniformState.prototype
+   * @type {boolean}
+   */
+  orthographicIn3D: {
+    get: function() {
+      return this._orthographicIn3D;
+    }
+  },
+  /**
+   * The current ellipsoid.
+   *
+   * @memberOf UniformState.prototype
+   * @type {Ellipsoid}
+   */
+  ellipsoid: {
+    get: function() {
+      return defaultValue_default(this._ellipsoid, Ellipsoid_default.default);
+    }
+  }
+});
+function setView(uniformState, matrix) {
+  Matrix4_default.clone(matrix, uniformState._view);
+  Matrix4_default.getMatrix3(matrix, uniformState._viewRotation);
+  uniformState._view3DDirty = true;
+  uniformState._inverseView3DDirty = true;
+  uniformState._modelViewDirty = true;
+  uniformState._modelView3DDirty = true;
+  uniformState._modelViewRelativeToEyeDirty = true;
+  uniformState._inverseModelViewDirty = true;
+  uniformState._inverseModelView3DDirty = true;
+  uniformState._viewProjectionDirty = true;
+  uniformState._inverseViewProjectionDirty = true;
+  uniformState._modelViewProjectionDirty = true;
+  uniformState._modelViewProjectionRelativeToEyeDirty = true;
+  uniformState._modelViewInfiniteProjectionDirty = true;
+  uniformState._normalDirty = true;
+  uniformState._inverseNormalDirty = true;
+  uniformState._normal3DDirty = true;
+  uniformState._inverseNormal3DDirty = true;
+}
+function setInverseView(uniformState, matrix) {
+  Matrix4_default.clone(matrix, uniformState._inverseView);
+  Matrix4_default.getMatrix3(matrix, uniformState._inverseViewRotation);
+}
+function setProjection(uniformState, matrix) {
+  Matrix4_default.clone(matrix, uniformState._projection);
+  uniformState._inverseProjectionDirty = true;
+  uniformState._viewProjectionDirty = true;
+  uniformState._inverseViewProjectionDirty = true;
+  uniformState._modelViewProjectionDirty = true;
+  uniformState._modelViewProjectionRelativeToEyeDirty = true;
+}
+function setInfiniteProjection(uniformState, matrix) {
+  Matrix4_default.clone(matrix, uniformState._infiniteProjection);
+  uniformState._modelViewInfiniteProjectionDirty = true;
+}
+var surfacePositionScratch = new Cartesian3_default();
+var enuTransformScratch = new Matrix4_default();
+function setCamera(uniformState, camera) {
+  Cartesian3_default.clone(camera.positionWC, uniformState._cameraPosition);
+  Cartesian3_default.clone(camera.directionWC, uniformState._cameraDirection);
+  Cartesian3_default.clone(camera.rightWC, uniformState._cameraRight);
+  Cartesian3_default.clone(camera.upWC, uniformState._cameraUp);
+  const ellipsoid = uniformState._ellipsoid;
+  let surfacePosition;
+  const positionCartographic = camera.positionCartographic;
+  if (!defined_default(positionCartographic)) {
+    uniformState._eyeHeight = -ellipsoid.maximumRadius;
+    if (Cartesian3_default.magnitude(camera.positionWC) > 0) {
+      uniformState._eyeEllipsoidNormalEC = Cartesian3_default.normalize(
+        camera.positionWC,
+        uniformState._eyeEllipsoidNormalEC
+      );
+    }
+    surfacePosition = ellipsoid.scaleToGeodeticSurface(
+      camera.positionWC,
+      surfacePositionScratch
+    );
+  } else {
+    uniformState._eyeHeight = positionCartographic.height;
+    uniformState._eyeEllipsoidNormalEC = ellipsoid.geodeticSurfaceNormalCartographic(
+      positionCartographic,
+      uniformState._eyeEllipsoidNormalEC
+    );
+    surfacePosition = Cartesian3_default.fromRadians(
+      positionCartographic.longitude,
+      positionCartographic.latitude,
+      0,
+      ellipsoid,
+      surfacePositionScratch
+    );
+  }
+  uniformState._encodedCameraPositionMCDirty = true;
+  if (!defined_default(surfacePosition)) {
+    return;
+  }
+  uniformState._eyeEllipsoidNormalEC = Matrix3_default.multiplyByVector(
+    uniformState._viewRotation,
+    uniformState._eyeEllipsoidNormalEC,
+    uniformState._eyeEllipsoidNormalEC
+  );
+  const enuToWorld = Transforms_default.eastNorthUpToFixedFrame(
+    surfacePosition,
+    ellipsoid,
+    enuTransformScratch
+  );
+  uniformState._enuToModel = Matrix4_default.multiplyTransformation(
+    uniformState.inverseModel,
+    enuToWorld,
+    uniformState._enuToModel
+  );
+  uniformState._modelToEnu = Matrix4_default.inverseTransformation(
+    uniformState._enuToModel,
+    uniformState._modelToEnu
+  );
+  if (!Math_default.equalsEpsilon(
+    ellipsoid._radii.x,
+    ellipsoid._radii.y,
+    Math_default.EPSILON15
+  )) {
+    return;
+  }
+  uniformState._eyeEllipsoidCurvature = ellipsoid.getLocalCurvature(
+    surfacePosition,
+    uniformState._eyeEllipsoidCurvature
+  );
+}
+var transformMatrix = new Matrix3_default();
+var sunCartographicScratch = new Cartographic_default();
+function setSunAndMoonDirections(uniformState, frameState) {
+  Transforms_default.computeIcrfToCentralBodyFixedMatrix(
+    frameState.time,
+    transformMatrix
+  );
+  let position = Simon1994PlanetaryPositions_default.computeSunPositionInEarthInertialFrame(
+    frameState.time,
+    uniformState._sunPositionWC
+  );
+  Matrix3_default.multiplyByVector(transformMatrix, position, position);
+  Cartesian3_default.normalize(position, uniformState._sunDirectionWC);
+  position = Matrix3_default.multiplyByVector(
+    uniformState.viewRotation3D,
+    position,
+    uniformState._sunDirectionEC
+  );
+  Cartesian3_default.normalize(position, position);
+  position = Simon1994PlanetaryPositions_default.computeMoonPositionInEarthInertialFrame(
+    frameState.time,
+    uniformState._moonDirectionEC
+  );
+  Matrix3_default.multiplyByVector(transformMatrix, position, position);
+  Matrix3_default.multiplyByVector(uniformState.viewRotation3D, position, position);
+  Cartesian3_default.normalize(position, position);
+  const projection = frameState.mapProjection;
+  const ellipsoid = projection.ellipsoid;
+  const sunCartographic = ellipsoid.cartesianToCartographic(
+    uniformState._sunPositionWC,
+    sunCartographicScratch
+  );
+  projection.project(sunCartographic, uniformState._sunPositionColumbusView);
+}
+UniformState.prototype.updateCamera = function(camera) {
+  setView(this, camera.viewMatrix);
+  setInverseView(this, camera.inverseViewMatrix);
+  setCamera(this, camera);
+  this._entireFrustum.x = camera.frustum.near;
+  this._entireFrustum.y = camera.frustum.far;
+  this.updateFrustum(camera.frustum);
+  this._orthographicIn3D = this._mode !== SceneMode_default.SCENE2D && camera.frustum instanceof OrthographicFrustum_default;
+};
+UniformState.prototype.updateFrustum = function(frustum) {
+  setProjection(this, frustum.projectionMatrix);
+  if (defined_default(frustum.infiniteProjectionMatrix)) {
+    setInfiniteProjection(this, frustum.infiniteProjectionMatrix);
+  }
+  this._currentFrustum.x = frustum.near;
+  this._currentFrustum.y = frustum.far;
+  this._farDepthFromNearPlusOne = frustum.far - frustum.near + 1;
+  this._log2FarDepthFromNearPlusOne = Math_default.log2(
+    this._farDepthFromNearPlusOne
+  );
+  this._oneOverLog2FarDepthFromNearPlusOne = 1 / this._log2FarDepthFromNearPlusOne;
+  const offCenterFrustum = frustum.offCenterFrustum;
+  if (defined_default(offCenterFrustum)) {
+    frustum = offCenterFrustum;
+  }
+  this._frustumPlanes.x = frustum.top;
+  this._frustumPlanes.y = frustum.bottom;
+  this._frustumPlanes.z = frustum.left;
+  this._frustumPlanes.w = frustum.right;
+};
+UniformState.prototype.updatePass = function(pass) {
+  this._pass = pass;
+};
+var EMPTY_ARRAY = [];
+var defaultLight = new SunLight_default();
+UniformState.prototype.update = function(frameState) {
+  this._mode = frameState.mode;
+  this._mapProjection = frameState.mapProjection;
+  this._ellipsoid = frameState.mapProjection.ellipsoid;
+  this._pixelRatio = frameState.pixelRatio;
+  const camera = frameState.camera;
+  this.updateCamera(camera);
+  if (frameState.mode === SceneMode_default.SCENE2D) {
+    this._frustum2DWidth = camera.frustum.right - camera.frustum.left;
+    this._eyeHeight2D.x = this._frustum2DWidth * 0.5;
+    this._eyeHeight2D.y = this._eyeHeight2D.x * this._eyeHeight2D.x;
+  } else {
+    this._frustum2DWidth = 0;
+    this._eyeHeight2D.x = 0;
+    this._eyeHeight2D.y = 0;
+  }
+  setSunAndMoonDirections(this, frameState);
+  const light = defaultValue_default(frameState.light, defaultLight);
+  if (light instanceof SunLight_default) {
+    this._lightDirectionWC = Cartesian3_default.clone(
+      this._sunDirectionWC,
+      this._lightDirectionWC
+    );
+    this._lightDirectionEC = Cartesian3_default.clone(
+      this._sunDirectionEC,
+      this._lightDirectionEC
+    );
+  } else {
+    this._lightDirectionWC = Cartesian3_default.normalize(
+      Cartesian3_default.negate(light.direction, this._lightDirectionWC),
+      this._lightDirectionWC
+    );
+    this._lightDirectionEC = Matrix3_default.multiplyByVector(
+      this.viewRotation3D,
+      this._lightDirectionWC,
+      this._lightDirectionEC
+    );
+  }
+  const lightColor = light.color;
+  let lightColorHdr = Cartesian3_default.fromElements(
+    lightColor.red,
+    lightColor.green,
+    lightColor.blue,
+    this._lightColorHdr
+  );
+  lightColorHdr = Cartesian3_default.multiplyByScalar(
+    lightColorHdr,
+    light.intensity,
+    lightColorHdr
+  );
+  const maximumComponent = Cartesian3_default.maximumComponent(lightColorHdr);
+  if (maximumComponent > 1) {
+    Cartesian3_default.divideByScalar(
+      lightColorHdr,
+      maximumComponent,
+      this._lightColor
+    );
+  } else {
+    Cartesian3_default.clone(lightColorHdr, this._lightColor);
+  }
+  const brdfLutGenerator = frameState.brdfLutGenerator;
+  const brdfLut = defined_default(brdfLutGenerator) ? brdfLutGenerator.colorTexture : void 0;
+  this._brdfLut = brdfLut;
+  this._environmentMap = defaultValue_default(
+    frameState.environmentMap,
+    frameState.context.defaultCubeMap
+  );
+  this._sphericalHarmonicCoefficients = defaultValue_default(
+    frameState.sphericalHarmonicCoefficients,
+    EMPTY_ARRAY
+  );
+  this._specularEnvironmentMaps = frameState.specularEnvironmentMaps;
+  this._specularEnvironmentMapsMaximumLOD = frameState.specularEnvironmentMapsMaximumLOD;
+  this._fogDensity = frameState.fog.density;
+  this._fogMinimumBrightness = frameState.fog.minimumBrightness;
+  const atmosphere = frameState.atmosphere;
+  if (defined_default(atmosphere)) {
+    this._atmosphereHsbShift = Cartesian3_default.fromElements(
+      atmosphere.hueShift,
+      atmosphere.saturationShift,
+      atmosphere.brightnessShift,
+      this._atmosphereHsbShift
+    );
+    this._atmosphereLightIntensity = atmosphere.lightIntensity;
+    this._atmosphereRayleighCoefficient = Cartesian3_default.clone(
+      atmosphere.rayleighCoefficient,
+      this._atmosphereRayleighCoefficient
+    );
+    this._atmosphereRayleighScaleHeight = atmosphere.rayleighScaleHeight;
+    this._atmosphereMieCoefficient = Cartesian3_default.clone(
+      atmosphere.mieCoefficient,
+      this._atmosphereMieCoefficient
+    );
+    this._atmosphereMieScaleHeight = atmosphere.mieScaleHeight;
+    this._atmosphereMieAnisotropy = atmosphere.mieAnisotropy;
+    this._atmosphereDynamicLighting = atmosphere.dynamicLighting;
+  }
+  this._invertClassificationColor = frameState.invertClassificationColor;
+  this._frameState = frameState;
+  this._temeToPseudoFixed = Transforms_default.computeTemeToPseudoFixedMatrix(
+    frameState.time,
+    this._temeToPseudoFixed
+  );
+  this._splitPosition = frameState.splitPosition * frameState.context.drawingBufferWidth;
+  const fov = camera.frustum.fov;
+  const viewport = this._viewport;
+  let pixelSizePerMeter;
+  if (defined_default(fov)) {
+    if (viewport.height > viewport.width) {
+      pixelSizePerMeter = Math.tan(0.5 * fov) * 2 / viewport.height;
+    } else {
+      pixelSizePerMeter = Math.tan(0.5 * fov) * 2 / viewport.width;
+    }
+  } else {
+    pixelSizePerMeter = 1 / Math.max(viewport.width, viewport.height);
+  }
+  this._geometricToleranceOverMeter = pixelSizePerMeter * frameState.maximumScreenSpaceError;
+  Color_default.clone(frameState.backgroundColor, this._backgroundColor);
+  this._minimumDisableDepthTestDistance = frameState.minimumDisableDepthTestDistance;
+  this._minimumDisableDepthTestDistance *= this._minimumDisableDepthTestDistance;
+  if (this._minimumDisableDepthTestDistance === Number.POSITIVE_INFINITY) {
+    this._minimumDisableDepthTestDistance = -1;
+  }
+};
+function cleanViewport(uniformState) {
+  if (uniformState._viewportDirty) {
+    const v3 = uniformState._viewport;
+    Matrix4_default.computeOrthographicOffCenter(
+      v3.x,
+      v3.x + v3.width,
+      v3.y,
+      v3.y + v3.height,
+      0,
+      1,
+      uniformState._viewportOrthographicMatrix
+    );
+    Matrix4_default.computeViewportTransformation(
+      v3,
+      0,
+      1,
+      uniformState._viewportTransformation
+    );
+    uniformState._viewportDirty = false;
+  }
+}
+function cleanInverseProjection(uniformState) {
+  if (uniformState._inverseProjectionDirty) {
+    uniformState._inverseProjectionDirty = false;
+    if (uniformState._mode !== SceneMode_default.SCENE2D && uniformState._mode !== SceneMode_default.MORPHING && !uniformState._orthographicIn3D) {
+      Matrix4_default.inverse(
+        uniformState._projection,
+        uniformState._inverseProjection
+      );
+    } else {
+      Matrix4_default.clone(Matrix4_default.ZERO, uniformState._inverseProjection);
+    }
+  }
+}
+function cleanModelView(uniformState) {
+  if (uniformState._modelViewDirty) {
+    uniformState._modelViewDirty = false;
+    Matrix4_default.multiplyTransformation(
+      uniformState._view,
+      uniformState._model,
+      uniformState._modelView
+    );
+  }
+}
+function cleanModelView3D(uniformState) {
+  if (uniformState._modelView3DDirty) {
+    uniformState._modelView3DDirty = false;
+    Matrix4_default.multiplyTransformation(
+      uniformState.view3D,
+      uniformState._model,
+      uniformState._modelView3D
+    );
+  }
+}
+function cleanInverseModelView(uniformState) {
+  if (uniformState._inverseModelViewDirty) {
+    uniformState._inverseModelViewDirty = false;
+    Matrix4_default.inverse(uniformState.modelView, uniformState._inverseModelView);
+  }
+}
+function cleanInverseModelView3D(uniformState) {
+  if (uniformState._inverseModelView3DDirty) {
+    uniformState._inverseModelView3DDirty = false;
+    Matrix4_default.inverse(uniformState.modelView3D, uniformState._inverseModelView3D);
+  }
+}
+function cleanViewProjection(uniformState) {
+  if (uniformState._viewProjectionDirty) {
+    uniformState._viewProjectionDirty = false;
+    Matrix4_default.multiply(
+      uniformState._projection,
+      uniformState._view,
+      uniformState._viewProjection
+    );
+  }
+}
+function cleanInverseViewProjection(uniformState) {
+  if (uniformState._inverseViewProjectionDirty) {
+    uniformState._inverseViewProjectionDirty = false;
+    Matrix4_default.inverse(
+      uniformState.viewProjection,
+      uniformState._inverseViewProjection
+    );
+  }
+}
+function cleanModelViewProjection(uniformState) {
+  if (uniformState._modelViewProjectionDirty) {
+    uniformState._modelViewProjectionDirty = false;
+    Matrix4_default.multiply(
+      uniformState._projection,
+      uniformState.modelView,
+      uniformState._modelViewProjection
+    );
+  }
+}
+function cleanModelViewRelativeToEye(uniformState) {
+  if (uniformState._modelViewRelativeToEyeDirty) {
+    uniformState._modelViewRelativeToEyeDirty = false;
+    const mv = uniformState.modelView;
+    const mvRte = uniformState._modelViewRelativeToEye;
+    mvRte[0] = mv[0];
+    mvRte[1] = mv[1];
+    mvRte[2] = mv[2];
+    mvRte[3] = mv[3];
+    mvRte[4] = mv[4];
+    mvRte[5] = mv[5];
+    mvRte[6] = mv[6];
+    mvRte[7] = mv[7];
+    mvRte[8] = mv[8];
+    mvRte[9] = mv[9];
+    mvRte[10] = mv[10];
+    mvRte[11] = mv[11];
+    mvRte[12] = 0;
+    mvRte[13] = 0;
+    mvRte[14] = 0;
+    mvRte[15] = mv[15];
+  }
+}
+function cleanInverseModelViewProjection(uniformState) {
+  if (uniformState._inverseModelViewProjectionDirty) {
+    uniformState._inverseModelViewProjectionDirty = false;
+    Matrix4_default.inverse(
+      uniformState.modelViewProjection,
+      uniformState._inverseModelViewProjection
+    );
+  }
+}
+function cleanModelViewProjectionRelativeToEye(uniformState) {
+  if (uniformState._modelViewProjectionRelativeToEyeDirty) {
+    uniformState._modelViewProjectionRelativeToEyeDirty = false;
+    Matrix4_default.multiply(
+      uniformState._projection,
+      uniformState.modelViewRelativeToEye,
+      uniformState._modelViewProjectionRelativeToEye
+    );
+  }
+}
+function cleanModelViewInfiniteProjection(uniformState) {
+  if (uniformState._modelViewInfiniteProjectionDirty) {
+    uniformState._modelViewInfiniteProjectionDirty = false;
+    Matrix4_default.multiply(
+      uniformState._infiniteProjection,
+      uniformState.modelView,
+      uniformState._modelViewInfiniteProjection
+    );
+  }
+}
+function cleanNormal(uniformState) {
+  if (uniformState._normalDirty) {
+    uniformState._normalDirty = false;
+    const m = uniformState._normal;
+    Matrix4_default.getMatrix3(uniformState.inverseModelView, m);
+    Matrix3_default.transpose(m, m);
+  }
+}
+function cleanNormal3D(uniformState) {
+  if (uniformState._normal3DDirty) {
+    uniformState._normal3DDirty = false;
+    const m = uniformState._normal3D;
+    Matrix4_default.getMatrix3(uniformState.inverseModelView3D, m);
+    Matrix3_default.transpose(m, m);
+  }
+}
+function cleanInverseNormal(uniformState) {
+  if (uniformState._inverseNormalDirty) {
+    uniformState._inverseNormalDirty = false;
+    const m = uniformState._inverseNormal;
+    Matrix4_default.getMatrix3(uniformState.modelView, m);
+    Matrix3_default.transpose(m, m);
+  }
+}
+function cleanInverseNormal3D(uniformState) {
+  if (uniformState._inverseNormal3DDirty) {
+    uniformState._inverseNormal3DDirty = false;
+    const m = uniformState._inverseNormal3D;
+    Matrix4_default.getMatrix3(uniformState.modelView3D, m);
+    Matrix3_default.transpose(m, m);
+  }
+}
+var cameraPositionMC = new Cartesian3_default();
+function cleanEncodedCameraPositionMC(uniformState) {
+  if (uniformState._encodedCameraPositionMCDirty) {
+    uniformState._encodedCameraPositionMCDirty = false;
+    Matrix4_default.multiplyByPoint(
+      uniformState.inverseModel,
+      uniformState._cameraPosition,
+      cameraPositionMC
+    );
+    EncodedCartesian3_default.fromCartesian(
+      cameraPositionMC,
+      uniformState._encodedCameraPositionMC
+    );
+  }
+}
+var view2Dto3DPScratch = new Cartesian3_default();
+var view2Dto3DRScratch = new Cartesian3_default();
+var view2Dto3DUScratch = new Cartesian3_default();
+var view2Dto3DDScratch = new Cartesian3_default();
+var view2Dto3DCartographicScratch = new Cartographic_default();
+var view2Dto3DCartesian3Scratch = new Cartesian3_default();
+var view2Dto3DMatrix4Scratch = new Matrix4_default();
+function view2Dto3D(position2D, direction2D, right2D, up2D, frustum2DWidth, mode2, projection, result) {
+  const p = view2Dto3DPScratch;
+  p.x = position2D.y;
+  p.y = position2D.z;
+  p.z = position2D.x;
+  const r = view2Dto3DRScratch;
+  r.x = right2D.y;
+  r.y = right2D.z;
+  r.z = right2D.x;
+  const u3 = view2Dto3DUScratch;
+  u3.x = up2D.y;
+  u3.y = up2D.z;
+  u3.z = up2D.x;
+  const d = view2Dto3DDScratch;
+  d.x = direction2D.y;
+  d.y = direction2D.z;
+  d.z = direction2D.x;
+  if (mode2 === SceneMode_default.SCENE2D) {
+    p.z = frustum2DWidth * 0.5;
+  }
+  const cartographic2 = projection.unproject(p, view2Dto3DCartographicScratch);
+  cartographic2.longitude = Math_default.clamp(
+    cartographic2.longitude,
+    -Math.PI,
+    Math.PI
+  );
+  cartographic2.latitude = Math_default.clamp(
+    cartographic2.latitude,
+    -Math_default.PI_OVER_TWO,
+    Math_default.PI_OVER_TWO
+  );
+  const ellipsoid = projection.ellipsoid;
+  const position3D = ellipsoid.cartographicToCartesian(
+    cartographic2,
+    view2Dto3DCartesian3Scratch
+  );
+  const enuToFixed = Transforms_default.eastNorthUpToFixedFrame(
+    position3D,
+    ellipsoid,
+    view2Dto3DMatrix4Scratch
+  );
+  Matrix4_default.multiplyByPointAsVector(enuToFixed, r, r);
+  Matrix4_default.multiplyByPointAsVector(enuToFixed, u3, u3);
+  Matrix4_default.multiplyByPointAsVector(enuToFixed, d, d);
+  if (!defined_default(result)) {
+    result = new Matrix4_default();
+  }
+  result[0] = r.x;
+  result[1] = u3.x;
+  result[2] = -d.x;
+  result[3] = 0;
+  result[4] = r.y;
+  result[5] = u3.y;
+  result[6] = -d.y;
+  result[7] = 0;
+  result[8] = r.z;
+  result[9] = u3.z;
+  result[10] = -d.z;
+  result[11] = 0;
+  result[12] = -Cartesian3_default.dot(r, position3D);
+  result[13] = -Cartesian3_default.dot(u3, position3D);
+  result[14] = Cartesian3_default.dot(d, position3D);
+  result[15] = 1;
+  return result;
+}
+function updateView3D(that) {
+  if (that._view3DDirty) {
+    if (that._mode === SceneMode_default.SCENE3D) {
+      Matrix4_default.clone(that._view, that._view3D);
+    } else {
+      view2Dto3D(
+        that._cameraPosition,
+        that._cameraDirection,
+        that._cameraRight,
+        that._cameraUp,
+        that._frustum2DWidth,
+        that._mode,
+        that._mapProjection,
+        that._view3D
+      );
+    }
+    Matrix4_default.getMatrix3(that._view3D, that._viewRotation3D);
+    that._view3DDirty = false;
+  }
+}
+function updateInverseView3D(that) {
+  if (that._inverseView3DDirty) {
+    Matrix4_default.inverseTransformation(that.view3D, that._inverseView3D);
+    Matrix4_default.getMatrix3(that._inverseView3D, that._inverseViewRotation3D);
+    that._inverseView3DDirty = false;
+  }
+}
+var UniformState_default = UniformState;
+
+// packages/engine/Source/Renderer/Context.js
+function Context(canvas, options) {
+  Check_default.defined("canvas", canvas);
+  const {
+    getWebGLStub,
+    requestWebgl1,
+    webgl: webglOptions = {},
+    allowTextureFilterAnisotropic = true
+  } = defaultValue_default(options, {});
+  webglOptions.alpha = defaultValue_default(webglOptions.alpha, false);
+  webglOptions.stencil = defaultValue_default(webglOptions.stencil, true);
+  webglOptions.powerPreference = defaultValue_default(
+    webglOptions.powerPreference,
+    "high-performance"
+  );
+  const glContext = defined_default(getWebGLStub) ? getWebGLStub(canvas, webglOptions) : getWebGLContext(canvas, webglOptions, requestWebgl1);
+  const webgl2Supported = typeof WebGL2RenderingContext !== "undefined";
+  const webgl2 = webgl2Supported && glContext instanceof WebGL2RenderingContext;
+  this._canvas = canvas;
+  this._originalGLContext = glContext;
+  this._gl = glContext;
+  this._webgl2 = webgl2;
+  this._id = createGuid_default();
+  this.validateFramebuffer = false;
+  this.validateShaderProgram = false;
+  this.logShaderCompilation = false;
+  this._throwOnWebGLError = false;
+  this._shaderCache = new ShaderCache_default(this);
+  this._textureCache = new TextureCache_default();
+  const gl = glContext;
+  this._stencilBits = gl.getParameter(gl.STENCIL_BITS);
+  ContextLimits_default._maximumCombinedTextureImageUnits = gl.getParameter(
+    gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS
+  );
+  ContextLimits_default._maximumCubeMapSize = gl.getParameter(
+    gl.MAX_CUBE_MAP_TEXTURE_SIZE
+  );
+  ContextLimits_default._maximumFragmentUniformVectors = gl.getParameter(
+    gl.MAX_FRAGMENT_UNIFORM_VECTORS
+  );
+  ContextLimits_default._maximumTextureImageUnits = gl.getParameter(
+    gl.MAX_TEXTURE_IMAGE_UNITS
+  );
+  ContextLimits_default._maximumRenderbufferSize = gl.getParameter(
+    gl.MAX_RENDERBUFFER_SIZE
+  );
+  ContextLimits_default._maximumTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  ContextLimits_default._maximumVaryingVectors = gl.getParameter(
+    gl.MAX_VARYING_VECTORS
+  );
+  ContextLimits_default._maximumVertexAttributes = gl.getParameter(
+    gl.MAX_VERTEX_ATTRIBS
+  );
+  ContextLimits_default._maximumVertexTextureImageUnits = gl.getParameter(
+    gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS
+  );
+  ContextLimits_default._maximumVertexUniformVectors = gl.getParameter(
+    gl.MAX_VERTEX_UNIFORM_VECTORS
+  );
+  ContextLimits_default._maximumSamples = this._webgl2 ? gl.getParameter(gl.MAX_SAMPLES) : 0;
+  const aliasedLineWidthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+  ContextLimits_default._minimumAliasedLineWidth = aliasedLineWidthRange[0];
+  ContextLimits_default._maximumAliasedLineWidth = aliasedLineWidthRange[1];
+  const aliasedPointSizeRange = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
+  ContextLimits_default._minimumAliasedPointSize = aliasedPointSizeRange[0];
+  ContextLimits_default._maximumAliasedPointSize = aliasedPointSizeRange[1];
+  const maximumViewportDimensions = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  ContextLimits_default._maximumViewportWidth = maximumViewportDimensions[0];
+  ContextLimits_default._maximumViewportHeight = maximumViewportDimensions[1];
+  const highpFloat = gl.getShaderPrecisionFormat(
+    gl.FRAGMENT_SHADER,
+    gl.HIGH_FLOAT
+  );
+  ContextLimits_default._highpFloatSupported = highpFloat.precision !== 0;
+  const highpInt = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_INT);
+  ContextLimits_default._highpIntSupported = highpInt.rangeMax !== 0;
+  this._antialias = gl.getContextAttributes().antialias;
+  this._standardDerivatives = !!getExtension(gl, ["OES_standard_derivatives"]);
+  this._blendMinmax = !!getExtension(gl, ["EXT_blend_minmax"]);
+  this._elementIndexUint = !!getExtension(gl, ["OES_element_index_uint"]);
+  this._depthTexture = !!getExtension(gl, [
+    "WEBGL_depth_texture",
+    "WEBKIT_WEBGL_depth_texture"
+  ]);
+  this._fragDepth = !!getExtension(gl, ["EXT_frag_depth"]);
+  this._debugShaders = getExtension(gl, ["WEBGL_debug_shaders"]);
+  this._textureFloat = !!getExtension(gl, ["OES_texture_float"]);
+  this._textureHalfFloat = !!getExtension(gl, ["OES_texture_half_float"]);
+  this._textureFloatLinear = !!getExtension(gl, ["OES_texture_float_linear"]);
+  this._textureHalfFloatLinear = !!getExtension(gl, [
+    "OES_texture_half_float_linear"
+  ]);
+  this._supportsTextureLod = !!getExtension(gl, ["EXT_shader_texture_lod"]);
+  this._colorBufferFloat = !!getExtension(gl, [
+    "EXT_color_buffer_float",
+    "WEBGL_color_buffer_float"
+  ]);
+  this._floatBlend = !!getExtension(gl, ["EXT_float_blend"]);
+  this._colorBufferHalfFloat = !!getExtension(gl, [
+    "EXT_color_buffer_half_float"
+  ]);
+  this._s3tc = !!getExtension(gl, [
+    "WEBGL_compressed_texture_s3tc",
+    "MOZ_WEBGL_compressed_texture_s3tc",
+    "WEBKIT_WEBGL_compressed_texture_s3tc"
+  ]);
+  this._pvrtc = !!getExtension(gl, [
+    "WEBGL_compressed_texture_pvrtc",
+    "WEBKIT_WEBGL_compressed_texture_pvrtc"
+  ]);
+  this._astc = !!getExtension(gl, ["WEBGL_compressed_texture_astc"]);
+  this._etc = !!getExtension(gl, ["WEBG_compressed_texture_etc"]);
+  this._etc1 = !!getExtension(gl, ["WEBGL_compressed_texture_etc1"]);
+  this._bc7 = !!getExtension(gl, ["EXT_texture_compression_bptc"]);
+  loadKTX2_default.setKTX2SupportedFormats(
+    this._s3tc,
+    this._pvrtc,
+    this._astc,
+    this._etc,
+    this._etc1,
+    this._bc7
+  );
+  const textureFilterAnisotropic = allowTextureFilterAnisotropic ? getExtension(gl, [
+    "EXT_texture_filter_anisotropic",
+    "WEBKIT_EXT_texture_filter_anisotropic"
+  ]) : void 0;
+  this._textureFilterAnisotropic = textureFilterAnisotropic;
+  ContextLimits_default._maximumTextureFilterAnisotropy = defined_default(
+    textureFilterAnisotropic
+  ) ? gl.getParameter(textureFilterAnisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : 1;
+  let glCreateVertexArray;
+  let glBindVertexArray;
+  let glDeleteVertexArray;
+  let glDrawElementsInstanced;
+  let glDrawArraysInstanced;
+  let glVertexAttribDivisor;
+  let glDrawBuffers;
+  let vertexArrayObject;
+  let instancedArrays;
+  let drawBuffers;
+  if (webgl2) {
+    const that = this;
+    glCreateVertexArray = function() {
+      return that._gl.createVertexArray();
+    };
+    glBindVertexArray = function(vao) {
+      that._gl.bindVertexArray(vao);
+    };
+    glDeleteVertexArray = function(vao) {
+      that._gl.deleteVertexArray(vao);
+    };
+    glDrawElementsInstanced = function(mode2, count, type, offset, instanceCount) {
+      gl.drawElementsInstanced(mode2, count, type, offset, instanceCount);
+    };
+    glDrawArraysInstanced = function(mode2, first, count, instanceCount) {
+      gl.drawArraysInstanced(mode2, first, count, instanceCount);
+    };
+    glVertexAttribDivisor = function(index, divisor) {
+      gl.vertexAttribDivisor(index, divisor);
+    };
+    glDrawBuffers = function(buffers) {
+      gl.drawBuffers(buffers);
+    };
+  } else {
+    vertexArrayObject = getExtension(gl, ["OES_vertex_array_object"]);
+    if (defined_default(vertexArrayObject)) {
+      glCreateVertexArray = function() {
+        return vertexArrayObject.createVertexArrayOES();
+      };
+      glBindVertexArray = function(vertexArray) {
+        vertexArrayObject.bindVertexArrayOES(vertexArray);
+      };
+      glDeleteVertexArray = function(vertexArray) {
+        vertexArrayObject.deleteVertexArrayOES(vertexArray);
+      };
+    }
+    instancedArrays = getExtension(gl, ["ANGLE_instanced_arrays"]);
+    if (defined_default(instancedArrays)) {
+      glDrawElementsInstanced = function(mode2, count, type, offset, instanceCount) {
+        instancedArrays.drawElementsInstancedANGLE(
+          mode2,
+          count,
+          type,
+          offset,
+          instanceCount
+        );
+      };
+      glDrawArraysInstanced = function(mode2, first, count, instanceCount) {
+        instancedArrays.drawArraysInstancedANGLE(
+          mode2,
+          first,
+          count,
+          instanceCount
+        );
+      };
+      glVertexAttribDivisor = function(index, divisor) {
+        instancedArrays.vertexAttribDivisorANGLE(index, divisor);
+      };
+    }
+    drawBuffers = getExtension(gl, ["WEBGL_draw_buffers"]);
+    if (defined_default(drawBuffers)) {
+      glDrawBuffers = function(buffers) {
+        drawBuffers.drawBuffersWEBGL(buffers);
+      };
+    }
+  }
+  this.glCreateVertexArray = glCreateVertexArray;
+  this.glBindVertexArray = glBindVertexArray;
+  this.glDeleteVertexArray = glDeleteVertexArray;
+  this.glDrawElementsInstanced = glDrawElementsInstanced;
+  this.glDrawArraysInstanced = glDrawArraysInstanced;
+  this.glVertexAttribDivisor = glVertexAttribDivisor;
+  this.glDrawBuffers = glDrawBuffers;
+  this._vertexArrayObject = !!vertexArrayObject;
+  this._instancedArrays = !!instancedArrays;
+  this._drawBuffers = !!drawBuffers;
+  ContextLimits_default._maximumDrawBuffers = this.drawBuffers ? gl.getParameter(WebGLConstants_default.MAX_DRAW_BUFFERS) : 1;
+  ContextLimits_default._maximumColorAttachments = this.drawBuffers ? gl.getParameter(WebGLConstants_default.MAX_COLOR_ATTACHMENTS) : 1;
+  this._clearColor = new Color_default(0, 0, 0, 0);
+  this._clearDepth = 1;
+  this._clearStencil = 0;
+  const us = new UniformState_default();
+  const ps = new PassState_default(this);
+  const rs = RenderState_default.fromCache();
+  this._defaultPassState = ps;
+  this._defaultRenderState = rs;
+  this._defaultTexture = void 0;
+  this._defaultEmissiveTexture = void 0;
+  this._defaultNormalTexture = void 0;
+  this._defaultCubeMap = void 0;
+  this._us = us;
+  this._currentRenderState = rs;
+  this._currentPassState = ps;
+  this._currentFramebuffer = void 0;
+  this._maxFrameTextureUnitIndex = 0;
+  this._vertexAttribDivisors = [];
+  this._previousDrawInstanced = false;
+  for (let i = 0; i < ContextLimits_default._maximumVertexAttributes; i++) {
+    this._vertexAttribDivisors.push(0);
+  }
+  this._pickObjects = {};
+  this._nextPickColor = new Uint32Array(1);
+  this.options = {
+    getWebGLStub,
+    requestWebgl1,
+    webgl: webglOptions,
+    allowTextureFilterAnisotropic
+  };
+  this.cache = {};
+  RenderState_default.apply(gl, rs, ps);
+}
+function getWebGLContext(canvas, webglOptions, requestWebgl1) {
+  if (typeof WebGLRenderingContext === "undefined") {
+    throw new RuntimeError_default(
+      "The browser does not support WebGL.  Visit http://get.webgl.org."
+    );
+  }
+  const webgl2Supported = typeof WebGL2RenderingContext !== "undefined";
+  if (!requestWebgl1 && !webgl2Supported) {
+    requestWebgl1 = true;
+  }
+  const contextType = requestWebgl1 ? "webgl" : "webgl2";
+  const glContext = canvas.getContext(contextType, webglOptions);
+  if (!defined_default(glContext)) {
+    throw new RuntimeError_default(
+      "The browser supports WebGL, but initialization failed."
+    );
+  }
+  return glContext;
+}
+function errorToString(gl, error) {
+  let message = "WebGL Error:  ";
+  switch (error) {
+    case gl.INVALID_ENUM:
+      message += "INVALID_ENUM";
+      break;
+    case gl.INVALID_VALUE:
+      message += "INVALID_VALUE";
+      break;
+    case gl.INVALID_OPERATION:
+      message += "INVALID_OPERATION";
+      break;
+    case gl.OUT_OF_MEMORY:
+      message += "OUT_OF_MEMORY";
+      break;
+    case gl.CONTEXT_LOST_WEBGL:
+      message += "CONTEXT_LOST_WEBGL lost";
+      break;
+    default:
+      message += `Unknown (${error})`;
+  }
+  return message;
+}
+function createErrorMessage(gl, glFunc, glFuncArguments, error) {
+  let message = `${errorToString(gl, error)}: ${glFunc.name}(`;
+  for (let i = 0; i < glFuncArguments.length; ++i) {
+    if (i !== 0) {
+      message += ", ";
+    }
+    message += glFuncArguments[i];
+  }
+  message += ");";
+  return message;
+}
+function throwOnError(gl, glFunc, glFuncArguments) {
+  const error = gl.getError();
+  if (error !== gl.NO_ERROR) {
+    throw new RuntimeError_default(
+      createErrorMessage(gl, glFunc, glFuncArguments, error)
+    );
+  }
+}
+function makeGetterSetter(gl, propertyName, logFunction) {
+  return {
+    get: function() {
+      const value = gl[propertyName];
+      logFunction(gl, `get: ${propertyName}`, value);
+      return gl[propertyName];
+    },
+    set: function(value) {
+      gl[propertyName] = value;
+      logFunction(gl, `set: ${propertyName}`, value);
+    }
+  };
+}
+function wrapGL(gl, logFunction) {
+  if (!defined_default(logFunction)) {
+    return gl;
+  }
+  function wrapFunction2(property) {
+    return function() {
+      const result = property.apply(gl, arguments);
+      logFunction(gl, property, arguments);
+      return result;
+    };
+  }
+  const glWrapper = {};
+  for (const propertyName in gl) {
+    const property = gl[propertyName];
+    if (property instanceof Function) {
+      glWrapper[propertyName] = wrapFunction2(property);
+    } else {
+      Object.defineProperty(
+        glWrapper,
+        propertyName,
+        makeGetterSetter(gl, propertyName, logFunction)
+      );
+    }
+  }
+  return glWrapper;
+}
+function getExtension(gl, names) {
+  const length2 = names.length;
+  for (let i = 0; i < length2; ++i) {
+    const extension = gl.getExtension(names[i]);
+    if (extension) {
+      return extension;
+    }
+  }
+  return void 0;
+}
+var defaultFramebufferMarker = {};
+Object.defineProperties(Context.prototype, {
+  id: {
+    get: function() {
+      return this._id;
+    }
+  },
+  webgl2: {
+    get: function() {
+      return this._webgl2;
+    }
+  },
+  canvas: {
+    get: function() {
+      return this._canvas;
+    }
+  },
+  shaderCache: {
+    get: function() {
+      return this._shaderCache;
+    }
+  },
+  textureCache: {
+    get: function() {
+      return this._textureCache;
+    }
+  },
+  uniformState: {
+    get: function() {
+      return this._us;
+    }
+  },
+  /**
+   * The number of stencil bits per pixel in the default bound framebuffer.  The minimum is eight bits.
+   * @memberof Context.prototype
+   * @type {number}
+   * @see {@link https://www.khronos.org/opengles/sdk/docs/man/xhtml/glGet.xml|glGet} with <code>STENCIL_BITS</code>.
+   */
+  stencilBits: {
+    get: function() {
+      return this._stencilBits;
+    }
+  },
+  /**
+   * <code>true</code> if the WebGL context supports stencil buffers.
+   * Stencil buffers are not supported by all systems.
+   * @memberof Context.prototype
+   * @type {boolean}
+   */
+  stencilBuffer: {
+    get: function() {
+      return this._stencilBits >= 8;
+    }
+  },
+  /**
+   * <code>true</code> if the WebGL context supports antialiasing.  By default
+   * antialiasing is requested, but it is not supported by all systems.
+   * @memberof Context.prototype
+   * @type {boolean}
+   */
+  antialias: {
+    get: function() {
+      return this._antialias;
+    }
+  },
+  /**
+   * <code>true</code> if the WebGL context supports multisample antialiasing. Requires
+   * WebGL2.
+   * @memberof Context.prototype
+   * @type {boolean}
+   */
+  msaa: {
+    get: function() {
+      return this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if the OES_standard_derivatives extension is supported.  This
+   * extension provides access to <code>dFdx</code>, <code>dFdy</code>, and <code>fwidth</code>
+   * functions from GLSL.  A shader using these functions still needs to explicitly enable the
+   * extension with <code>#extension GL_OES_standard_derivatives : enable</code>.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link http://www.khronos.org/registry/gles/extensions/OES/OES_standard_derivatives.txt|OES_standard_derivatives}
+   */
+  standardDerivatives: {
+    get: function() {
+      return this._standardDerivatives || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if the EXT_float_blend extension is supported. This
+   * extension enables blending with 32-bit float values.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_float_blend/}
+   */
+  floatBlend: {
+    get: function() {
+      return this._floatBlend;
+    }
+  },
+  /**
+   * <code>true</code> if the EXT_blend_minmax extension is supported.  This
+   * extension extends blending capabilities by adding two new blend equations:
+   * the minimum or maximum color components of the source and destination colors.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_blend_minmax/}
+   */
+  blendMinmax: {
+    get: function() {
+      return this._blendMinmax || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if the OES_element_index_uint extension is supported.  This
+   * extension allows the use of unsigned int indices, which can improve performance by
+   * eliminating batch breaking caused by unsigned short indices.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link http://www.khronos.org/registry/webgl/extensions/OES_element_index_uint/|OES_element_index_uint}
+   */
+  elementIndexUint: {
+    get: function() {
+      return this._elementIndexUint || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if WEBGL_depth_texture is supported.  This extension provides
+   * access to depth textures that, for example, can be attached to framebuffers for shadow mapping.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link http://www.khronos.org/registry/webgl/extensions/WEBGL_depth_texture/|WEBGL_depth_texture}
+   */
+  depthTexture: {
+    get: function() {
+      return this._depthTexture || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if OES_texture_float is supported. This extension provides
+   * access to floating point textures that, for example, can be attached to framebuffers for high dynamic range.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_float/}
+   */
+  floatingPointTexture: {
+    get: function() {
+      return this._webgl2 || this._textureFloat;
+    }
+  },
+  /**
+   * <code>true</code> if OES_texture_half_float is supported. This extension provides
+   * access to floating point textures that, for example, can be attached to framebuffers for high dynamic range.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_half_float/}
+   */
+  halfFloatingPointTexture: {
+    get: function() {
+      return this._webgl2 || this._textureHalfFloat;
+    }
+  },
+  /**
+   * <code>true</code> if OES_texture_float_linear is supported. This extension provides
+   * access to linear sampling methods for minification and magnification filters of floating-point textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_float_linear/}
+   */
+  textureFloatLinear: {
+    get: function() {
+      return this._textureFloatLinear;
+    }
+  },
+  /**
+   * <code>true</code> if OES_texture_half_float_linear is supported. This extension provides
+   * access to linear sampling methods for minification and magnification filters of half floating-point textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/OES_texture_half_float_linear/}
+   */
+  textureHalfFloatLinear: {
+    get: function() {
+      return this._webgl2 && this._textureFloatLinear || !this._webgl2 && this._textureHalfFloatLinear;
+    }
+  },
+  /**
+   * <code>true</code> if EXT_shader_texture_lod is supported. This extension provides
+   * access to explicit LOD selection in texture sampling functions.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://registry.khronos.org/webgl/extensions/EXT_shader_texture_lod/}
+   */
+  supportsTextureLod: {
+    get: function() {
+      return this._webgl2 || this._supportsTextureLod;
+    }
+  },
+  /**
+   * <code>true</code> if EXT_texture_filter_anisotropic is supported. This extension provides
+   * access to anisotropic filtering for textured surfaces at an oblique angle from the viewer.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_texture_filter_anisotropic/}
+   */
+  textureFilterAnisotropic: {
+    get: function() {
+      return !!this._textureFilterAnisotropic;
+    }
+  },
+  /**
+   * <code>true</code> if WEBGL_compressed_texture_s3tc is supported.  This extension provides
+   * access to DXT compressed textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_s3tc/}
+   */
+  s3tc: {
+    get: function() {
+      return this._s3tc;
+    }
+  },
+  /**
+   * <code>true</code> if WEBGL_compressed_texture_pvrtc is supported.  This extension provides
+   * access to PVR compressed textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_pvrtc/}
+   */
+  pvrtc: {
+    get: function() {
+      return this._pvrtc;
+    }
+  },
+  /**
+   * <code>true</code> if WEBGL_compressed_texture_astc is supported.  This extension provides
+   * access to ASTC compressed textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_astc/}
+   */
+  astc: {
+    get: function() {
+      return this._astc;
+    }
+  },
+  /**
+   * <code>true</code> if WEBGL_compressed_texture_etc is supported.  This extension provides
+   * access to ETC compressed textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_etc/}
+   */
+  etc: {
+    get: function() {
+      return this._etc;
+    }
+  },
+  /**
+   * <code>true</code> if WEBGL_compressed_texture_etc1 is supported.  This extension provides
+   * access to ETC1 compressed textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_etc1/}
+   */
+  etc1: {
+    get: function() {
+      return this._etc1;
+    }
+  },
+  /**
+   * <code>true</code> if EXT_texture_compression_bptc is supported.  This extension provides
+   * access to BC7 compressed textures.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_texture_compression_bptc/}
+   */
+  bc7: {
+    get: function() {
+      return this._bc7;
+    }
+  },
+  /**
+   * <code>true</code> if S3TC, PVRTC, ASTC, ETC, ETC1, or BC7 compression is supported.
+   * @memberof Context.prototype
+   * @type {boolean}
+   */
+  supportsBasis: {
+    get: function() {
+      return this._s3tc || this._pvrtc || this._astc || this._etc || this._etc1 || this._bc7;
+    }
+  },
+  /**
+   * <code>true</code> if the OES_vertex_array_object extension is supported.  This
+   * extension can improve performance by reducing the overhead of switching vertex arrays.
+   * When enabled, this extension is automatically used by {@link VertexArray}.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link http://www.khronos.org/registry/webgl/extensions/OES_vertex_array_object/|OES_vertex_array_object}
+   */
+  vertexArrayObject: {
+    get: function() {
+      return this._vertexArrayObject || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if the EXT_frag_depth extension is supported.  This
+   * extension provides access to the <code>gl_FragDepthEXT</code> built-in output variable
+   * from GLSL fragment shaders.  A shader using these functions still needs to explicitly enable the
+   * extension with <code>#extension GL_EXT_frag_depth : enable</code>.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link http://www.khronos.org/registry/webgl/extensions/EXT_frag_depth/|EXT_frag_depth}
+   */
+  fragmentDepth: {
+    get: function() {
+      return this._fragDepth || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if the ANGLE_instanced_arrays extension is supported.  This
+   * extension provides access to instanced rendering.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/ANGLE_instanced_arrays}
+   */
+  instancedArrays: {
+    get: function() {
+      return this._instancedArrays || this._webgl2;
+    }
+  },
+  /**
+   * <code>true</code> if the EXT_color_buffer_float extension is supported.  This
+   * extension makes the gl.RGBA32F format color renderable.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/WEBGL_color_buffer_float/}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_float/}
+   */
+  colorBufferFloat: {
+    get: function() {
+      return this._colorBufferFloat;
+    }
+  },
+  /**
+   * <code>true</code> if the EXT_color_buffer_half_float extension is supported.  This
+   * extension makes the format gl.RGBA16F format color renderable.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_half_float/}
+   * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_color_buffer_float/}
+   */
+  colorBufferHalfFloat: {
+    get: function() {
+      return this._webgl2 && this._colorBufferFloat || !this._webgl2 && this._colorBufferHalfFloat;
+    }
+  },
+  /**
+   * <code>true</code> if the WEBGL_draw_buffers extension is supported. This
+   * extensions provides support for multiple render targets. The framebuffer object can have mutiple
+   * color attachments and the GLSL fragment shader can write to the built-in output array <code>gl_FragData</code>.
+   * A shader using this feature needs to explicitly enable the extension with
+   * <code>#extension GL_EXT_draw_buffers : enable</code>.
+   * @memberof Context.prototype
+   * @type {boolean}
+   * @see {@link http://www.khronos.org/registry/webgl/extensions/WEBGL_draw_buffers/|WEBGL_draw_buffers}
+   */
+  drawBuffers: {
+    get: function() {
+      return this._drawBuffers || this._webgl2;
+    }
+  },
+  debugShaders: {
+    get: function() {
+      return this._debugShaders;
+    }
+  },
+  throwOnWebGLError: {
+    get: function() {
+      return this._throwOnWebGLError;
+    },
+    set: function(value) {
+      this._throwOnWebGLError = value;
+      this._gl = wrapGL(
+        this._originalGLContext,
+        value ? throwOnError : void 0
+      );
+    }
+  },
+  /**
+   * A 1x1 RGBA texture initialized to [255, 255, 255, 255].  This can
+   * be used as a placeholder texture while other textures are downloaded.
+   * @memberof Context.prototype
+   * @type {Texture}
+   */
+  defaultTexture: {
+    get: function() {
+      if (this._defaultTexture === void 0) {
+        this._defaultTexture = new Texture_default({
+          context: this,
+          source: {
+            width: 1,
+            height: 1,
+            arrayBufferView: new Uint8Array([255, 255, 255, 255])
+          },
+          flipY: false
+        });
+      }
+      return this._defaultTexture;
+    }
+  },
+  /**
+   * A 1x1 RGB texture initialized to [0, 0, 0] representing a material that is
+   * not emissive. This can be used as a placeholder texture for emissive
+   * textures while other textures are downloaded.
+   * @memberof Context.prototype
+   * @type {Texture}
+   */
+  defaultEmissiveTexture: {
+    get: function() {
+      if (this._defaultEmissiveTexture === void 0) {
+        this._defaultEmissiveTexture = new Texture_default({
+          context: this,
+          pixelFormat: PixelFormat_default.RGB,
+          source: {
+            width: 1,
+            height: 1,
+            arrayBufferView: new Uint8Array([0, 0, 0])
+          },
+          flipY: false
+        });
+      }
+      return this._defaultEmissiveTexture;
+    }
+  },
+  /**
+   * A 1x1 RGBA texture initialized to [128, 128, 255] to encode a tangent
+   * space normal pointing in the +z direction, i.e. (0, 0, 1). This can
+   * be used as a placeholder normal texture while other textures are
+   * downloaded.
+   * @memberof Context.prototype
+   * @type {Texture}
+   */
+  defaultNormalTexture: {
+    get: function() {
+      if (this._defaultNormalTexture === void 0) {
+        this._defaultNormalTexture = new Texture_default({
+          context: this,
+          pixelFormat: PixelFormat_default.RGB,
+          source: {
+            width: 1,
+            height: 1,
+            arrayBufferView: new Uint8Array([128, 128, 255])
+          },
+          flipY: false
+        });
+      }
+      return this._defaultNormalTexture;
+    }
+  },
+  /**
+   * A cube map, where each face is a 1x1 RGBA texture initialized to
+   * [255, 255, 255, 255].  This can be used as a placeholder cube map while
+   * other cube maps are downloaded.
+   * @memberof Context.prototype
+   * @type {CubeMap}
+   */
+  defaultCubeMap: {
+    get: function() {
+      if (this._defaultCubeMap === void 0) {
+        const face = {
+          width: 1,
+          height: 1,
+          arrayBufferView: new Uint8Array([255, 255, 255, 255])
+        };
+        this._defaultCubeMap = new CubeMap_default({
+          context: this,
+          source: {
+            positiveX: face,
+            negativeX: face,
+            positiveY: face,
+            negativeY: face,
+            positiveZ: face,
+            negativeZ: face
+          },
+          flipY: false
+        });
+      }
+      return this._defaultCubeMap;
+    }
+  },
+  /**
+   * The drawingBufferHeight of the underlying GL context.
+   * @memberof Context.prototype
+   * @type {number}
+   * @see {@link https://www.khronos.org/registry/webgl/specs/1.0/#DOM-WebGLRenderingContext-drawingBufferHeight|drawingBufferHeight}
+   */
+  drawingBufferHeight: {
+    get: function() {
+      return this._gl.drawingBufferHeight;
+    }
+  },
+  /**
+   * The drawingBufferWidth of the underlying GL context.
+   * @memberof Context.prototype
+   * @type {number}
+   * @see {@link https://www.khronos.org/registry/webgl/specs/1.0/#DOM-WebGLRenderingContext-drawingBufferWidth|drawingBufferWidth}
+   */
+  drawingBufferWidth: {
+    get: function() {
+      return this._gl.drawingBufferWidth;
+    }
+  },
+  /**
+   * Gets an object representing the currently bound framebuffer.  While this instance is not an actual
+   * {@link Framebuffer}, it is used to represent the default framebuffer in calls to
+   * {@link Texture.fromFramebuffer}.
+   * @memberof Context.prototype
+   * @type {object}
+   */
+  defaultFramebuffer: {
+    get: function() {
+      return defaultFramebufferMarker;
+    }
+  }
+});
+function validateFramebuffer(context) {
+  if (context.validateFramebuffer) {
+    const gl = context._gl;
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      let message;
+      switch (status) {
+        case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+          message = "Framebuffer is not complete.  Incomplete attachment: at least one attachment point with a renderbuffer or texture attached has its attached object no longer in existence or has an attached image with a width or height of zero, or the color attachment point has a non-color-renderable image attached, or the depth attachment point has a non-depth-renderable image attached, or the stencil attachment point has a non-stencil-renderable image attached.  Color-renderable formats include GL_RGBA4, GL_RGB5_A1, and GL_RGB565. GL_DEPTH_COMPONENT16 is the only depth-renderable format. GL_STENCIL_INDEX8 is the only stencil-renderable format.";
+          break;
+        case gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
+          message = "Framebuffer is not complete.  Incomplete dimensions: not all attached images have the same width and height.";
+          break;
+        case gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+          message = "Framebuffer is not complete.  Missing attachment: no images are attached to the framebuffer.";
+          break;
+        case gl.FRAMEBUFFER_UNSUPPORTED:
+          message = "Framebuffer is not complete.  Unsupported: the combination of internal formats of the attached images violates an implementation-dependent set of restrictions.";
+          break;
+      }
+      throw new DeveloperError_default(message);
+    }
+  }
+}
+function applyRenderState(context, renderState, passState, clear2) {
+  const previousRenderState = context._currentRenderState;
+  const previousPassState = context._currentPassState;
+  context._currentRenderState = renderState;
+  context._currentPassState = passState;
+  RenderState_default.partialApply(
+    context._gl,
+    previousRenderState,
+    renderState,
+    previousPassState,
+    passState,
+    clear2
+  );
+}
+var scratchBackBufferArray;
+if (typeof WebGLRenderingContext !== "undefined") {
+  scratchBackBufferArray = [WebGLConstants_default.BACK];
+}
+function bindFramebuffer(context, framebuffer) {
+  if (framebuffer !== context._currentFramebuffer) {
+    context._currentFramebuffer = framebuffer;
+    let buffers = scratchBackBufferArray;
+    if (defined_default(framebuffer)) {
+      framebuffer._bind();
+      validateFramebuffer(context);
+      buffers = framebuffer._getActiveColorAttachments();
+    } else {
+      const gl = context._gl;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    if (context.drawBuffers) {
+      context.glDrawBuffers(buffers);
+    }
+  }
+}
+var defaultClearCommand = new ClearCommand_default();
+Context.prototype.clear = function(clearCommand, passState) {
+  clearCommand = defaultValue_default(clearCommand, defaultClearCommand);
+  passState = defaultValue_default(passState, this._defaultPassState);
+  const gl = this._gl;
+  let bitmask = 0;
+  const c = clearCommand.color;
+  const d = clearCommand.depth;
+  const s = clearCommand.stencil;
+  if (defined_default(c)) {
+    if (!Color_default.equals(this._clearColor, c)) {
+      Color_default.clone(c, this._clearColor);
+      gl.clearColor(c.red, c.green, c.blue, c.alpha);
+    }
+    bitmask |= gl.COLOR_BUFFER_BIT;
+  }
+  if (defined_default(d)) {
+    if (d !== this._clearDepth) {
+      this._clearDepth = d;
+      gl.clearDepth(d);
+    }
+    bitmask |= gl.DEPTH_BUFFER_BIT;
+  }
+  if (defined_default(s)) {
+    if (s !== this._clearStencil) {
+      this._clearStencil = s;
+      gl.clearStencil(s);
+    }
+    bitmask |= gl.STENCIL_BUFFER_BIT;
+  }
+  const rs = defaultValue_default(clearCommand.renderState, this._defaultRenderState);
+  applyRenderState(this, rs, passState, true);
+  const framebuffer = defaultValue_default(
+    clearCommand.framebuffer,
+    passState.framebuffer
+  );
+  bindFramebuffer(this, framebuffer);
+  gl.clear(bitmask);
+};
+function beginDraw(context, framebuffer, passState, shaderProgram, renderState) {
+  if (defined_default(framebuffer) && renderState.depthTest) {
+    if (renderState.depthTest.enabled && !framebuffer.hasDepthAttachment) {
+      throw new DeveloperError_default(
+        "The depth test can not be enabled (drawCommand.renderState.depthTest.enabled) because the framebuffer (drawCommand.framebuffer) does not have a depth or depth-stencil renderbuffer."
+      );
+    }
+  }
+  bindFramebuffer(context, framebuffer);
+  applyRenderState(context, renderState, passState, false);
+  shaderProgram._bind();
+  context._maxFrameTextureUnitIndex = Math.max(
+    context._maxFrameTextureUnitIndex,
+    shaderProgram.maximumTextureUnitIndex
+  );
+}
+function continueDraw(context, drawCommand, shaderProgram, uniformMap2) {
+  const primitiveType = drawCommand._primitiveType;
+  const va = drawCommand._vertexArray;
+  let offset = drawCommand._offset;
+  let count = drawCommand._count;
+  const instanceCount = drawCommand.instanceCount;
+  if (!PrimitiveType_default.validate(primitiveType)) {
+    throw new DeveloperError_default(
+      "drawCommand.primitiveType is required and must be valid."
+    );
+  }
+  Check_default.defined("drawCommand.vertexArray", va);
+  Check_default.typeOf.number.greaterThanOrEquals("drawCommand.offset", offset, 0);
+  if (defined_default(count)) {
+    Check_default.typeOf.number.greaterThanOrEquals("drawCommand.count", count, 0);
+  }
+  Check_default.typeOf.number.greaterThanOrEquals(
+    "drawCommand.instanceCount",
+    instanceCount,
+    0
+  );
+  if (instanceCount > 0 && !context.instancedArrays) {
+    throw new DeveloperError_default("Instanced arrays extension is not supported");
+  }
+  context._us.model = defaultValue_default(drawCommand._modelMatrix, Matrix4_default.IDENTITY);
+  shaderProgram._setUniforms(
+    uniformMap2,
+    context._us,
+    context.validateShaderProgram
+  );
+  va._bind();
+  const indexBuffer = va.indexBuffer;
+  if (defined_default(indexBuffer)) {
+    offset = offset * indexBuffer.bytesPerIndex;
+    if (defined_default(count)) {
+      count = Math.min(count, indexBuffer.numberOfIndices);
+    } else {
+      count = indexBuffer.numberOfIndices;
+    }
+    if (instanceCount === 0) {
+      context._gl.drawElements(
+        primitiveType,
+        count,
+        indexBuffer.indexDatatype,
+        offset
+      );
+    } else {
+      context.glDrawElementsInstanced(
+        primitiveType,
+        count,
+        indexBuffer.indexDatatype,
+        offset,
+        instanceCount
+      );
+    }
+  } else {
+    if (defined_default(count)) {
+      count = Math.min(count, va.numberOfVertices);
+    } else {
+      count = va.numberOfVertices;
+    }
+    if (instanceCount === 0) {
+      context._gl.drawArrays(primitiveType, offset, count);
+    } else {
+      context.glDrawArraysInstanced(
+        primitiveType,
+        offset,
+        count,
+        instanceCount
+      );
+    }
+  }
+  va._unBind();
+}
+Context.prototype.draw = function(drawCommand, passState, shaderProgram, uniformMap2) {
+  Check_default.defined("drawCommand", drawCommand);
+  Check_default.defined("drawCommand.shaderProgram", drawCommand._shaderProgram);
+  passState = defaultValue_default(passState, this._defaultPassState);
+  const framebuffer = defaultValue_default(
+    drawCommand._framebuffer,
+    passState.framebuffer
+  );
+  const renderState = defaultValue_default(
+    drawCommand._renderState,
+    this._defaultRenderState
+  );
+  shaderProgram = defaultValue_default(shaderProgram, drawCommand._shaderProgram);
+  uniformMap2 = defaultValue_default(uniformMap2, drawCommand._uniformMap);
+  beginDraw(this, framebuffer, passState, shaderProgram, renderState);
+  continueDraw(this, drawCommand, shaderProgram, uniformMap2);
+};
+Context.prototype.endFrame = function() {
+  const gl = this._gl;
+  gl.useProgram(null);
+  this._currentFramebuffer = void 0;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const buffers = scratchBackBufferArray;
+  if (this.drawBuffers) {
+    this.glDrawBuffers(buffers);
+  }
+  const length2 = this._maxFrameTextureUnitIndex;
+  this._maxFrameTextureUnitIndex = 0;
+  for (let i = 0; i < length2; ++i) {
+    gl.activeTexture(gl.TEXTURE0 + i);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
+  }
+};
+Context.prototype.readPixels = function(readState) {
+  const gl = this._gl;
+  readState = defaultValue_default(readState, defaultValue_default.EMPTY_OBJECT);
+  const x = Math.max(defaultValue_default(readState.x, 0), 0);
+  const y = Math.max(defaultValue_default(readState.y, 0), 0);
+  const width = defaultValue_default(readState.width, gl.drawingBufferWidth);
+  const height = defaultValue_default(readState.height, gl.drawingBufferHeight);
+  const framebuffer = readState.framebuffer;
+  Check_default.typeOf.number.greaterThan("readState.width", width, 0);
+  Check_default.typeOf.number.greaterThan("readState.height", height, 0);
+  let pixelDatatype = PixelDatatype_default.UNSIGNED_BYTE;
+  if (defined_default(framebuffer) && framebuffer.numberOfColorAttachments > 0) {
+    pixelDatatype = framebuffer.getColorTexture(0).pixelDatatype;
+  }
+  const pixels = PixelFormat_default.createTypedArray(
+    PixelFormat_default.RGBA,
+    pixelDatatype,
+    width,
+    height
+  );
+  bindFramebuffer(this, framebuffer);
+  gl.readPixels(
+    x,
+    y,
+    width,
+    height,
+    PixelFormat_default.RGBA,
+    PixelDatatype_default.toWebGLConstant(pixelDatatype, this),
+    pixels
+  );
+  return pixels;
+};
+var viewportQuadAttributeLocations = {
+  position: 0,
+  textureCoordinates: 1
+};
+Context.prototype.getViewportQuadVertexArray = function() {
+  let vertexArray = this.cache.viewportQuad_vertexArray;
+  if (!defined_default(vertexArray)) {
+    const geometry = new Geometry_default({
+      attributes: {
+        position: new GeometryAttribute_default({
+          componentDatatype: ComponentDatatype_default.FLOAT,
+          componentsPerAttribute: 2,
+          values: [-1, -1, 1, -1, 1, 1, -1, 1]
+        }),
+        textureCoordinates: new GeometryAttribute_default({
+          componentDatatype: ComponentDatatype_default.FLOAT,
+          componentsPerAttribute: 2,
+          values: [0, 0, 1, 0, 1, 1, 0, 1]
+        })
+      },
+      // Workaround Internet Explorer 11.0.8 lack of TRIANGLE_FAN
+      indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+      primitiveType: PrimitiveType_default.TRIANGLES
+    });
+    vertexArray = VertexArray_default.fromGeometry({
+      context: this,
+      geometry,
+      attributeLocations: viewportQuadAttributeLocations,
+      bufferUsage: BufferUsage_default.STATIC_DRAW,
+      interleave: true
+    });
+    this.cache.viewportQuad_vertexArray = vertexArray;
+  }
+  return vertexArray;
+};
+Context.prototype.createViewportQuadCommand = function(fragmentShaderSource, overrides) {
+  overrides = defaultValue_default(overrides, defaultValue_default.EMPTY_OBJECT);
+  return new DrawCommand_default({
+    vertexArray: this.getViewportQuadVertexArray(),
+    primitiveType: PrimitiveType_default.TRIANGLES,
+    renderState: overrides.renderState,
+    shaderProgram: ShaderProgram_default.fromCache({
+      context: this,
+      vertexShaderSource: ViewportQuadVS_default,
+      fragmentShaderSource,
+      attributeLocations: viewportQuadAttributeLocations
+    }),
+    uniformMap: overrides.uniformMap,
+    owner: overrides.owner,
+    framebuffer: overrides.framebuffer,
+    pass: overrides.pass
+  });
+};
+Context.prototype.getObjectByPickColor = function(pickColor) {
+  Check_default.defined("pickColor", pickColor);
+  return this._pickObjects[pickColor.toRgba()];
+};
+function PickId(pickObjects, key, color) {
+  this._pickObjects = pickObjects;
+  this.key = key;
+  this.color = color;
+}
+Object.defineProperties(PickId.prototype, {
+  object: {
+    get: function() {
+      return this._pickObjects[this.key];
+    },
+    set: function(value) {
+      this._pickObjects[this.key] = value;
+    }
+  }
+});
+PickId.prototype.destroy = function() {
+  delete this._pickObjects[this.key];
+  return void 0;
+};
+Context.prototype.createPickId = function(object2) {
+  Check_default.defined("object", object2);
+  ++this._nextPickColor[0];
+  const key = this._nextPickColor[0];
+  if (key === 0) {
+    throw new RuntimeError_default("Out of unique Pick IDs.");
+  }
+  this._pickObjects[key] = object2;
+  return new PickId(this._pickObjects, key, Color_default.fromRgba(key));
+};
+Context.prototype.isDestroyed = function() {
+  return false;
+};
+Context.prototype.destroy = function() {
+  const cache = this.cache;
+  for (const property in cache) {
+    if (cache.hasOwnProperty(property)) {
+      const propertyValue = cache[property];
+      if (defined_default(propertyValue.destroy)) {
+        propertyValue.destroy();
+      }
+    }
+  }
+  this._shaderCache = this._shaderCache.destroy();
+  this._textureCache = this._textureCache.destroy();
+  this._defaultTexture = this._defaultTexture && this._defaultTexture.destroy();
+  this._defaultEmissiveTexture = this._defaultEmissiveTexture && this._defaultEmissiveTexture.destroy();
+  this._defaultNormalTexture = this._defaultNormalTexture && this._defaultNormalTexture.destroy();
+  this._defaultCubeMap = this._defaultCubeMap && this._defaultCubeMap.destroy();
+  return destroyObject_default(this);
+};
+Context._deprecationWarning = deprecationWarning_default;
+var Context_default = Context;
 
 // packages/engine/Source/Scene/SceneTransitioner.js
 function SceneTransitioner(scene) {
@@ -232002,14 +231965,14 @@ VoxelTraversal.prototype.findKeyframeNode = function(megatextureIndex) {
     return keyframeNode.megatextureIndex === megatextureIndex;
   });
 };
-function binaryTreeWeightingRecursive(arr, start, end, depth) {
+function binaryTreeWeightingRecursive(arr, start, end, depth2) {
   if (start > end) {
     return;
   }
   const mid = Math.floor((start + end) / 2);
-  arr[mid] = depth;
-  binaryTreeWeightingRecursive(arr, start, mid - 1, depth + 1);
-  binaryTreeWeightingRecursive(arr, mid + 1, end, depth + 1);
+  arr[mid] = depth2;
+  binaryTreeWeightingRecursive(arr, start, mid - 1, depth2 + 1);
+  binaryTreeWeightingRecursive(arr, mid + 1, end, depth2 + 1);
 }
 VoxelTraversal.simultaneousRequestCountMaximum = 50;
 VoxelTraversal.prototype.update = function(frameState, keyframeLocation, recomputeBoundingVolumes, pauseUpdate) {
@@ -237407,6 +237370,44 @@ SkyAtmosphere.prototype.destroy = function() {
 };
 var SkyAtmosphere_default = SkyAtmosphere;
 
+// packages/engine/Source/Renderer/loadCubeMap.js
+function loadCubeMap(context, urls, skipColorSpaceConversion) {
+  Check_default.defined("context", context);
+  Check_default.defined("urls", urls);
+  if (Object.values(CubeMap_default.FaceName).some((faceName) => !defined_default(urls[faceName]))) {
+    throw new DeveloperError_default(
+      "urls must have positiveX, negativeX, positiveY, negativeY, positiveZ, and negativeZ properties."
+    );
+  }
+  const flipOptions = {
+    flipY: true,
+    skipColorSpaceConversion,
+    preferImageBitmap: true
+  };
+  const facePromises = [
+    Resource_default.createIfNeeded(urls.positiveX).fetchImage(flipOptions),
+    Resource_default.createIfNeeded(urls.negativeX).fetchImage(flipOptions),
+    Resource_default.createIfNeeded(urls.positiveY).fetchImage(flipOptions),
+    Resource_default.createIfNeeded(urls.negativeY).fetchImage(flipOptions),
+    Resource_default.createIfNeeded(urls.positiveZ).fetchImage(flipOptions),
+    Resource_default.createIfNeeded(urls.negativeZ).fetchImage(flipOptions)
+  ];
+  return Promise.all(facePromises).then(function(images) {
+    return new CubeMap_default({
+      context,
+      source: {
+        positiveX: images[0],
+        negativeX: images[1],
+        positiveY: images[2],
+        negativeY: images[3],
+        positiveZ: images[4],
+        negativeZ: images[5]
+      }
+    });
+  });
+}
+var loadCubeMap_default = loadCubeMap;
+
 // packages/engine/Source/Shaders/SkyBoxFS.js
 var SkyBoxFS_default = "uniform samplerCube u_cubeMap;\n\nin vec3 v_texCoord;\n\nvoid main()\n{\n    vec4 color = czm_textureCube(u_cubeMap, normalize(v_texCoord));\n    out_FragColor = vec4(czm_gammaCorrect(color).rgb, czm_morphTime);\n}\n";
 
@@ -238961,6 +238962,764 @@ VoxelShape.prototype.computeOrientedBoundingBoxForSample = DeveloperError_defaul
 VoxelShape.DefaultMinBounds = DeveloperError_default.throwInstantiationError;
 VoxelShape.DefaultMaxBounds = DeveloperError_default.throwInstantiationError;
 var VoxelShape_default = VoxelShape;
+
+// packages/engine/Source/Renderer/Texture3D.js
+function Texture2(options) {
+  options = defaultValue_default(options, defaultValue_default.EMPTY_OBJECT);
+  Check_default.defined("options.context", options.context);
+  const {
+    context,
+    source,
+    pixelFormat = PixelFormat_default.RGBA,
+    pixelDatatype = PixelDatatype_default.UNSIGNED_BYTE,
+    flipY = true,
+    skipColorSpaceConversion = false,
+    sampler = new Sampler_default()
+  } = options;
+  let { width, height, depth: depth2 } = options;
+  if (defined_default(source)) {
+    if (!defined_default(width)) {
+      width = defaultValue_default(source.videoWidth, source.width);
+    }
+    if (!defined_default(height)) {
+      height = defaultValue_default(source.videoHeight, source.height);
+    }
+  }
+  const preMultiplyAlpha = options.preMultiplyAlpha || pixelFormat === PixelFormat_default.RGB || pixelFormat === PixelFormat_default.LUMINANCE;
+  const internalFormat = PixelFormat_default.toInternalFormat(
+    pixelFormat,
+    pixelDatatype,
+    context
+  );
+  const isCompressed = PixelFormat_default.isCompressedFormat(internalFormat);
+  if (!defined_default(width) || !defined_default(height)) {
+    throw new DeveloperError_default(
+      "options requires a source field to create an initialized texture or width and height fields to create a blank texture."
+    );
+  }
+  Check_default.typeOf.number.greaterThan("width", width, 0);
+  if (width > ContextLimits_default.maximumTextureSize) {
+    throw new DeveloperError_default(
+      `Width must be less than or equal to the maximum texture size (${ContextLimits_default.maximumTextureSize}).  Check maximumTextureSize.`
+    );
+  }
+  Check_default.typeOf.number.greaterThan("height", height, 0);
+  if (height > ContextLimits_default.maximumTextureSize) {
+    throw new DeveloperError_default(
+      `Height must be less than or equal to the maximum texture size (${ContextLimits_default.maximumTextureSize}).  Check maximumTextureSize.`
+    );
+  }
+  if (!PixelFormat_default.validate(pixelFormat)) {
+    throw new DeveloperError_default("Invalid options.pixelFormat.");
+  }
+  if (!isCompressed && !PixelDatatype_default.validate(pixelDatatype)) {
+    throw new DeveloperError_default("Invalid options.pixelDatatype.");
+  }
+  if (pixelFormat === PixelFormat_default.DEPTH_COMPONENT && pixelDatatype !== PixelDatatype_default.UNSIGNED_SHORT && pixelDatatype !== PixelDatatype_default.UNSIGNED_INT) {
+    throw new DeveloperError_default(
+      "When options.pixelFormat is DEPTH_COMPONENT, options.pixelDatatype must be UNSIGNED_SHORT or UNSIGNED_INT."
+    );
+  }
+  if (pixelFormat === PixelFormat_default.DEPTH_STENCIL && pixelDatatype !== PixelDatatype_default.UNSIGNED_INT_24_8) {
+    throw new DeveloperError_default(
+      "When options.pixelFormat is DEPTH_STENCIL, options.pixelDatatype must be UNSIGNED_INT_24_8."
+    );
+  }
+  if (pixelDatatype === PixelDatatype_default.FLOAT && !context.floatingPointTexture) {
+    throw new DeveloperError_default(
+      "When options.pixelDatatype is FLOAT, this WebGL implementation must support the OES_texture_float extension.  Check context.floatingPointTexture."
+    );
+  }
+  if (pixelDatatype === PixelDatatype_default.HALF_FLOAT && !context.halfFloatingPointTexture) {
+    throw new DeveloperError_default(
+      "When options.pixelDatatype is HALF_FLOAT, this WebGL implementation must support the OES_texture_half_float extension. Check context.halfFloatingPointTexture."
+    );
+  }
+  if (PixelFormat_default.isDepthFormat(pixelFormat)) {
+    if (defined_default(source)) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is DEPTH_COMPONENT or DEPTH_STENCIL, source cannot be provided."
+      );
+    }
+    if (!context.depthTexture) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is DEPTH_COMPONENT or DEPTH_STENCIL, this WebGL implementation must support WEBGL_depth_texture.  Check context.depthTexture."
+      );
+    }
+  }
+  if (isCompressed) {
+    if (!defined_default(source) || !defined_default(source.arrayBufferView)) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is compressed, options.source.arrayBufferView must be defined."
+      );
+    }
+    if (PixelFormat_default.isDXTFormat(internalFormat) && !context.s3tc) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is S3TC compressed, this WebGL implementation must support the WEBGL_compressed_texture_s3tc extension. Check context.s3tc."
+      );
+    } else if (PixelFormat_default.isPVRTCFormat(internalFormat) && !context.pvrtc) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is PVRTC compressed, this WebGL implementation must support the WEBGL_compressed_texture_pvrtc extension. Check context.pvrtc."
+      );
+    } else if (PixelFormat_default.isASTCFormat(internalFormat) && !context.astc) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is ASTC compressed, this WebGL implementation must support the WEBGL_compressed_texture_astc extension. Check context.astc."
+      );
+    } else if (PixelFormat_default.isETC2Format(internalFormat) && !context.etc) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is ETC2 compressed, this WebGL implementation must support the WEBGL_compressed_texture_etc extension. Check context.etc."
+      );
+    } else if (PixelFormat_default.isETC1Format(internalFormat) && !context.etc1) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is ETC1 compressed, this WebGL implementation must support the WEBGL_compressed_texture_etc1 extension. Check context.etc1."
+      );
+    } else if (PixelFormat_default.isBC7Format(internalFormat) && !context.bc7) {
+      throw new DeveloperError_default(
+        "When options.pixelFormat is BC7 compressed, this WebGL implementation must support the EXT_texture_compression_bptc extension. Check context.bc7."
+      );
+    }
+    if (PixelFormat_default.compressedTextureSizeInBytes(
+      internalFormat,
+      width,
+      height
+    ) !== source.arrayBufferView.byteLength) {
+      throw new DeveloperError_default(
+        "The byte length of the array buffer is invalid for the compressed texture with the given width and height."
+      );
+    }
+  }
+  const gl = context._gl;
+  const sizeInBytes = isCompressed ? PixelFormat_default.compressedTextureSizeInBytes(pixelFormat, width, height) : PixelFormat_default.textureSizeInBytes(pixelFormat, pixelDatatype, width, height);
+  this._id = createGuid_default();
+  this._context = context;
+  this._textureFilterAnisotropic = context._textureFilterAnisotropic;
+  this._textureTarget = gl.TEXTURE_3D;
+  this._texture = gl.createTexture();
+  this._internalFormat = internalFormat;
+  this._pixelFormat = pixelFormat;
+  this._pixelDatatype = pixelDatatype;
+  this._width = width;
+  this._height = height;
+  this._depth = depth2;
+  this._dimensions = new Cartesian2_default(width, height);
+  this._hasMipmap = false;
+  this._sizeInBytes = sizeInBytes;
+  this._preMultiplyAlpha = preMultiplyAlpha;
+  this._flipY = flipY;
+  this._initialized = false;
+  this._sampler = void 0;
+  this._sampler = sampler;
+  setupSampler3(this, sampler);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(this._textureTarget, this._texture);
+  if (defined_default(source)) {
+    if (skipColorSpaceConversion) {
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    } else {
+      gl.pixelStorei(
+        gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,
+        gl.BROWSER_DEFAULT_WEBGL
+      );
+    }
+    if (defined_default(source.arrayBufferView)) {
+      const isCompressed2 = PixelFormat_default.isCompressedFormat(internalFormat);
+      if (isCompressed2) {
+        loadCompressedBufferSource2(this, source);
+      } else {
+        loadBufferSource2(this, source);
+      }
+    } else if (defined_default(source.framebuffer)) {
+      loadFramebufferSource2(this, source);
+    } else {
+      loadImageSource2(this, source);
+    }
+    this._initialized = true;
+  } else {
+    loadNull2(this);
+  }
+  gl.bindTexture(this._textureTarget, null);
+}
+function loadCompressedBufferSource2(texture, source) {
+  const context = texture._context;
+  const gl = context._gl;
+  const textureTarget = texture._textureTarget;
+  const internalFormat = texture._internalFormat;
+  const { width, height } = texture;
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.compressedTexImage2D(
+    textureTarget,
+    0,
+    internalFormat,
+    width,
+    height,
+    0,
+    source.arrayBufferView
+  );
+  if (defined_default(source.mipLevels)) {
+    let mipWidth = width;
+    let mipHeight = height;
+    for (let i = 0; i < source.mipLevels.length; ++i) {
+      mipWidth = nextMipSize2(mipWidth);
+      mipHeight = nextMipSize2(mipHeight);
+      gl.compressedTexImage2D(
+        textureTarget,
+        i + 1,
+        internalFormat,
+        mipWidth,
+        mipHeight,
+        0,
+        source.mipLevels[i]
+      );
+    }
+  }
+}
+function loadBufferSource2(texture, source) {
+  const context = texture._context;
+  const gl = context._gl;
+  const textureTarget = texture._textureTarget;
+  const internalFormat = texture._internalFormat;
+  const { width, height, depth: depth2, pixelFormat, pixelDatatype, flipY } = texture;
+  const unpackAlignment = PixelFormat_default.alignmentInBytes(
+    pixelFormat,
+    pixelDatatype,
+    width
+  );
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, unpackAlignment);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  let arrayBufferView = source.arrayBufferView;
+  if (flipY) {
+    arrayBufferView = PixelFormat_default.flipY(
+      arrayBufferView,
+      pixelFormat,
+      pixelDatatype,
+      width,
+      height
+    );
+  }
+  gl.texImage3D(
+    textureTarget,
+    0,
+    internalFormat,
+    width,
+    height,
+    depth2,
+    0,
+    pixelFormat,
+    PixelDatatype_default.toWebGLConstant(pixelDatatype, context),
+    arrayBufferView
+  );
+  if (defined_default(source.mipLevels)) {
+    let mipWidth = width;
+    let mipHeight = height;
+    for (let i = 0; i < source.mipLevels.length; ++i) {
+      mipWidth = nextMipSize2(mipWidth);
+      mipHeight = nextMipSize2(mipHeight);
+      gl.texImage3D(
+        textureTarget,
+        i + 1,
+        internalFormat,
+        mipWidth,
+        mipHeight,
+        depth2,
+        0,
+        pixelFormat,
+        PixelDatatype_default.toWebGLConstant(pixelDatatype, context),
+        source.mipLevels[i]
+      );
+    }
+  }
+}
+function loadFramebufferSource2(texture, source) {
+  const context = texture._context;
+  const gl = context._gl;
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  if (source.framebuffer !== context.defaultFramebuffer) {
+    source.framebuffer._bind();
+  }
+  gl.copyTexImage2D(
+    texture._textureTarget,
+    0,
+    texture._internalFormat,
+    source.xOffset,
+    source.yOffset,
+    texture.width,
+    texture.height,
+    0
+  );
+  if (source.framebuffer !== context.defaultFramebuffer) {
+    source.framebuffer._unBind();
+  }
+}
+function loadImageSource2(texture, source) {
+  const context = texture._context;
+  const gl = context._gl;
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, texture.preMultiplyAlpha);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY);
+  gl.texImage3D(
+    texture._textureTarget,
+    0,
+    texture._internalFormat,
+    texture.pixelFormat,
+    PixelDatatype_default.toWebGLConstant(texture.pixelDatatype, context),
+    source
+  );
+}
+function nextMipSize2(currentSize) {
+  const nextSize = Math.floor(currentSize / 2) | 0;
+  return Math.max(nextSize, 1);
+}
+function loadNull2(texture) {
+  const context = texture._context;
+  context._gl.texImage3D(
+    texture._textureTarget,
+    0,
+    texture._internalFormat,
+    texture._width,
+    texture._height,
+    0,
+    texture._pixelFormat,
+    PixelDatatype_default.toWebGLConstant(texture._pixelDatatype, context),
+    null
+  );
+}
+Texture2.create = function(options) {
+  return new Texture2(options);
+};
+Texture2.fromFramebuffer = function(options) {
+  options = defaultValue_default(options, defaultValue_default.EMPTY_OBJECT);
+  Check_default.defined("options.context", options.context);
+  const context = options.context;
+  const gl = context._gl;
+  const {
+    pixelFormat = PixelFormat_default.RGB,
+    framebufferXOffset = 0,
+    framebufferYOffset = 0,
+    width = gl.drawingBufferWidth,
+    height = gl.drawingBufferHeight,
+    framebuffer
+  } = options;
+  if (!PixelFormat_default.validate(pixelFormat)) {
+    throw new DeveloperError_default("Invalid pixelFormat.");
+  }
+  if (PixelFormat_default.isDepthFormat(pixelFormat) || PixelFormat_default.isCompressedFormat(pixelFormat)) {
+    throw new DeveloperError_default(
+      "pixelFormat cannot be DEPTH_COMPONENT, DEPTH_STENCIL or a compressed format."
+    );
+  }
+  Check_default.defined("options.context", context);
+  Check_default.typeOf.number.greaterThanOrEquals(
+    "framebufferXOffset",
+    framebufferXOffset,
+    0
+  );
+  Check_default.typeOf.number.greaterThanOrEquals(
+    "framebufferYOffset",
+    framebufferYOffset,
+    0
+  );
+  if (framebufferXOffset + width > gl.drawingBufferWidth) {
+    throw new DeveloperError_default(
+      "framebufferXOffset + width must be less than or equal to drawingBufferWidth"
+    );
+  }
+  if (framebufferYOffset + height > gl.drawingBufferHeight) {
+    throw new DeveloperError_default(
+      "framebufferYOffset + height must be less than or equal to drawingBufferHeight."
+    );
+  }
+  const texture = new Texture2({
+    context,
+    width,
+    height,
+    pixelFormat,
+    source: {
+      framebuffer: defined_default(framebuffer) ? framebuffer : context.defaultFramebuffer,
+      xOffset: framebufferXOffset,
+      yOffset: framebufferYOffset,
+      width,
+      height
+    }
+  });
+  return texture;
+};
+Object.defineProperties(Texture2.prototype, {
+  /**
+   * A unique id for the texture
+   * @memberof Texture.prototype
+   * @type {string}
+   * @readonly
+   * @private
+   */
+  id: {
+    get: function() {
+      return this._id;
+    }
+  },
+  /**
+   * The sampler to use when sampling this texture.
+   * Create a sampler by calling {@link Sampler}.  If this
+   * parameter is not specified, a default sampler is used.  The default sampler clamps texture
+   * coordinates in both directions, uses linear filtering for both magnification and minification,
+   * and uses a maximum anisotropy of 1.0.
+   * @memberof Texture.prototype
+   * @type {object}
+   */
+  sampler: {
+    get: function() {
+      return this._sampler;
+    },
+    set: function(sampler) {
+      setupSampler3(this, sampler);
+      this._sampler = sampler;
+    }
+  },
+  pixelFormat: {
+    get: function() {
+      return this._pixelFormat;
+    }
+  },
+  pixelDatatype: {
+    get: function() {
+      return this._pixelDatatype;
+    }
+  },
+  dimensions: {
+    get: function() {
+      return this._dimensions;
+    }
+  },
+  preMultiplyAlpha: {
+    get: function() {
+      return this._preMultiplyAlpha;
+    }
+  },
+  flipY: {
+    get: function() {
+      return this._flipY;
+    }
+  },
+  width: {
+    get: function() {
+      return this._width;
+    }
+  },
+  height: {
+    get: function() {
+      return this._height;
+    }
+  },
+  sizeInBytes: {
+    get: function() {
+      if (this._hasMipmap) {
+        return Math.floor(this._sizeInBytes * 4 / 3);
+      }
+      return this._sizeInBytes;
+    }
+  },
+  _target: {
+    get: function() {
+      return this._textureTarget;
+    }
+  }
+});
+function setupSampler3(texture, sampler) {
+  let { minificationFilter, magnificationFilter } = sampler;
+  const mipmap = [
+    TextureMinificationFilter_default.NEAREST_MIPMAP_NEAREST,
+    TextureMinificationFilter_default.NEAREST_MIPMAP_LINEAR,
+    TextureMinificationFilter_default.LINEAR_MIPMAP_NEAREST,
+    TextureMinificationFilter_default.LINEAR_MIPMAP_LINEAR
+  ].includes(minificationFilter);
+  const context = texture._context;
+  const pixelFormat = texture._pixelFormat;
+  const pixelDatatype = texture._pixelDatatype;
+  if (pixelDatatype === PixelDatatype_default.FLOAT && !context.textureFloatLinear || pixelDatatype === PixelDatatype_default.HALF_FLOAT && !context.textureHalfFloatLinear) {
+    minificationFilter = mipmap ? TextureMinificationFilter_default.NEAREST_MIPMAP_NEAREST : TextureMinificationFilter_default.NEAREST;
+    magnificationFilter = TextureMagnificationFilter_default.NEAREST;
+  }
+  if (context.webgl2) {
+    if (PixelFormat_default.isDepthFormat(pixelFormat)) {
+      minificationFilter = TextureMinificationFilter_default.NEAREST;
+      magnificationFilter = TextureMagnificationFilter_default.NEAREST;
+    }
+  }
+  const gl = context._gl;
+  const target = texture._textureTarget;
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(target, texture._texture);
+  gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, minificationFilter);
+  gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, magnificationFilter);
+  gl.texParameteri(target, gl.TEXTURE_WRAP_S, sampler.wrapS);
+  gl.texParameteri(target, gl.TEXTURE_WRAP_T, sampler.wrapT);
+  if (defined_default(texture._textureFilterAnisotropic)) {
+    gl.texParameteri(
+      target,
+      texture._textureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT,
+      sampler.maximumAnisotropy
+    );
+  }
+  gl.bindTexture(target, null);
+}
+Texture2.prototype.copyFrom = function(options) {
+  Check_default.defined("options", options);
+  const {
+    xOffset = 0,
+    yOffset = 0,
+    source,
+    skipColorSpaceConversion = false
+  } = options;
+  Check_default.defined("options.source", source);
+  if (PixelFormat_default.isDepthFormat(this._pixelFormat)) {
+    throw new DeveloperError_default(
+      "Cannot call copyFrom when the texture pixel format is DEPTH_COMPONENT or DEPTH_STENCIL."
+    );
+  }
+  if (PixelFormat_default.isCompressedFormat(this._pixelFormat)) {
+    throw new DeveloperError_default(
+      "Cannot call copyFrom with a compressed texture pixel format."
+    );
+  }
+  Check_default.typeOf.number.greaterThanOrEquals("xOffset", xOffset, 0);
+  Check_default.typeOf.number.greaterThanOrEquals("yOffset", yOffset, 0);
+  Check_default.typeOf.number.lessThanOrEquals(
+    "xOffset + options.source.width",
+    xOffset + source.width,
+    this._width
+  );
+  Check_default.typeOf.number.lessThanOrEquals(
+    "yOffset + options.source.height",
+    yOffset + source.height,
+    this._height
+  );
+  const context = this._context;
+  const gl = context._gl;
+  const target = this._textureTarget;
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(target, this._texture);
+  const { width, height, arrayBufferView } = source;
+  const textureWidth = this._width;
+  const textureHeight = this._height;
+  const internalFormat = this._internalFormat;
+  const pixelFormat = this._pixelFormat;
+  const pixelDatatype = this._pixelDatatype;
+  const preMultiplyAlpha = this._preMultiplyAlpha;
+  const flipY = this._flipY;
+  let unpackAlignment = 4;
+  if (defined_default(arrayBufferView)) {
+    unpackAlignment = PixelFormat_default.alignmentInBytes(
+      pixelFormat,
+      pixelDatatype,
+      width
+    );
+  }
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, unpackAlignment);
+  if (skipColorSpaceConversion) {
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  } else {
+    gl.pixelStorei(
+      gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,
+      gl.BROWSER_DEFAULT_WEBGL
+    );
+  }
+  let uploaded = false;
+  if (!this._initialized) {
+    let pixels;
+    if (xOffset === 0 && yOffset === 0 && width === textureWidth && height === textureHeight) {
+      if (defined_default(arrayBufferView)) {
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        if (flipY) {
+          pixels = PixelFormat_default.flipY(
+            arrayBufferView,
+            pixelFormat,
+            pixelDatatype,
+            textureWidth,
+            textureHeight
+          );
+        } else {
+          pixels = arrayBufferView;
+        }
+      } else {
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, preMultiplyAlpha);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
+        pixels = source;
+      }
+      uploaded = true;
+    } else {
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      pixels = PixelFormat_default.createTypedArray(
+        pixelFormat,
+        pixelDatatype,
+        textureWidth,
+        textureHeight
+      );
+    }
+    gl.texImage3D(
+      target,
+      0,
+      internalFormat,
+      textureWidth,
+      textureHeight,
+      depth,
+      0,
+      pixelFormat,
+      PixelDatatype_default.toWebGLConstant(pixelDatatype, context),
+      pixels
+    );
+    this._initialized = true;
+  }
+  if (!uploaded) {
+    let pixels;
+    if (defined_default(arrayBufferView)) {
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      if (flipY) {
+        pixels = PixelFormat_default.flipY(
+          arrayBufferView,
+          pixelFormat,
+          pixelDatatype,
+          width,
+          height
+        );
+      } else {
+        pixels = arrayBufferView;
+      }
+    } else {
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, preMultiplyAlpha);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
+      pixels = source;
+    }
+    gl.texSubImage2D(
+      target,
+      0,
+      xOffset,
+      yOffset,
+      width,
+      height,
+      pixelFormat,
+      PixelDatatype_default.toWebGLConstant(pixelDatatype, context),
+      pixels
+    );
+  }
+  gl.bindTexture(target, null);
+};
+Texture2.prototype.copyFromFramebuffer = function(xOffset, yOffset, framebufferXOffset, framebufferYOffset, width, height) {
+  xOffset = defaultValue_default(xOffset, 0);
+  yOffset = defaultValue_default(yOffset, 0);
+  framebufferXOffset = defaultValue_default(framebufferXOffset, 0);
+  framebufferYOffset = defaultValue_default(framebufferYOffset, 0);
+  width = defaultValue_default(width, this._width);
+  height = defaultValue_default(height, this._height);
+  if (PixelFormat_default.isDepthFormat(this._pixelFormat)) {
+    throw new DeveloperError_default(
+      "Cannot call copyFromFramebuffer when the texture pixel format is DEPTH_COMPONENT or DEPTH_STENCIL."
+    );
+  }
+  if (this._pixelDatatype === PixelDatatype_default.FLOAT) {
+    throw new DeveloperError_default(
+      "Cannot call copyFromFramebuffer when the texture pixel data type is FLOAT."
+    );
+  }
+  if (this._pixelDatatype === PixelDatatype_default.HALF_FLOAT) {
+    throw new DeveloperError_default(
+      "Cannot call copyFromFramebuffer when the texture pixel data type is HALF_FLOAT."
+    );
+  }
+  if (PixelFormat_default.isCompressedFormat(this._pixelFormat)) {
+    throw new DeveloperError_default(
+      "Cannot call copyFrom with a compressed texture pixel format."
+    );
+  }
+  Check_default.typeOf.number.greaterThanOrEquals("xOffset", xOffset, 0);
+  Check_default.typeOf.number.greaterThanOrEquals("yOffset", yOffset, 0);
+  Check_default.typeOf.number.greaterThanOrEquals(
+    "framebufferXOffset",
+    framebufferXOffset,
+    0
+  );
+  Check_default.typeOf.number.greaterThanOrEquals(
+    "framebufferYOffset",
+    framebufferYOffset,
+    0
+  );
+  Check_default.typeOf.number.lessThanOrEquals(
+    "xOffset + width",
+    xOffset + width,
+    this._width
+  );
+  Check_default.typeOf.number.lessThanOrEquals(
+    "yOffset + height",
+    yOffset + height,
+    this._height
+  );
+  const gl = this._context._gl;
+  const target = this._textureTarget;
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(target, this._texture);
+  gl.copyTexSubImage2D(
+    target,
+    0,
+    xOffset,
+    yOffset,
+    framebufferXOffset,
+    framebufferYOffset,
+    width,
+    height
+  );
+  gl.bindTexture(target, null);
+  this._initialized = true;
+};
+Texture2.prototype.generateMipmap = function(hint) {
+  hint = defaultValue_default(hint, MipmapHint_default.DONT_CARE);
+  if (PixelFormat_default.isDepthFormat(this._pixelFormat)) {
+    throw new DeveloperError_default(
+      "Cannot call generateMipmap when the texture pixel format is DEPTH_COMPONENT or DEPTH_STENCIL."
+    );
+  }
+  if (PixelFormat_default.isCompressedFormat(this._pixelFormat)) {
+    throw new DeveloperError_default(
+      "Cannot call generateMipmap with a compressed pixel format."
+    );
+  }
+  if (!this._context.webgl2) {
+    if (this._width > 1 && !Math_default.isPowerOfTwo(this._width)) {
+      throw new DeveloperError_default(
+        "width must be a power of two to call generateMipmap() in a WebGL1 context."
+      );
+    }
+    if (this._height > 1 && !Math_default.isPowerOfTwo(this._height)) {
+      throw new DeveloperError_default(
+        "height must be a power of two to call generateMipmap() in a WebGL1 context."
+      );
+    }
+  }
+  if (!MipmapHint_default.validate(hint)) {
+    throw new DeveloperError_default("hint is invalid.");
+  }
+  this._hasMipmap = true;
+  const gl = this._context._gl;
+  const target = this._textureTarget;
+  gl.hint(gl.GENERATE_MIPMAP_HINT, hint);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(target, this._texture);
+  gl.generateMipmap(target);
+  gl.bindTexture(target, null);
+};
+Texture2.prototype.isDestroyed = function() {
+  return false;
+};
+Texture2.prototype.destroy = function() {
+  this._context._gl.deleteTexture(this._texture);
+  return destroyObject_default(this);
+};
+var Texture3D_default = Texture2;
 
 // packages/engine/Source/Widget/CesiumWidget.js
 function startRenderLoop(widget) {
@@ -244625,351 +245384,223 @@ AnimationViewModel._maxShuttleRingAngle = maxShuttleRingAngle;
 AnimationViewModel._realtimeShuttleRingAngle = realtimeShuttleRingAngle;
 var AnimationViewModel_default = AnimationViewModel;
 
-// packages/widgets/Source/CesiumInspector/CesiumInspectorViewModel.js
-function frustumStatisticsToString(statistics2) {
-  let str;
-  if (defined_default(statistics2)) {
-    str = "Command Statistics";
-    const com = statistics2.commandsInFrustums;
-    for (const n in com) {
-      if (com.hasOwnProperty(n)) {
-        let num = parseInt(n, 10);
-        let s;
-        if (num === 7) {
-          s = "1, 2 and 3";
-        } else {
-          const f = [];
-          for (let i = 2; i >= 0; i--) {
-            const p = Math.pow(2, i);
-            if (num >= p) {
-              f.push(i + 1);
-              num -= p;
-            }
-          }
-          s = f.reverse().join(" and ");
-        }
-        str += `<br>&nbsp;&nbsp;&nbsp;&nbsp;${com[n]} in frustum ${s}`;
+// packages/widgets/Source/BaseLayerPicker/BaseLayerPickerViewModel.js
+function BaseLayerPickerViewModel(options) {
+  options = defaultValue_default(options, defaultValue_default.EMPTY_OBJECT);
+  const globe = options.globe;
+  const imageryProviderViewModels = defaultValue_default(
+    options.imageryProviderViewModels,
+    []
+  );
+  const terrainProviderViewModels = defaultValue_default(
+    options.terrainProviderViewModels,
+    []
+  );
+  if (!defined_default(globe)) {
+    throw new DeveloperError_default("globe is required");
+  }
+  this._globe = globe;
+  this.imageryProviderViewModels = imageryProviderViewModels.slice(0);
+  this.terrainProviderViewModels = terrainProviderViewModels.slice(0);
+  this.dropDownVisible = false;
+  knockout_default.track(this, [
+    "imageryProviderViewModels",
+    "terrainProviderViewModels",
+    "dropDownVisible"
+  ]);
+  const imageryObservable = knockout_default.getObservable(
+    this,
+    "imageryProviderViewModels"
+  );
+  const imageryProviders = knockout_default.pureComputed(function() {
+    const providers = imageryObservable();
+    const categories = {};
+    let i;
+    for (i = 0; i < providers.length; i++) {
+      const provider = providers[i];
+      const category = provider.category;
+      if (defined_default(categories[category])) {
+        categories[category].push(provider);
+      } else {
+        categories[category] = [provider];
       }
     }
-    str += `<br>Total: ${statistics2.totalCommands}`;
-  }
-  return str;
-}
-function boundDepthFrustum(lower, upper, proposed) {
-  let bounded = Math.min(proposed, upper);
-  bounded = Math.max(bounded, lower);
-  return bounded;
-}
-var scratchPickRay2 = new Ray_default();
-var scratchPickCartesian3 = new Cartesian3_default();
-function CesiumInspectorViewModel(scene, performanceContainer) {
-  if (!defined_default(scene)) {
-    throw new DeveloperError_default("scene is required");
-  }
-  if (!defined_default(performanceContainer)) {
-    throw new DeveloperError_default("performanceContainer is required");
-  }
+    const allCategoryNames = Object.keys(categories);
+    const result = [];
+    for (i = 0; i < allCategoryNames.length; i++) {
+      const name = allCategoryNames[i];
+      result.push({
+        name,
+        providers: categories[name]
+      });
+    }
+    return result;
+  });
+  this._imageryProviders = imageryProviders;
+  const terrainObservable = knockout_default.getObservable(
+    this,
+    "terrainProviderViewModels"
+  );
+  const terrainProviders = knockout_default.pureComputed(function() {
+    const providers = terrainObservable();
+    const categories = {};
+    let i;
+    for (i = 0; i < providers.length; i++) {
+      const provider = providers[i];
+      const category = provider.category;
+      if (defined_default(categories[category])) {
+        categories[category].push(provider);
+      } else {
+        categories[category] = [provider];
+      }
+    }
+    const allCategoryNames = Object.keys(categories);
+    const result = [];
+    for (i = 0; i < allCategoryNames.length; i++) {
+      const name = allCategoryNames[i];
+      result.push({
+        name,
+        providers: categories[name]
+      });
+    }
+    return result;
+  });
+  this._terrainProviders = terrainProviders;
+  this.buttonTooltip = void 0;
+  knockout_default.defineProperty(this, "buttonTooltip", function() {
+    const selectedImagery = this.selectedImagery;
+    const selectedTerrain = this.selectedTerrain;
+    const imageryTip = defined_default(selectedImagery) ? selectedImagery.name : void 0;
+    const terrainTip = defined_default(selectedTerrain) ? selectedTerrain.name : void 0;
+    if (defined_default(imageryTip) && defined_default(terrainTip)) {
+      return `${imageryTip}
+${terrainTip}`;
+    } else if (defined_default(imageryTip)) {
+      return imageryTip;
+    }
+    return terrainTip;
+  });
+  this.buttonImageUrl = void 0;
+  knockout_default.defineProperty(this, "buttonImageUrl", function() {
+    const selectedImagery = this.selectedImagery;
+    if (defined_default(selectedImagery)) {
+      return selectedImagery.iconUrl;
+    }
+  });
+  this.selectedImagery = void 0;
+  const selectedImageryViewModel = knockout_default.observable();
+  this._currentImageryLayers = [];
+  knockout_default.defineProperty(this, "selectedImagery", {
+    get: function() {
+      return selectedImageryViewModel();
+    },
+    set: function(value) {
+      if (selectedImageryViewModel() === value) {
+        this.dropDownVisible = false;
+        return;
+      }
+      let i;
+      const currentImageryLayers = this._currentImageryLayers;
+      const currentImageryLayersLength = currentImageryLayers.length;
+      const imageryLayers = this._globe.imageryLayers;
+      let hadExistingBaseLayer = false;
+      for (i = 0; i < currentImageryLayersLength; i++) {
+        const layersLength = imageryLayers.length;
+        for (let x = 0; x < layersLength; x++) {
+          const layer = imageryLayers.get(x);
+          if (layer === currentImageryLayers[i]) {
+            imageryLayers.remove(layer);
+            hadExistingBaseLayer = true;
+            break;
+          }
+        }
+      }
+      if (defined_default(value)) {
+        const newProviders = value.creationCommand();
+        if (Array.isArray(newProviders)) {
+          const newProvidersLength = newProviders.length;
+          this._currentImageryLayers = [];
+          for (i = newProvidersLength - 1; i >= 0; i--) {
+            const layer = ImageryLayer_default.fromProviderAsync(newProviders[i]);
+            imageryLayers.add(layer, 0);
+            this._currentImageryLayers.push(layer);
+          }
+        } else {
+          this._currentImageryLayers = [];
+          const layer = ImageryLayer_default.fromProviderAsync(newProviders);
+          layer.name = value.name;
+          if (hadExistingBaseLayer) {
+            imageryLayers.add(layer, 0);
+          } else {
+            const baseLayer = imageryLayers.get(0);
+            if (defined_default(baseLayer)) {
+              imageryLayers.remove(baseLayer);
+            }
+            imageryLayers.add(layer, 0);
+          }
+          this._currentImageryLayers.push(layer);
+        }
+      }
+      selectedImageryViewModel(value);
+      this.dropDownVisible = false;
+    }
+  });
+  this.selectedTerrain = void 0;
+  const selectedTerrainViewModel = knockout_default.observable();
+  knockout_default.defineProperty(this, "selectedTerrain", {
+    get: function() {
+      return selectedTerrainViewModel();
+    },
+    set: function(value) {
+      if (selectedTerrainViewModel() === value) {
+        this.dropDownVisible = false;
+        return;
+      }
+      let newProvider;
+      if (defined_default(value)) {
+        newProvider = value.creationCommand();
+      }
+      if (defined_default(newProvider) && !defined_default(newProvider.then)) {
+        this._globe.depthTestAgainstTerrain = !(newProvider instanceof EllipsoidTerrainProvider_default);
+        this._globe.terrainProvider = newProvider;
+      } else if (defined_default(newProvider)) {
+        let cancelUpdate = false;
+        const removeCancelListener = this._globe.terrainProviderChanged.addEventListener(
+          () => {
+            cancelUpdate = true;
+            removeCancelListener();
+          }
+        );
+        const terrain = new Terrain_default(newProvider);
+        const removeEventListener = terrain.readyEvent.addEventListener(
+          (terrainProvider) => {
+            if (cancelUpdate) {
+              return;
+            }
+            this._globe.depthTestAgainstTerrain = !(terrainProvider instanceof EllipsoidTerrainProvider_default);
+            this._globe.terrainProvider = terrainProvider;
+            removeEventListener();
+          }
+        );
+      }
+      selectedTerrainViewModel(value);
+      this.dropDownVisible = false;
+    }
+  });
   const that = this;
-  const canvas = scene.canvas;
-  const eventHandler = new ScreenSpaceEventHandler_default(canvas);
-  this._eventHandler = eventHandler;
-  this._scene = scene;
-  this._canvas = canvas;
-  this._primitive = void 0;
-  this._tile = void 0;
-  this._modelMatrixPrimitive = void 0;
-  this._performanceDisplay = void 0;
-  this._performanceContainer = performanceContainer;
-  const globe = this._scene.globe;
-  globe.depthTestAgainstTerrain = true;
-  this.frustums = false;
-  this.frustumPlanes = false;
-  this.performance = false;
-  this.shaderCacheText = "";
-  this.primitiveBoundingSphere = false;
-  this.primitiveReferenceFrame = false;
-  this.filterPrimitive = false;
-  this.tileBoundingSphere = false;
-  this.filterTile = false;
-  this.wireframe = false;
-  this.depthFrustum = 1;
-  this._numberOfFrustums = 1;
-  this.suspendUpdates = false;
-  this.tileCoordinates = false;
-  this.frustumStatisticText = false;
-  this.tileText = "";
-  this.hasPickedPrimitive = false;
-  this.hasPickedTile = false;
-  this.pickPrimitiveActive = false;
-  this.pickTileActive = false;
-  this.dropDownVisible = true;
-  this.generalVisible = true;
-  this.primitivesVisible = false;
-  this.terrainVisible = false;
-  this.depthFrustumText = "";
-  knockout_default.track(this, [
-    "frustums",
-    "frustumPlanes",
-    "performance",
-    "shaderCacheText",
-    "primitiveBoundingSphere",
-    "primitiveReferenceFrame",
-    "filterPrimitive",
-    "tileBoundingSphere",
-    "filterTile",
-    "wireframe",
-    "depthFrustum",
-    "suspendUpdates",
-    "tileCoordinates",
-    "frustumStatisticText",
-    "tileText",
-    "hasPickedPrimitive",
-    "hasPickedTile",
-    "pickPrimitiveActive",
-    "pickTileActive",
-    "dropDownVisible",
-    "generalVisible",
-    "primitivesVisible",
-    "terrainVisible",
-    "depthFrustumText"
-  ]);
   this._toggleDropDown = createCommand_default(function() {
     that.dropDownVisible = !that.dropDownVisible;
   });
-  this._toggleGeneral = createCommand_default(function() {
-    that.generalVisible = !that.generalVisible;
-  });
-  this._togglePrimitives = createCommand_default(function() {
-    that.primitivesVisible = !that.primitivesVisible;
-  });
-  this._toggleTerrain = createCommand_default(function() {
-    that.terrainVisible = !that.terrainVisible;
-  });
-  this._frustumsSubscription = knockout_default.getObservable(this, "frustums").subscribe(function(val) {
-    that._scene.debugShowFrustums = val;
-    that._scene.requestRender();
-  });
-  this._frustumPlanesSubscription = knockout_default.getObservable(this, "frustumPlanes").subscribe(function(val) {
-    that._scene.debugShowFrustumPlanes = val;
-    that._scene.requestRender();
-  });
-  this._performanceSubscription = knockout_default.getObservable(this, "performance").subscribe(function(val) {
-    if (val) {
-      that._performanceDisplay = new PerformanceDisplay_default({
-        container: that._performanceContainer
-      });
-    } else {
-      that._performanceContainer.innerHTML = "";
-    }
-  });
-  this._showPrimitiveBoundingSphere = createCommand_default(function() {
-    that._primitive.debugShowBoundingVolume = that.primitiveBoundingSphere;
-    that._scene.requestRender();
-    return true;
-  });
-  this._primitiveBoundingSphereSubscription = knockout_default.getObservable(this, "primitiveBoundingSphere").subscribe(function() {
-    that._showPrimitiveBoundingSphere();
-  });
-  this._showPrimitiveReferenceFrame = createCommand_default(function() {
-    if (that.primitiveReferenceFrame) {
-      const modelMatrix = that._primitive.modelMatrix;
-      that._modelMatrixPrimitive = new DebugModelMatrixPrimitive_default({
-        modelMatrix
-      });
-      that._scene.primitives.add(that._modelMatrixPrimitive);
-    } else if (defined_default(that._modelMatrixPrimitive)) {
-      that._scene.primitives.remove(that._modelMatrixPrimitive);
-      that._modelMatrixPrimitive = void 0;
-    }
-    that._scene.requestRender();
-    return true;
-  });
-  this._primitiveReferenceFrameSubscription = knockout_default.getObservable(this, "primitiveReferenceFrame").subscribe(function() {
-    that._showPrimitiveReferenceFrame();
-  });
-  this._doFilterPrimitive = createCommand_default(function() {
-    if (that.filterPrimitive) {
-      that._scene.debugCommandFilter = function(command) {
-        if (defined_default(that._modelMatrixPrimitive) && command.owner === that._modelMatrixPrimitive._primitive) {
-          return true;
-        } else if (defined_default(that._primitive)) {
-          return command.owner === that._primitive || command.owner === that._primitive._billboardCollection || command.owner.primitive === that._primitive;
-        }
-        return false;
-      };
-    } else {
-      that._scene.debugCommandFilter = void 0;
-    }
-    return true;
-  });
-  this._filterPrimitiveSubscription = knockout_default.getObservable(this, "filterPrimitive").subscribe(function() {
-    that._doFilterPrimitive();
-    that._scene.requestRender();
-  });
-  this._wireframeSubscription = knockout_default.getObservable(this, "wireframe").subscribe(function(val) {
-    globe._surface.tileProvider._debug.wireframe = val;
-    that._scene.requestRender();
-  });
-  this._depthFrustumSubscription = knockout_default.getObservable(this, "depthFrustum").subscribe(function(val) {
-    that._scene.debugShowDepthFrustum = val;
-    that._scene.requestRender();
-  });
-  this._incrementDepthFrustum = createCommand_default(function() {
-    const next = that.depthFrustum + 1;
-    that.depthFrustum = boundDepthFrustum(1, that._numberOfFrustums, next);
-    that._scene.requestRender();
-    return true;
-  });
-  this._decrementDepthFrustum = createCommand_default(function() {
-    const next = that.depthFrustum - 1;
-    that.depthFrustum = boundDepthFrustum(1, that._numberOfFrustums, next);
-    that._scene.requestRender();
-    return true;
-  });
-  this._suspendUpdatesSubscription = knockout_default.getObservable(this, "suspendUpdates").subscribe(function(val) {
-    globe._surface._debug.suspendLodUpdate = val;
-    if (!val) {
-      that.filterTile = false;
-    }
-  });
-  let tileBoundariesLayer;
-  this._showTileCoordinates = createCommand_default(function() {
-    if (that.tileCoordinates && !defined_default(tileBoundariesLayer)) {
-      tileBoundariesLayer = scene.imageryLayers.addImageryProvider(
-        new TileCoordinatesImageryProvider_default({
-          tilingScheme: scene.terrainProvider.tilingScheme
-        })
-      );
-    } else if (!that.tileCoordinates && defined_default(tileBoundariesLayer)) {
-      scene.imageryLayers.remove(tileBoundariesLayer);
-      tileBoundariesLayer = void 0;
-    }
-    return true;
-  });
-  this._tileCoordinatesSubscription = knockout_default.getObservable(this, "tileCoordinates").subscribe(function() {
-    that._showTileCoordinates();
-    that._scene.requestRender();
-  });
-  this._tileBoundingSphereSubscription = knockout_default.getObservable(this, "tileBoundingSphere").subscribe(function() {
-    that._showTileBoundingSphere();
-    that._scene.requestRender();
-  });
-  this._showTileBoundingSphere = createCommand_default(function() {
-    if (that.tileBoundingSphere) {
-      globe._surface.tileProvider._debug.boundingSphereTile = that._tile;
-    } else {
-      globe._surface.tileProvider._debug.boundingSphereTile = void 0;
-    }
-    that._scene.requestRender();
-    return true;
-  });
-  this._doFilterTile = createCommand_default(function() {
-    if (!that.filterTile) {
-      that.suspendUpdates = false;
-    } else {
-      that.suspendUpdates = true;
-      globe._surface._tilesToRender = [];
-      if (defined_default(that._tile) && that._tile.renderable) {
-        globe._surface._tilesToRender.push(that._tile);
-      }
-    }
-    return true;
-  });
-  this._filterTileSubscription = knockout_default.getObservable(this, "filterTile").subscribe(function() {
-    that.doFilterTile();
-    that._scene.requestRender();
-  });
-  function pickPrimitive(e) {
-    const newPick = that._scene.pick({
-      x: e.position.x,
-      y: e.position.y
-    });
-    if (defined_default(newPick)) {
-      that.primitive = defined_default(newPick.collection) ? newPick.collection : newPick.primitive;
-    }
-    that._scene.requestRender();
-    that.pickPrimitiveActive = false;
-  }
-  this._pickPrimitive = createCommand_default(function() {
-    that.pickPrimitiveActive = !that.pickPrimitiveActive;
-  });
-  this._pickPrimitiveActiveSubscription = knockout_default.getObservable(this, "pickPrimitiveActive").subscribe(function(val) {
-    if (val) {
-      eventHandler.setInputAction(
-        pickPrimitive,
-        ScreenSpaceEventType_default.LEFT_CLICK
-      );
-    } else {
-      eventHandler.removeInputAction(ScreenSpaceEventType_default.LEFT_CLICK);
-    }
-  });
-  function selectTile(e) {
-    let selectedTile;
-    const ellipsoid = globe.ellipsoid;
-    const ray = that._scene.camera.getPickRay(e.position, scratchPickRay2);
-    const cartesian11 = globe.pick(ray, that._scene, scratchPickCartesian3);
-    if (defined_default(cartesian11)) {
-      const cartographic2 = ellipsoid.cartesianToCartographic(cartesian11);
-      const tilesRendered = globe._surface.tileProvider._tilesToRenderByTextureCount;
-      for (let textureCount = 0; !selectedTile && textureCount < tilesRendered.length; ++textureCount) {
-        const tilesRenderedByTextureCount = tilesRendered[textureCount];
-        if (!defined_default(tilesRenderedByTextureCount)) {
-          continue;
-        }
-        for (let tileIndex = 0; !selectedTile && tileIndex < tilesRenderedByTextureCount.length; ++tileIndex) {
-          const tile = tilesRenderedByTextureCount[tileIndex];
-          if (Rectangle_default.contains(tile.rectangle, cartographic2)) {
-            selectedTile = tile;
-          }
-        }
-      }
-    }
-    that.tile = selectedTile;
-    that.pickTileActive = false;
-  }
-  this._pickTile = createCommand_default(function() {
-    that.pickTileActive = !that.pickTileActive;
-  });
-  this._pickTileActiveSubscription = knockout_default.getObservable(this, "pickTileActive").subscribe(function(val) {
-    if (val) {
-      eventHandler.setInputAction(
-        selectTile,
-        ScreenSpaceEventType_default.LEFT_CLICK
-      );
-    } else {
-      eventHandler.removeInputAction(ScreenSpaceEventType_default.LEFT_CLICK);
-    }
-  });
-  this._removePostRenderEvent = scene.postRender.addEventListener(function() {
-    that._update();
-  });
+  this.selectedImagery = defaultValue_default(
+    options.selectedImageryProviderViewModel,
+    imageryProviderViewModels[0]
+  );
+  this.selectedTerrain = options.selectedTerrainProviderViewModel;
 }
-Object.defineProperties(CesiumInspectorViewModel.prototype, {
-  /**
-   * Gets the scene to control.
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Scene}
-   */
-  scene: {
-    get: function() {
-      return this._scene;
-    }
-  },
-  /**
-   * Gets the container of the PerformanceDisplay
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Element}
-   */
-  performanceContainer: {
-    get: function() {
-      return this._performanceContainer;
-    }
-  },
+Object.defineProperties(BaseLayerPickerViewModel.prototype, {
   /**
    * Gets the command to toggle the visibility of the drop down.
-   * @memberof CesiumInspectorViewModel.prototype
+   * @memberof BaseLayerPickerViewModel.prototype
    *
    * @type {Command}
    */
@@ -244979,554 +245610,149 @@ Object.defineProperties(CesiumInspectorViewModel.prototype, {
     }
   },
   /**
-   * Gets the command to toggle the visibility of a BoundingSphere for a primitive
-   * @memberof CesiumInspectorViewModel.prototype
+   * Gets the globe.
+   * @memberof BaseLayerPickerViewModel.prototype
    *
-   * @type {Command}
+   * @type {Globe}
    */
-  showPrimitiveBoundingSphere: {
+  globe: {
     get: function() {
-      return this._showPrimitiveBoundingSphere;
-    }
-  },
-  /**
-   * Gets the command to toggle the visibility of a {@link DebugModelMatrixPrimitive} for the model matrix of a primitive
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  showPrimitiveReferenceFrame: {
-    get: function() {
-      return this._showPrimitiveReferenceFrame;
-    }
-  },
-  /**
-   * Gets the command to toggle a filter that renders only a selected primitive
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  doFilterPrimitive: {
-    get: function() {
-      return this._doFilterPrimitive;
-    }
-  },
-  /**
-   * Gets the command to increment the depth frustum index to be shown
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  incrementDepthFrustum: {
-    get: function() {
-      return this._incrementDepthFrustum;
-    }
-  },
-  /**
-   * Gets the command to decrement the depth frustum index to be shown
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  decrementDepthFrustum: {
-    get: function() {
-      return this._decrementDepthFrustum;
-    }
-  },
-  /**
-   * Gets the command to toggle the visibility of tile coordinates
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  showTileCoordinates: {
-    get: function() {
-      return this._showTileCoordinates;
-    }
-  },
-  /**
-   * Gets the command to toggle the visibility of a BoundingSphere for a selected tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  showTileBoundingSphere: {
-    get: function() {
-      return this._showTileBoundingSphere;
-    }
-  },
-  /**
-   * Gets the command to toggle a filter that renders only a selected tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  doFilterTile: {
-    get: function() {
-      return this._doFilterTile;
-    }
-  },
-  /**
-   * Gets the command to expand and collapse the general section
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  toggleGeneral: {
-    get: function() {
-      return this._toggleGeneral;
-    }
-  },
-  /**
-   * Gets the command to expand and collapse the primitives section
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  togglePrimitives: {
-    get: function() {
-      return this._togglePrimitives;
-    }
-  },
-  /**
-   * Gets the command to expand and collapse the terrain section
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  toggleTerrain: {
-    get: function() {
-      return this._toggleTerrain;
-    }
-  },
-  /**
-   * Gets the command to pick a primitive
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  pickPrimitive: {
-    get: function() {
-      return this._pickPrimitive;
-    }
-  },
-  /**
-   * Gets the command to pick a tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  pickTile: {
-    get: function() {
-      return this._pickTile;
-    }
-  },
-  /**
-   * Gets the command to pick a tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  selectParent: {
-    get: function() {
-      const that = this;
-      return createCommand_default(function() {
-        that.tile = that.tile.parent;
-      });
-    }
-  },
-  /**
-   * Gets the command to pick a tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  selectNW: {
-    get: function() {
-      const that = this;
-      return createCommand_default(function() {
-        that.tile = that.tile.northwestChild;
-      });
-    }
-  },
-  /**
-   * Gets the command to pick a tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  selectNE: {
-    get: function() {
-      const that = this;
-      return createCommand_default(function() {
-        that.tile = that.tile.northeastChild;
-      });
-    }
-  },
-  /**
-   * Gets the command to pick a tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  selectSW: {
-    get: function() {
-      const that = this;
-      return createCommand_default(function() {
-        that.tile = that.tile.southwestChild;
-      });
-    }
-  },
-  /**
-   * Gets the command to pick a tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  selectSE: {
-    get: function() {
-      const that = this;
-      return createCommand_default(function() {
-        that.tile = that.tile.southeastChild;
-      });
-    }
-  },
-  /**
-   * Gets or sets the current selected primitive
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  primitive: {
-    get: function() {
-      return this._primitive;
-    },
-    set: function(newPrimitive) {
-      const oldPrimitive = this._primitive;
-      if (newPrimitive !== oldPrimitive) {
-        this.hasPickedPrimitive = true;
-        if (defined_default(oldPrimitive)) {
-          oldPrimitive.debugShowBoundingVolume = false;
-        }
-        this._scene.debugCommandFilter = void 0;
-        if (defined_default(this._modelMatrixPrimitive)) {
-          this._scene.primitives.remove(this._modelMatrixPrimitive);
-          this._modelMatrixPrimitive = void 0;
-        }
-        this._primitive = newPrimitive;
-        newPrimitive.show = false;
-        setTimeout(function() {
-          newPrimitive.show = true;
-        }, 50);
-        this.showPrimitiveBoundingSphere();
-        this.showPrimitiveReferenceFrame();
-        this.doFilterPrimitive();
-      }
-    }
-  },
-  /**
-   * Gets or sets the current selected tile
-   * @memberof CesiumInspectorViewModel.prototype
-   *
-   * @type {Command}
-   */
-  tile: {
-    get: function() {
-      return this._tile;
-    },
-    set: function(newTile) {
-      if (defined_default(newTile)) {
-        this.hasPickedTile = true;
-        const oldTile = this._tile;
-        if (newTile !== oldTile) {
-          this.tileText = `L: ${newTile.level} X: ${newTile.x} Y: ${newTile.y}`;
-          this.tileText += `<br>SW corner: ${newTile.rectangle.west}, ${newTile.rectangle.south}`;
-          this.tileText += `<br>NE corner: ${newTile.rectangle.east}, ${newTile.rectangle.north}`;
-          const data = newTile.data;
-          if (defined_default(data) && defined_default(data.tileBoundingRegion)) {
-            this.tileText += `<br>Min: ${data.tileBoundingRegion.minimumHeight} Max: ${data.tileBoundingRegion.maximumHeight}`;
-          } else {
-            this.tileText += "<br>(Tile is not loaded)";
-          }
-        }
-        this._tile = newTile;
-        this.showTileBoundingSphere();
-        this.doFilterTile();
-      } else {
-        this.hasPickedTile = false;
-        this._tile = void 0;
-      }
+      return this._globe;
     }
   }
 });
-CesiumInspectorViewModel.prototype._update = function() {
-  if (this.frustums) {
-    this.frustumStatisticText = frustumStatisticsToString(
-      this._scene.debugFrustumStatistics
-    );
-  }
-  const numberOfFrustums = this._scene.numberOfFrustums;
-  this._numberOfFrustums = numberOfFrustums;
-  this.depthFrustum = boundDepthFrustum(1, numberOfFrustums, this.depthFrustum);
-  this.depthFrustumText = `${this.depthFrustum} of ${numberOfFrustums}`;
-  if (this.performance) {
-    this._performanceDisplay.update();
-  }
-  if (this.primitiveReferenceFrame) {
-    this._modelMatrixPrimitive.modelMatrix = this._primitive.modelMatrix;
-  }
-  this.shaderCacheText = `Cached shaders: ${this._scene.context.shaderCache.numberOfShaders}`;
-};
-CesiumInspectorViewModel.prototype.isDestroyed = function() {
-  return false;
-};
-CesiumInspectorViewModel.prototype.destroy = function() {
-  this._eventHandler.destroy();
-  this._removePostRenderEvent();
-  this._frustumsSubscription.dispose();
-  this._frustumPlanesSubscription.dispose();
-  this._performanceSubscription.dispose();
-  this._primitiveBoundingSphereSubscription.dispose();
-  this._primitiveReferenceFrameSubscription.dispose();
-  this._filterPrimitiveSubscription.dispose();
-  this._wireframeSubscription.dispose();
-  this._depthFrustumSubscription.dispose();
-  this._suspendUpdatesSubscription.dispose();
-  this._tileCoordinatesSubscription.dispose();
-  this._tileBoundingSphereSubscription.dispose();
-  this._filterTileSubscription.dispose();
-  this._pickPrimitiveActiveSubscription.dispose();
-  this._pickTileActiveSubscription.dispose();
-  return destroyObject_default(this);
-};
-var CesiumInspectorViewModel_default = CesiumInspectorViewModel;
+var BaseLayerPickerViewModel_default = BaseLayerPickerViewModel;
 
-// packages/widgets/Source/CesiumInspector/CesiumInspector.js
-function CesiumInspector(container, scene) {
+// packages/widgets/Source/BaseLayerPicker/BaseLayerPicker.js
+function BaseLayerPicker(container, options) {
   if (!defined_default(container)) {
     throw new DeveloperError_default("container is required.");
   }
-  if (!defined_default(scene)) {
-    throw new DeveloperError_default("scene is required.");
-  }
   container = getElement_default(container);
-  const performanceContainer = document.createElement("div");
-  const viewModel = new CesiumInspectorViewModel_default(scene, performanceContainer);
-  this._viewModel = viewModel;
-  this._container = container;
-  const element = document.createElement("div");
-  this._element = element;
-  const text2 = document.createElement("div");
-  text2.textContent = "Cesium Inspector";
-  text2.className = "cesium-cesiumInspector-button";
-  text2.setAttribute("data-bind", "click: toggleDropDown");
-  element.appendChild(text2);
-  element.className = "cesium-cesiumInspector";
+  const viewModel = new BaseLayerPickerViewModel_default(options);
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "cesium-button cesium-toolbar-button";
   element.setAttribute(
     "data-bind",
-    'css: { "cesium-cesiumInspector-visible" : dropDownVisible, "cesium-cesiumInspector-hidden" : !dropDownVisible }'
+    "attr: { title: buttonTooltip },click: toggleDropDown"
   );
-  container.appendChild(this._element);
-  const panel = document.createElement("div");
-  panel.className = "cesium-cesiumInspector-dropDown";
-  element.appendChild(panel);
-  const createSection = InspectorShared_default.createSection;
-  const createCheckbox = InspectorShared_default.createCheckbox;
-  const generalSection = createSection(
-    panel,
-    "General",
-    "generalVisible",
-    "toggleGeneral"
-  );
-  const debugShowFrustums = createCheckbox("Show Frustums", "frustums");
-  const frustumStatistics = document.createElement("div");
-  frustumStatistics.className = "cesium-cesiumInspector-frustumStatistics";
-  frustumStatistics.setAttribute(
+  container.appendChild(element);
+  const imgElement = document.createElement("img");
+  imgElement.setAttribute("draggable", "false");
+  imgElement.className = "cesium-baseLayerPicker-selected";
+  imgElement.setAttribute(
     "data-bind",
-    "visible: frustums, html: frustumStatisticText"
+    "attr: { src: buttonImageUrl }, visible: !!buttonImageUrl"
   );
-  debugShowFrustums.appendChild(frustumStatistics);
-  generalSection.appendChild(debugShowFrustums);
-  generalSection.appendChild(
-    createCheckbox("Show Frustum Planes", "frustumPlanes")
-  );
-  generalSection.appendChild(
-    createCheckbox("Performance Display", "performance")
-  );
-  performanceContainer.className = "cesium-cesiumInspector-performanceDisplay";
-  generalSection.appendChild(performanceContainer);
-  const shaderCacheDisplay = document.createElement("div");
-  shaderCacheDisplay.className = "cesium-cesiumInspector-shaderCache";
-  shaderCacheDisplay.setAttribute("data-bind", "html: shaderCacheText");
-  generalSection.appendChild(shaderCacheDisplay);
-  const depthFrustum = document.createElement("div");
-  generalSection.appendChild(depthFrustum);
-  const gLabel = document.createElement("span");
-  gLabel.setAttribute(
+  element.appendChild(imgElement);
+  const dropPanel = document.createElement("div");
+  dropPanel.className = "cesium-baseLayerPicker-dropDown";
+  dropPanel.setAttribute(
     "data-bind",
-    'html: "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frustum:"'
+    'css: { "cesium-baseLayerPicker-dropDown-visible" : dropDownVisible }'
   );
-  depthFrustum.appendChild(gLabel);
-  const gText = document.createElement("span");
-  gText.setAttribute("data-bind", "text: depthFrustumText");
-  depthFrustum.appendChild(gText);
-  const gMinusButton = document.createElement("input");
-  gMinusButton.type = "button";
-  gMinusButton.value = "-";
-  gMinusButton.className = "cesium-cesiumInspector-pickButton";
-  gMinusButton.setAttribute("data-bind", "click: decrementDepthFrustum");
-  depthFrustum.appendChild(gMinusButton);
-  const gPlusButton = document.createElement("input");
-  gPlusButton.type = "button";
-  gPlusButton.value = "+";
-  gPlusButton.className = "cesium-cesiumInspector-pickButton";
-  gPlusButton.setAttribute("data-bind", "click: incrementDepthFrustum");
-  depthFrustum.appendChild(gPlusButton);
-  const primSection = createSection(
-    panel,
-    "Primitives",
-    "primitivesVisible",
-    "togglePrimitives"
-  );
-  const pickPrimRequired = document.createElement("div");
-  pickPrimRequired.className = "cesium-cesiumInspector-pickSection";
-  primSection.appendChild(pickPrimRequired);
-  const pickPrimitiveButton = document.createElement("input");
-  pickPrimitiveButton.type = "button";
-  pickPrimitiveButton.value = "Pick a primitive";
-  pickPrimitiveButton.className = "cesium-cesiumInspector-pickButton";
-  pickPrimitiveButton.setAttribute(
+  container.appendChild(dropPanel);
+  const imageryTitle = document.createElement("div");
+  imageryTitle.className = "cesium-baseLayerPicker-sectionTitle";
+  imageryTitle.setAttribute(
     "data-bind",
-    'css: {"cesium-cesiumInspector-pickButtonHighlight" : pickPrimitiveActive}, click: pickPrimitive'
+    "visible: imageryProviderViewModels.length > 0"
   );
-  let buttonWrap = document.createElement("div");
-  buttonWrap.className = "cesium-cesiumInspector-center";
-  buttonWrap.appendChild(pickPrimitiveButton);
-  pickPrimRequired.appendChild(buttonWrap);
-  pickPrimRequired.appendChild(
-    createCheckbox(
-      "Show bounding sphere",
-      "primitiveBoundingSphere",
-      "hasPickedPrimitive"
-    )
-  );
-  pickPrimRequired.appendChild(
-    createCheckbox(
-      "Show reference frame",
-      "primitiveReferenceFrame",
-      "hasPickedPrimitive"
-    )
-  );
-  this._primitiveOnly = createCheckbox(
-    "Show only selected",
-    "filterPrimitive",
-    "hasPickedPrimitive"
-  );
-  pickPrimRequired.appendChild(this._primitiveOnly);
-  const terrainSection = createSection(
-    panel,
-    "Terrain",
-    "terrainVisible",
-    "toggleTerrain"
-  );
-  const pickTileRequired = document.createElement("div");
-  pickTileRequired.className = "cesium-cesiumInspector-pickSection";
-  terrainSection.appendChild(pickTileRequired);
-  const pickTileButton = document.createElement("input");
-  pickTileButton.type = "button";
-  pickTileButton.value = "Pick a tile";
-  pickTileButton.className = "cesium-cesiumInspector-pickButton";
-  pickTileButton.setAttribute(
+  imageryTitle.innerHTML = "Imagery";
+  dropPanel.appendChild(imageryTitle);
+  const imagerySection = document.createElement("div");
+  imagerySection.className = "cesium-baseLayerPicker-section";
+  imagerySection.setAttribute("data-bind", "foreach: _imageryProviders");
+  dropPanel.appendChild(imagerySection);
+  const imageryCategories = document.createElement("div");
+  imageryCategories.className = "cesium-baseLayerPicker-category";
+  imagerySection.appendChild(imageryCategories);
+  const categoryTitle = document.createElement("div");
+  categoryTitle.className = "cesium-baseLayerPicker-categoryTitle";
+  categoryTitle.setAttribute("data-bind", "text: name");
+  imageryCategories.appendChild(categoryTitle);
+  const imageryChoices = document.createElement("div");
+  imageryChoices.className = "cesium-baseLayerPicker-choices";
+  imageryChoices.setAttribute("data-bind", "foreach: providers");
+  imageryCategories.appendChild(imageryChoices);
+  const imageryProvider = document.createElement("div");
+  imageryProvider.className = "cesium-baseLayerPicker-item";
+  imageryProvider.setAttribute(
     "data-bind",
-    'css: {"cesium-cesiumInspector-pickButtonHighlight" : pickTileActive}, click: pickTile'
+    'css: { "cesium-baseLayerPicker-selectedItem" : $data === $parents[1].selectedImagery },attr: { title: tooltip },visible: creationCommand.canExecute,click: function($data) { $parents[1].selectedImagery = $data; }'
   );
-  buttonWrap = document.createElement("div");
-  buttonWrap.appendChild(pickTileButton);
-  buttonWrap.className = "cesium-cesiumInspector-center";
-  pickTileRequired.appendChild(buttonWrap);
-  const tileInfo = document.createElement("div");
-  pickTileRequired.appendChild(tileInfo);
-  const parentTile = document.createElement("input");
-  parentTile.type = "button";
-  parentTile.value = "Parent";
-  parentTile.className = "cesium-cesiumInspector-pickButton";
-  parentTile.setAttribute("data-bind", "click: selectParent");
-  const nwTile = document.createElement("input");
-  nwTile.type = "button";
-  nwTile.value = "NW";
-  nwTile.className = "cesium-cesiumInspector-pickButton";
-  nwTile.setAttribute("data-bind", "click: selectNW");
-  const neTile = document.createElement("input");
-  neTile.type = "button";
-  neTile.value = "NE";
-  neTile.className = "cesium-cesiumInspector-pickButton";
-  neTile.setAttribute("data-bind", "click: selectNE");
-  const swTile = document.createElement("input");
-  swTile.type = "button";
-  swTile.value = "SW";
-  swTile.className = "cesium-cesiumInspector-pickButton";
-  swTile.setAttribute("data-bind", "click: selectSW");
-  const seTile = document.createElement("input");
-  seTile.type = "button";
-  seTile.value = "SE";
-  seTile.className = "cesium-cesiumInspector-pickButton";
-  seTile.setAttribute("data-bind", "click: selectSE");
-  const tileText = document.createElement("div");
-  tileText.className = "cesium-cesiumInspector-tileText";
-  tileInfo.className = "cesium-cesiumInspector-frustumStatistics";
-  tileInfo.appendChild(tileText);
-  tileInfo.setAttribute("data-bind", "visible: hasPickedTile");
-  tileText.setAttribute("data-bind", "html: tileText");
-  const relativeText = document.createElement("div");
-  relativeText.className = "cesium-cesiumInspector-relativeText";
-  relativeText.textContent = "Select relative:";
-  tileInfo.appendChild(relativeText);
-  const table2 = document.createElement("table");
-  const tr1 = document.createElement("tr");
-  const tr2 = document.createElement("tr");
-  const td1 = document.createElement("td");
-  td1.appendChild(parentTile);
-  const td2 = document.createElement("td");
-  td2.appendChild(nwTile);
-  const td3 = document.createElement("td");
-  td3.appendChild(neTile);
-  tr1.appendChild(td1);
-  tr1.appendChild(td2);
-  tr1.appendChild(td3);
-  const td4 = document.createElement("td");
-  const td5 = document.createElement("td");
-  td5.appendChild(swTile);
-  const td6 = document.createElement("td");
-  td6.appendChild(seTile);
-  tr2.appendChild(td4);
-  tr2.appendChild(td5);
-  tr2.appendChild(td6);
-  table2.appendChild(tr1);
-  table2.appendChild(tr2);
-  tileInfo.appendChild(table2);
-  pickTileRequired.appendChild(
-    createCheckbox(
-      "Show bounding volume",
-      "tileBoundingSphere",
-      "hasPickedTile"
-    )
+  imageryChoices.appendChild(imageryProvider);
+  const providerIcon = document.createElement("img");
+  providerIcon.className = "cesium-baseLayerPicker-itemIcon";
+  providerIcon.setAttribute("data-bind", "attr: { src: iconUrl }");
+  providerIcon.setAttribute("draggable", "false");
+  imageryProvider.appendChild(providerIcon);
+  const providerLabel = document.createElement("div");
+  providerLabel.className = "cesium-baseLayerPicker-itemLabel";
+  providerLabel.setAttribute("data-bind", "text: name");
+  imageryProvider.appendChild(providerLabel);
+  const terrainTitle = document.createElement("div");
+  terrainTitle.className = "cesium-baseLayerPicker-sectionTitle";
+  terrainTitle.setAttribute(
+    "data-bind",
+    "visible: terrainProviderViewModels.length > 0"
   );
-  pickTileRequired.appendChild(
-    createCheckbox("Show only selected", "filterTile", "hasPickedTile")
+  terrainTitle.innerHTML = "Terrain";
+  dropPanel.appendChild(terrainTitle);
+  const terrainSection = document.createElement("div");
+  terrainSection.className = "cesium-baseLayerPicker-section";
+  terrainSection.setAttribute("data-bind", "foreach: _terrainProviders");
+  dropPanel.appendChild(terrainSection);
+  const terrainCategories = document.createElement("div");
+  terrainCategories.className = "cesium-baseLayerPicker-category";
+  terrainSection.appendChild(terrainCategories);
+  const terrainCategoryTitle = document.createElement("div");
+  terrainCategoryTitle.className = "cesium-baseLayerPicker-categoryTitle";
+  terrainCategoryTitle.setAttribute("data-bind", "text: name");
+  terrainCategories.appendChild(terrainCategoryTitle);
+  const terrainChoices = document.createElement("div");
+  terrainChoices.className = "cesium-baseLayerPicker-choices";
+  terrainChoices.setAttribute("data-bind", "foreach: providers");
+  terrainCategories.appendChild(terrainChoices);
+  const terrainProvider = document.createElement("div");
+  terrainProvider.className = "cesium-baseLayerPicker-item";
+  terrainProvider.setAttribute(
+    "data-bind",
+    'css: { "cesium-baseLayerPicker-selectedItem" : $data === $parents[1].selectedTerrain },attr: { title: tooltip },visible: creationCommand.canExecute,click: function($data) { $parents[1].selectedTerrain = $data; }'
   );
-  terrainSection.appendChild(createCheckbox("Wireframe", "wireframe"));
-  terrainSection.appendChild(
-    createCheckbox("Suspend LOD update", "suspendUpdates")
-  );
-  terrainSection.appendChild(
-    createCheckbox("Show tile coordinates", "tileCoordinates")
-  );
-  knockout_default.applyBindings(viewModel, this._element);
+  terrainChoices.appendChild(terrainProvider);
+  const terrainProviderIcon = document.createElement("img");
+  terrainProviderIcon.className = "cesium-baseLayerPicker-itemIcon";
+  terrainProviderIcon.setAttribute("data-bind", "attr: { src: iconUrl }");
+  terrainProviderIcon.setAttribute("draggable", "false");
+  terrainProvider.appendChild(terrainProviderIcon);
+  const terrainProviderLabel = document.createElement("div");
+  terrainProviderLabel.className = "cesium-baseLayerPicker-itemLabel";
+  terrainProviderLabel.setAttribute("data-bind", "text: name");
+  terrainProvider.appendChild(terrainProviderLabel);
+  knockout_default.applyBindings(viewModel, element);
+  knockout_default.applyBindings(viewModel, dropPanel);
+  this._viewModel = viewModel;
+  this._container = container;
+  this._element = element;
+  this._dropPanel = dropPanel;
+  this._closeDropDown = function(e) {
+    if (!(element.contains(e.target) || dropPanel.contains(e.target))) {
+      viewModel.dropDownVisible = false;
+    }
+  };
+  if (FeatureDetection_default.supportsPointerEvents()) {
+    document.addEventListener("pointerdown", this._closeDropDown, true);
+  } else {
+    document.addEventListener("mousedown", this._closeDropDown, true);
+    document.addEventListener("touchstart", this._closeDropDown, true);
+  }
 }
-Object.defineProperties(CesiumInspector.prototype, {
+Object.defineProperties(BaseLayerPicker.prototype, {
   /**
    * Gets the parent container.
-   * @memberof CesiumInspector.prototype
+   * @memberof BaseLayerPicker.prototype
    *
    * @type {Element}
    */
@@ -245537,9 +245763,9 @@ Object.defineProperties(CesiumInspector.prototype, {
   },
   /**
    * Gets the view model.
-   * @memberof CesiumInspector.prototype
+   * @memberof BaseLayerPicker.prototype
    *
-   * @type {CesiumInspectorViewModel}
+   * @type {BaseLayerPickerViewModel}
    */
   viewModel: {
     get: function() {
@@ -245547,16 +245773,356 @@ Object.defineProperties(CesiumInspector.prototype, {
     }
   }
 });
-CesiumInspector.prototype.isDestroyed = function() {
+BaseLayerPicker.prototype.isDestroyed = function() {
   return false;
 };
-CesiumInspector.prototype.destroy = function() {
+BaseLayerPicker.prototype.destroy = function() {
+  if (FeatureDetection_default.supportsPointerEvents()) {
+    document.removeEventListener("pointerdown", this._closeDropDown, true);
+  } else {
+    document.removeEventListener("mousedown", this._closeDropDown, true);
+    document.removeEventListener("touchstart", this._closeDropDown, true);
+  }
   knockout_default.cleanNode(this._element);
+  knockout_default.cleanNode(this._dropPanel);
   this._container.removeChild(this._element);
-  this.viewModel.destroy();
+  this._container.removeChild(this._dropPanel);
   return destroyObject_default(this);
 };
-var CesiumInspector_default = CesiumInspector;
+var BaseLayerPicker_default = BaseLayerPicker;
+
+// packages/widgets/Source/BaseLayerPicker/ProviderViewModel.js
+function ProviderViewModel(options) {
+  if (!defined_default(options.name)) {
+    throw new DeveloperError_default("options.name is required.");
+  }
+  if (!defined_default(options.tooltip)) {
+    throw new DeveloperError_default("options.tooltip is required.");
+  }
+  if (!defined_default(options.iconUrl)) {
+    throw new DeveloperError_default("options.iconUrl is required.");
+  }
+  if (typeof options.creationFunction !== "function") {
+    throw new DeveloperError_default("options.creationFunction is required.");
+  }
+  let creationCommand = options.creationFunction;
+  if (!defined_default(creationCommand.canExecute)) {
+    creationCommand = createCommand_default(creationCommand);
+  }
+  this._creationCommand = creationCommand;
+  this.name = options.name;
+  this.tooltip = options.tooltip;
+  this.iconUrl = options.iconUrl;
+  this._category = defaultValue_default(options.category, "");
+  knockout_default.track(this, ["name", "tooltip", "iconUrl"]);
+}
+Object.defineProperties(ProviderViewModel.prototype, {
+  /**
+   * Gets the Command that creates one or more providers which will be added to
+   * the globe when this item is selected.
+   * @memberof ProviderViewModel.prototype
+   * @memberof ProviderViewModel.prototype
+   * @type {Command}
+   * @readonly
+   */
+  creationCommand: {
+    get: function() {
+      return this._creationCommand;
+    }
+  },
+  /**
+   * Gets the category
+   * @type {string}
+   * @memberof ProviderViewModel.prototype
+   * @readonly
+   */
+  category: {
+    get: function() {
+      return this._category;
+    }
+  }
+});
+var ProviderViewModel_default = ProviderViewModel;
+
+// packages/widgets/Source/BaseLayerPicker/createDefaultImageryProviderViewModels.js
+function createDefaultImageryProviderViewModels() {
+  const providerViewModels = [];
+  const useRetinaTiles = devicePixelRatio >= 2;
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Bing Maps Aerial",
+      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/bingAerial.png"),
+      tooltip: "Bing Maps aerial imagery, provided by Cesium ion",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return createWorldImageryAsync_default({
+          style: IonWorldImageryStyle_default.AERIAL
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Bing Maps Aerial with Labels",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/bingAerialLabels.png"
+      ),
+      tooltip: "Bing Maps aerial imagery with labels, provided by Cesium ion",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return createWorldImageryAsync_default({
+          style: IonWorldImageryStyle_default.AERIAL_WITH_LABELS
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Bing Maps Roads",
+      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/bingRoads.png"),
+      tooltip: "Bing Maps standard road maps, provided by Cesium ion",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return createWorldImageryAsync_default({
+          style: IonWorldImageryStyle_default.ROAD
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "ArcGIS World Imagery",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/ArcGisMapServiceWorldImagery.png"
+      ),
+      tooltip: "ArcGIS World Imagery provides one meter or better satellite and aerial imagery in many parts of the world and lower resolution satellite imagery worldwide. The map includes 15m TerraColor imagery at small and mid-scales (~1:591M down to ~1:288k) for the world. The map features Maxar imagery at 0.3m resolution for select metropolitan areas around the world, 0.5m resolution across the United States and parts of Western Europe, and 1m resolution imagery across the rest of the world. In addition to commercial sources, the World Imagery map features high-resolution aerial photography contributed by the GIS User Community. This imagery ranges from 0.3m to 0.03m resolution (down to ~1:280 nin select communities). For more information on this map, including the terms of use, visit us online at \nhttps://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9",
+      category: "Other",
+      creationFunction: function() {
+        return ArcGisMapServerImageryProvider_default.fromBasemapType(
+          ArcGisBaseMapType_default.SATELLITE,
+          {
+            enablePickFeatures: false
+          }
+        );
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "ArcGIS World Hillshade",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/ArcGisMapServiceWorldHillshade.png"
+      ),
+      tooltip: "ArcGIS World Hillshade map portrays elevation as an artistic hillshade. This map is designed to be used as a backdrop for topographical, soil, hydro, landcover or other outdoor recreational maps. The map was compiled from a variety of sources from several data providers. The basemap has global coverage down to a scale of ~1:72k. In select areas of the United States and Europe, coverage is available down to ~1:9k. For more information on this map, including the terms of use, visit us online at \nhttps://www.arcgis.com/home/item.html?id=1b243539f4514b6ba35e7d995890db1d",
+      category: "Other",
+      creationFunction: function() {
+        return ArcGisMapServerImageryProvider_default.fromBasemapType(
+          ArcGisBaseMapType_default.HILLSHADE,
+          {
+            enablePickFeatures: false
+          }
+        );
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Esri World Ocean",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/ArcGisMapServiceWorldOcean.png"
+      ),
+      tooltip: "ArcGIS World Ocean map is designed to be used as a base map by marine GIS professionals and as a reference map by anyone interested in ocean data.  The base map features marine bathymetry. Land features include inland waters and roads overlaid on land cover and shaded relief imagery. The map was compiled from a variety of best available sources from several data providers, including General Bathymetric Chart of the Oceans GEBCO_08 Grid, National Oceanic and Atmospheric Administration (NOAA), and National Geographic, Garmin, HERE, Geonames.org, and Esri, and various other contributors. The base map currently provides coverage for the world down to a scale of ~1:577k, and coverage down to 1:72k in US coastal areas, and various other areas. Coverage down to ~ 1:9k is available limited areas based on regional hydrographic survey data. The base map was designed and developed by Esri. For more information on this map, including our terms of use, visit us online at \nhttps://www.arcgis.com/home/item.html?id=1e126e7520f9466c9ca28b8f28b5e500",
+      category: "Other",
+      creationFunction: function() {
+        return ArcGisMapServerImageryProvider_default.fromBasemapType(
+          ArcGisBaseMapType_default.OCEANS,
+          {
+            enablePickFeatures: false
+          }
+        );
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Open\xADStreet\xADMap",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/openStreetMap.png"
+      ),
+      tooltip: "OpenStreetMap (OSM) is a collaborative project to create a free editable map of the world.\nhttp://www.openstreetmap.org",
+      category: "Other",
+      creationFunction: function() {
+        return new OpenStreetMapImageryProvider_default({
+          url: "https://tile.openstreetmap.org/"
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Stadia x Stamen Watercolor",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/stamenWatercolor.png"
+      ),
+      tooltip: "Based on the original basemaps created for the Knight Foundation and reminiscent of hand drawn maps, the watercolor maps from Stamen Design apply raster effect area washes and organic edges over a paper texture to add warm pop to any map.\nhttps://docs.stadiamaps.com/map-styles/stamen-watercolor/",
+      category: "Other",
+      creationFunction: function() {
+        return new OpenStreetMapImageryProvider_default({
+          url: "https://tiles.stadiamaps.com/tiles/stamen_watercolor/",
+          fileExtension: "jpg",
+          credit: `&copy; <a href="https://stamen.com/" target="_blank">Stamen Design</a>
+           &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
+           &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
+           &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Stadia x Stamen Toner",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/stamenToner.png"
+      ),
+      tooltip: "Based on the original basemaps created for the Knight Foundation and the most popular of the excellent styles from Stamen Design, these high-contrast B+W (black and white) maps are the perfect backdrop for your colorful and eye-catching overlays.\nhttps://docs.stadiamaps.com/map-styles/stamen-toner/",
+      category: "Other",
+      creationFunction: function() {
+        return new OpenStreetMapImageryProvider_default({
+          url: "https://tiles.stadiamaps.com/tiles/stamen_toner/",
+          retinaTiles: useRetinaTiles,
+          credit: `&copy; <a href="https://stamen.com/" target="_blank">Stamen Design</a>
+            &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
+            &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
+            &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Stadia Alidade Smooth",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/stadiaAlidadeSmooth.png"
+      ),
+      tooltip: "Stadia's custom Alidade Smooth style is designed for maps that use a lot of markers or overlays. It features a muted color scheme and fewer points of interest to allow your added data to shine.\nhttps://docs.stadiamaps.com/map-styles/alidade-smooth/",
+      category: "Other",
+      creationFunction: function() {
+        return new OpenStreetMapImageryProvider_default({
+          url: "https://tiles.stadiamaps.com/tiles/alidade_smooth/",
+          retinaTiles: useRetinaTiles,
+          credit: `&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
+            &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
+            &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Stadia Alidade Smooth Dark",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/stadiaAlidadeSmoothDark.png"
+      ),
+      tooltip: "Stadia Alidade Smooth Dark, like its lighter cousin, is also designed to stay out of the way. It just flips the dark mode switch on the color scheme. With the lights out, your data can now literally shine.\nhttps://docs.stadiamaps.com/map-styles/alidade-smooth-dark/",
+      category: "Other",
+      creationFunction: function() {
+        return new OpenStreetMapImageryProvider_default({
+          url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/",
+          retinaTiles: useRetinaTiles,
+          credit: `&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
+            &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
+            &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
+        });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Sentinel-2",
+      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/sentinel-2.png"),
+      tooltip: "Sentinel-2 cloudless by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016 and 2017).",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return IonImageryProvider_default.fromAssetId(3954);
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Blue Marble",
+      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/blueMarble.png"),
+      tooltip: "Blue Marble Next Generation July, 2004 imagery from NASA.",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return IonImageryProvider_default.fromAssetId(3845);
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Earth at night",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/earthAtNight.png"
+      ),
+      tooltip: "The Earth at night, also known as The Black Marble, is a 500 meter resolution global composite imagery layer released by NASA.",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return IonImageryProvider_default.fromAssetId(3812);
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Natural Earth\xA0II",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/ImageryProviders/naturalEarthII.png"
+      ),
+      tooltip: "Natural Earth II, darkened for contrast.\nhttp://www.naturalearthdata.com/",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return TileMapServiceImageryProvider_default.fromUrl(
+          buildModuleUrl_default("Assets/Textures/NaturalEarthII")
+        );
+      }
+    })
+  );
+  return providerViewModels;
+}
+var createDefaultImageryProviderViewModels_default = createDefaultImageryProviderViewModels;
+
+// packages/widgets/Source/BaseLayerPicker/createDefaultTerrainProviderViewModels.js
+function createDefaultTerrainProviderViewModels() {
+  const providerViewModels = [];
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "WGS84 Ellipsoid",
+      iconUrl: buildModuleUrl_default("Widgets/Images/TerrainProviders/Ellipsoid.png"),
+      tooltip: "WGS84 standard ellipsoid, also known as EPSG:4326",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return new EllipsoidTerrainProvider_default({ ellipsoid: Ellipsoid_default.WGS84 });
+      }
+    })
+  );
+  providerViewModels.push(
+    new ProviderViewModel_default({
+      name: "Cesium World Terrain",
+      iconUrl: buildModuleUrl_default(
+        "Widgets/Images/TerrainProviders/CesiumWorldTerrain.png"
+      ),
+      tooltip: "High-resolution global terrain tileset curated from several datasources and hosted by Cesium ion",
+      category: "Cesium ion",
+      creationFunction: function() {
+        return createWorldTerrainAsync_default({
+          requestWaterMask: true,
+          requestVertexNormals: true
+        });
+      }
+    })
+  );
+  return providerViewModels;
+}
+var createDefaultTerrainProviderViewModels_default = createDefaultTerrainProviderViewModels;
 
 // packages/widgets/Source/Cesium3DTilesInspector/Cesium3DTilesInspectorViewModel.js
 function getPickTileset(viewModel) {
@@ -246955,223 +247521,351 @@ Cesium3DTilesInspector.prototype.destroy = function() {
 };
 var Cesium3DTilesInspector_default = Cesium3DTilesInspector;
 
-// packages/widgets/Source/BaseLayerPicker/BaseLayerPickerViewModel.js
-function BaseLayerPickerViewModel(options) {
-  options = defaultValue_default(options, defaultValue_default.EMPTY_OBJECT);
-  const globe = options.globe;
-  const imageryProviderViewModels = defaultValue_default(
-    options.imageryProviderViewModels,
-    []
-  );
-  const terrainProviderViewModels = defaultValue_default(
-    options.terrainProviderViewModels,
-    []
-  );
-  if (!defined_default(globe)) {
-    throw new DeveloperError_default("globe is required");
-  }
-  this._globe = globe;
-  this.imageryProviderViewModels = imageryProviderViewModels.slice(0);
-  this.terrainProviderViewModels = terrainProviderViewModels.slice(0);
-  this.dropDownVisible = false;
-  knockout_default.track(this, [
-    "imageryProviderViewModels",
-    "terrainProviderViewModels",
-    "dropDownVisible"
-  ]);
-  const imageryObservable = knockout_default.getObservable(
-    this,
-    "imageryProviderViewModels"
-  );
-  const imageryProviders = knockout_default.pureComputed(function() {
-    const providers = imageryObservable();
-    const categories = {};
-    let i;
-    for (i = 0; i < providers.length; i++) {
-      const provider = providers[i];
-      const category = provider.category;
-      if (defined_default(categories[category])) {
-        categories[category].push(provider);
-      } else {
-        categories[category] = [provider];
-      }
-    }
-    const allCategoryNames = Object.keys(categories);
-    const result = [];
-    for (i = 0; i < allCategoryNames.length; i++) {
-      const name = allCategoryNames[i];
-      result.push({
-        name,
-        providers: categories[name]
-      });
-    }
-    return result;
-  });
-  this._imageryProviders = imageryProviders;
-  const terrainObservable = knockout_default.getObservable(
-    this,
-    "terrainProviderViewModels"
-  );
-  const terrainProviders = knockout_default.pureComputed(function() {
-    const providers = terrainObservable();
-    const categories = {};
-    let i;
-    for (i = 0; i < providers.length; i++) {
-      const provider = providers[i];
-      const category = provider.category;
-      if (defined_default(categories[category])) {
-        categories[category].push(provider);
-      } else {
-        categories[category] = [provider];
-      }
-    }
-    const allCategoryNames = Object.keys(categories);
-    const result = [];
-    for (i = 0; i < allCategoryNames.length; i++) {
-      const name = allCategoryNames[i];
-      result.push({
-        name,
-        providers: categories[name]
-      });
-    }
-    return result;
-  });
-  this._terrainProviders = terrainProviders;
-  this.buttonTooltip = void 0;
-  knockout_default.defineProperty(this, "buttonTooltip", function() {
-    const selectedImagery = this.selectedImagery;
-    const selectedTerrain = this.selectedTerrain;
-    const imageryTip = defined_default(selectedImagery) ? selectedImagery.name : void 0;
-    const terrainTip = defined_default(selectedTerrain) ? selectedTerrain.name : void 0;
-    if (defined_default(imageryTip) && defined_default(terrainTip)) {
-      return `${imageryTip}
-${terrainTip}`;
-    } else if (defined_default(imageryTip)) {
-      return imageryTip;
-    }
-    return terrainTip;
-  });
-  this.buttonImageUrl = void 0;
-  knockout_default.defineProperty(this, "buttonImageUrl", function() {
-    const selectedImagery = this.selectedImagery;
-    if (defined_default(selectedImagery)) {
-      return selectedImagery.iconUrl;
-    }
-  });
-  this.selectedImagery = void 0;
-  const selectedImageryViewModel = knockout_default.observable();
-  this._currentImageryLayers = [];
-  knockout_default.defineProperty(this, "selectedImagery", {
-    get: function() {
-      return selectedImageryViewModel();
-    },
-    set: function(value) {
-      if (selectedImageryViewModel() === value) {
-        this.dropDownVisible = false;
-        return;
-      }
-      let i;
-      const currentImageryLayers = this._currentImageryLayers;
-      const currentImageryLayersLength = currentImageryLayers.length;
-      const imageryLayers = this._globe.imageryLayers;
-      let hadExistingBaseLayer = false;
-      for (i = 0; i < currentImageryLayersLength; i++) {
-        const layersLength = imageryLayers.length;
-        for (let x = 0; x < layersLength; x++) {
-          const layer = imageryLayers.get(x);
-          if (layer === currentImageryLayers[i]) {
-            imageryLayers.remove(layer);
-            hadExistingBaseLayer = true;
-            break;
-          }
-        }
-      }
-      if (defined_default(value)) {
-        const newProviders = value.creationCommand();
-        if (Array.isArray(newProviders)) {
-          const newProvidersLength = newProviders.length;
-          this._currentImageryLayers = [];
-          for (i = newProvidersLength - 1; i >= 0; i--) {
-            const layer = ImageryLayer_default.fromProviderAsync(newProviders[i]);
-            imageryLayers.add(layer, 0);
-            this._currentImageryLayers.push(layer);
-          }
+// packages/widgets/Source/CesiumInspector/CesiumInspectorViewModel.js
+function frustumStatisticsToString(statistics2) {
+  let str;
+  if (defined_default(statistics2)) {
+    str = "Command Statistics";
+    const com = statistics2.commandsInFrustums;
+    for (const n in com) {
+      if (com.hasOwnProperty(n)) {
+        let num = parseInt(n, 10);
+        let s;
+        if (num === 7) {
+          s = "1, 2 and 3";
         } else {
-          this._currentImageryLayers = [];
-          const layer = ImageryLayer_default.fromProviderAsync(newProviders);
-          layer.name = value.name;
-          if (hadExistingBaseLayer) {
-            imageryLayers.add(layer, 0);
-          } else {
-            const baseLayer = imageryLayers.get(0);
-            if (defined_default(baseLayer)) {
-              imageryLayers.remove(baseLayer);
+          const f = [];
+          for (let i = 2; i >= 0; i--) {
+            const p = Math.pow(2, i);
+            if (num >= p) {
+              f.push(i + 1);
+              num -= p;
             }
-            imageryLayers.add(layer, 0);
           }
-          this._currentImageryLayers.push(layer);
+          s = f.reverse().join(" and ");
         }
+        str += `<br>&nbsp;&nbsp;&nbsp;&nbsp;${com[n]} in frustum ${s}`;
       }
-      selectedImageryViewModel(value);
-      this.dropDownVisible = false;
     }
-  });
-  this.selectedTerrain = void 0;
-  const selectedTerrainViewModel = knockout_default.observable();
-  knockout_default.defineProperty(this, "selectedTerrain", {
-    get: function() {
-      return selectedTerrainViewModel();
-    },
-    set: function(value) {
-      if (selectedTerrainViewModel() === value) {
-        this.dropDownVisible = false;
-        return;
-      }
-      let newProvider;
-      if (defined_default(value)) {
-        newProvider = value.creationCommand();
-      }
-      if (defined_default(newProvider) && !defined_default(newProvider.then)) {
-        this._globe.depthTestAgainstTerrain = !(newProvider instanceof EllipsoidTerrainProvider_default);
-        this._globe.terrainProvider = newProvider;
-      } else if (defined_default(newProvider)) {
-        let cancelUpdate = false;
-        const removeCancelListener = this._globe.terrainProviderChanged.addEventListener(
-          () => {
-            cancelUpdate = true;
-            removeCancelListener();
-          }
-        );
-        const terrain = new Terrain_default(newProvider);
-        const removeEventListener = terrain.readyEvent.addEventListener(
-          (terrainProvider) => {
-            if (cancelUpdate) {
-              return;
-            }
-            this._globe.depthTestAgainstTerrain = !(terrainProvider instanceof EllipsoidTerrainProvider_default);
-            this._globe.terrainProvider = terrainProvider;
-            removeEventListener();
-          }
-        );
-      }
-      selectedTerrainViewModel(value);
-      this.dropDownVisible = false;
-    }
-  });
+    str += `<br>Total: ${statistics2.totalCommands}`;
+  }
+  return str;
+}
+function boundDepthFrustum(lower, upper, proposed) {
+  let bounded = Math.min(proposed, upper);
+  bounded = Math.max(bounded, lower);
+  return bounded;
+}
+var scratchPickRay2 = new Ray_default();
+var scratchPickCartesian3 = new Cartesian3_default();
+function CesiumInspectorViewModel(scene, performanceContainer) {
+  if (!defined_default(scene)) {
+    throw new DeveloperError_default("scene is required");
+  }
+  if (!defined_default(performanceContainer)) {
+    throw new DeveloperError_default("performanceContainer is required");
+  }
   const that = this;
+  const canvas = scene.canvas;
+  const eventHandler = new ScreenSpaceEventHandler_default(canvas);
+  this._eventHandler = eventHandler;
+  this._scene = scene;
+  this._canvas = canvas;
+  this._primitive = void 0;
+  this._tile = void 0;
+  this._modelMatrixPrimitive = void 0;
+  this._performanceDisplay = void 0;
+  this._performanceContainer = performanceContainer;
+  const globe = this._scene.globe;
+  globe.depthTestAgainstTerrain = true;
+  this.frustums = false;
+  this.frustumPlanes = false;
+  this.performance = false;
+  this.shaderCacheText = "";
+  this.primitiveBoundingSphere = false;
+  this.primitiveReferenceFrame = false;
+  this.filterPrimitive = false;
+  this.tileBoundingSphere = false;
+  this.filterTile = false;
+  this.wireframe = false;
+  this.depthFrustum = 1;
+  this._numberOfFrustums = 1;
+  this.suspendUpdates = false;
+  this.tileCoordinates = false;
+  this.frustumStatisticText = false;
+  this.tileText = "";
+  this.hasPickedPrimitive = false;
+  this.hasPickedTile = false;
+  this.pickPrimitiveActive = false;
+  this.pickTileActive = false;
+  this.dropDownVisible = true;
+  this.generalVisible = true;
+  this.primitivesVisible = false;
+  this.terrainVisible = false;
+  this.depthFrustumText = "";
+  knockout_default.track(this, [
+    "frustums",
+    "frustumPlanes",
+    "performance",
+    "shaderCacheText",
+    "primitiveBoundingSphere",
+    "primitiveReferenceFrame",
+    "filterPrimitive",
+    "tileBoundingSphere",
+    "filterTile",
+    "wireframe",
+    "depthFrustum",
+    "suspendUpdates",
+    "tileCoordinates",
+    "frustumStatisticText",
+    "tileText",
+    "hasPickedPrimitive",
+    "hasPickedTile",
+    "pickPrimitiveActive",
+    "pickTileActive",
+    "dropDownVisible",
+    "generalVisible",
+    "primitivesVisible",
+    "terrainVisible",
+    "depthFrustumText"
+  ]);
   this._toggleDropDown = createCommand_default(function() {
     that.dropDownVisible = !that.dropDownVisible;
   });
-  this.selectedImagery = defaultValue_default(
-    options.selectedImageryProviderViewModel,
-    imageryProviderViewModels[0]
-  );
-  this.selectedTerrain = options.selectedTerrainProviderViewModel;
+  this._toggleGeneral = createCommand_default(function() {
+    that.generalVisible = !that.generalVisible;
+  });
+  this._togglePrimitives = createCommand_default(function() {
+    that.primitivesVisible = !that.primitivesVisible;
+  });
+  this._toggleTerrain = createCommand_default(function() {
+    that.terrainVisible = !that.terrainVisible;
+  });
+  this._frustumsSubscription = knockout_default.getObservable(this, "frustums").subscribe(function(val) {
+    that._scene.debugShowFrustums = val;
+    that._scene.requestRender();
+  });
+  this._frustumPlanesSubscription = knockout_default.getObservable(this, "frustumPlanes").subscribe(function(val) {
+    that._scene.debugShowFrustumPlanes = val;
+    that._scene.requestRender();
+  });
+  this._performanceSubscription = knockout_default.getObservable(this, "performance").subscribe(function(val) {
+    if (val) {
+      that._performanceDisplay = new PerformanceDisplay_default({
+        container: that._performanceContainer
+      });
+    } else {
+      that._performanceContainer.innerHTML = "";
+    }
+  });
+  this._showPrimitiveBoundingSphere = createCommand_default(function() {
+    that._primitive.debugShowBoundingVolume = that.primitiveBoundingSphere;
+    that._scene.requestRender();
+    return true;
+  });
+  this._primitiveBoundingSphereSubscription = knockout_default.getObservable(this, "primitiveBoundingSphere").subscribe(function() {
+    that._showPrimitiveBoundingSphere();
+  });
+  this._showPrimitiveReferenceFrame = createCommand_default(function() {
+    if (that.primitiveReferenceFrame) {
+      const modelMatrix = that._primitive.modelMatrix;
+      that._modelMatrixPrimitive = new DebugModelMatrixPrimitive_default({
+        modelMatrix
+      });
+      that._scene.primitives.add(that._modelMatrixPrimitive);
+    } else if (defined_default(that._modelMatrixPrimitive)) {
+      that._scene.primitives.remove(that._modelMatrixPrimitive);
+      that._modelMatrixPrimitive = void 0;
+    }
+    that._scene.requestRender();
+    return true;
+  });
+  this._primitiveReferenceFrameSubscription = knockout_default.getObservable(this, "primitiveReferenceFrame").subscribe(function() {
+    that._showPrimitiveReferenceFrame();
+  });
+  this._doFilterPrimitive = createCommand_default(function() {
+    if (that.filterPrimitive) {
+      that._scene.debugCommandFilter = function(command) {
+        if (defined_default(that._modelMatrixPrimitive) && command.owner === that._modelMatrixPrimitive._primitive) {
+          return true;
+        } else if (defined_default(that._primitive)) {
+          return command.owner === that._primitive || command.owner === that._primitive._billboardCollection || command.owner.primitive === that._primitive;
+        }
+        return false;
+      };
+    } else {
+      that._scene.debugCommandFilter = void 0;
+    }
+    return true;
+  });
+  this._filterPrimitiveSubscription = knockout_default.getObservable(this, "filterPrimitive").subscribe(function() {
+    that._doFilterPrimitive();
+    that._scene.requestRender();
+  });
+  this._wireframeSubscription = knockout_default.getObservable(this, "wireframe").subscribe(function(val) {
+    globe._surface.tileProvider._debug.wireframe = val;
+    that._scene.requestRender();
+  });
+  this._depthFrustumSubscription = knockout_default.getObservable(this, "depthFrustum").subscribe(function(val) {
+    that._scene.debugShowDepthFrustum = val;
+    that._scene.requestRender();
+  });
+  this._incrementDepthFrustum = createCommand_default(function() {
+    const next = that.depthFrustum + 1;
+    that.depthFrustum = boundDepthFrustum(1, that._numberOfFrustums, next);
+    that._scene.requestRender();
+    return true;
+  });
+  this._decrementDepthFrustum = createCommand_default(function() {
+    const next = that.depthFrustum - 1;
+    that.depthFrustum = boundDepthFrustum(1, that._numberOfFrustums, next);
+    that._scene.requestRender();
+    return true;
+  });
+  this._suspendUpdatesSubscription = knockout_default.getObservable(this, "suspendUpdates").subscribe(function(val) {
+    globe._surface._debug.suspendLodUpdate = val;
+    if (!val) {
+      that.filterTile = false;
+    }
+  });
+  let tileBoundariesLayer;
+  this._showTileCoordinates = createCommand_default(function() {
+    if (that.tileCoordinates && !defined_default(tileBoundariesLayer)) {
+      tileBoundariesLayer = scene.imageryLayers.addImageryProvider(
+        new TileCoordinatesImageryProvider_default({
+          tilingScheme: scene.terrainProvider.tilingScheme
+        })
+      );
+    } else if (!that.tileCoordinates && defined_default(tileBoundariesLayer)) {
+      scene.imageryLayers.remove(tileBoundariesLayer);
+      tileBoundariesLayer = void 0;
+    }
+    return true;
+  });
+  this._tileCoordinatesSubscription = knockout_default.getObservable(this, "tileCoordinates").subscribe(function() {
+    that._showTileCoordinates();
+    that._scene.requestRender();
+  });
+  this._tileBoundingSphereSubscription = knockout_default.getObservable(this, "tileBoundingSphere").subscribe(function() {
+    that._showTileBoundingSphere();
+    that._scene.requestRender();
+  });
+  this._showTileBoundingSphere = createCommand_default(function() {
+    if (that.tileBoundingSphere) {
+      globe._surface.tileProvider._debug.boundingSphereTile = that._tile;
+    } else {
+      globe._surface.tileProvider._debug.boundingSphereTile = void 0;
+    }
+    that._scene.requestRender();
+    return true;
+  });
+  this._doFilterTile = createCommand_default(function() {
+    if (!that.filterTile) {
+      that.suspendUpdates = false;
+    } else {
+      that.suspendUpdates = true;
+      globe._surface._tilesToRender = [];
+      if (defined_default(that._tile) && that._tile.renderable) {
+        globe._surface._tilesToRender.push(that._tile);
+      }
+    }
+    return true;
+  });
+  this._filterTileSubscription = knockout_default.getObservable(this, "filterTile").subscribe(function() {
+    that.doFilterTile();
+    that._scene.requestRender();
+  });
+  function pickPrimitive(e) {
+    const newPick = that._scene.pick({
+      x: e.position.x,
+      y: e.position.y
+    });
+    if (defined_default(newPick)) {
+      that.primitive = defined_default(newPick.collection) ? newPick.collection : newPick.primitive;
+    }
+    that._scene.requestRender();
+    that.pickPrimitiveActive = false;
+  }
+  this._pickPrimitive = createCommand_default(function() {
+    that.pickPrimitiveActive = !that.pickPrimitiveActive;
+  });
+  this._pickPrimitiveActiveSubscription = knockout_default.getObservable(this, "pickPrimitiveActive").subscribe(function(val) {
+    if (val) {
+      eventHandler.setInputAction(
+        pickPrimitive,
+        ScreenSpaceEventType_default.LEFT_CLICK
+      );
+    } else {
+      eventHandler.removeInputAction(ScreenSpaceEventType_default.LEFT_CLICK);
+    }
+  });
+  function selectTile(e) {
+    let selectedTile;
+    const ellipsoid = globe.ellipsoid;
+    const ray = that._scene.camera.getPickRay(e.position, scratchPickRay2);
+    const cartesian11 = globe.pick(ray, that._scene, scratchPickCartesian3);
+    if (defined_default(cartesian11)) {
+      const cartographic2 = ellipsoid.cartesianToCartographic(cartesian11);
+      const tilesRendered = globe._surface.tileProvider._tilesToRenderByTextureCount;
+      for (let textureCount = 0; !selectedTile && textureCount < tilesRendered.length; ++textureCount) {
+        const tilesRenderedByTextureCount = tilesRendered[textureCount];
+        if (!defined_default(tilesRenderedByTextureCount)) {
+          continue;
+        }
+        for (let tileIndex = 0; !selectedTile && tileIndex < tilesRenderedByTextureCount.length; ++tileIndex) {
+          const tile = tilesRenderedByTextureCount[tileIndex];
+          if (Rectangle_default.contains(tile.rectangle, cartographic2)) {
+            selectedTile = tile;
+          }
+        }
+      }
+    }
+    that.tile = selectedTile;
+    that.pickTileActive = false;
+  }
+  this._pickTile = createCommand_default(function() {
+    that.pickTileActive = !that.pickTileActive;
+  });
+  this._pickTileActiveSubscription = knockout_default.getObservable(this, "pickTileActive").subscribe(function(val) {
+    if (val) {
+      eventHandler.setInputAction(
+        selectTile,
+        ScreenSpaceEventType_default.LEFT_CLICK
+      );
+    } else {
+      eventHandler.removeInputAction(ScreenSpaceEventType_default.LEFT_CLICK);
+    }
+  });
+  this._removePostRenderEvent = scene.postRender.addEventListener(function() {
+    that._update();
+  });
 }
-Object.defineProperties(BaseLayerPickerViewModel.prototype, {
+Object.defineProperties(CesiumInspectorViewModel.prototype, {
+  /**
+   * Gets the scene to control.
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Scene}
+   */
+  scene: {
+    get: function() {
+      return this._scene;
+    }
+  },
+  /**
+   * Gets the container of the PerformanceDisplay
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Element}
+   */
+  performanceContainer: {
+    get: function() {
+      return this._performanceContainer;
+    }
+  },
   /**
    * Gets the command to toggle the visibility of the drop down.
-   * @memberof BaseLayerPickerViewModel.prototype
+   * @memberof CesiumInspectorViewModel.prototype
    *
    * @type {Command}
    */
@@ -247181,149 +247875,554 @@ Object.defineProperties(BaseLayerPickerViewModel.prototype, {
     }
   },
   /**
-   * Gets the globe.
-   * @memberof BaseLayerPickerViewModel.prototype
+   * Gets the command to toggle the visibility of a BoundingSphere for a primitive
+   * @memberof CesiumInspectorViewModel.prototype
    *
-   * @type {Globe}
+   * @type {Command}
    */
-  globe: {
+  showPrimitiveBoundingSphere: {
     get: function() {
-      return this._globe;
+      return this._showPrimitiveBoundingSphere;
+    }
+  },
+  /**
+   * Gets the command to toggle the visibility of a {@link DebugModelMatrixPrimitive} for the model matrix of a primitive
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  showPrimitiveReferenceFrame: {
+    get: function() {
+      return this._showPrimitiveReferenceFrame;
+    }
+  },
+  /**
+   * Gets the command to toggle a filter that renders only a selected primitive
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  doFilterPrimitive: {
+    get: function() {
+      return this._doFilterPrimitive;
+    }
+  },
+  /**
+   * Gets the command to increment the depth frustum index to be shown
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  incrementDepthFrustum: {
+    get: function() {
+      return this._incrementDepthFrustum;
+    }
+  },
+  /**
+   * Gets the command to decrement the depth frustum index to be shown
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  decrementDepthFrustum: {
+    get: function() {
+      return this._decrementDepthFrustum;
+    }
+  },
+  /**
+   * Gets the command to toggle the visibility of tile coordinates
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  showTileCoordinates: {
+    get: function() {
+      return this._showTileCoordinates;
+    }
+  },
+  /**
+   * Gets the command to toggle the visibility of a BoundingSphere for a selected tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  showTileBoundingSphere: {
+    get: function() {
+      return this._showTileBoundingSphere;
+    }
+  },
+  /**
+   * Gets the command to toggle a filter that renders only a selected tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  doFilterTile: {
+    get: function() {
+      return this._doFilterTile;
+    }
+  },
+  /**
+   * Gets the command to expand and collapse the general section
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  toggleGeneral: {
+    get: function() {
+      return this._toggleGeneral;
+    }
+  },
+  /**
+   * Gets the command to expand and collapse the primitives section
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  togglePrimitives: {
+    get: function() {
+      return this._togglePrimitives;
+    }
+  },
+  /**
+   * Gets the command to expand and collapse the terrain section
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  toggleTerrain: {
+    get: function() {
+      return this._toggleTerrain;
+    }
+  },
+  /**
+   * Gets the command to pick a primitive
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  pickPrimitive: {
+    get: function() {
+      return this._pickPrimitive;
+    }
+  },
+  /**
+   * Gets the command to pick a tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  pickTile: {
+    get: function() {
+      return this._pickTile;
+    }
+  },
+  /**
+   * Gets the command to pick a tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  selectParent: {
+    get: function() {
+      const that = this;
+      return createCommand_default(function() {
+        that.tile = that.tile.parent;
+      });
+    }
+  },
+  /**
+   * Gets the command to pick a tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  selectNW: {
+    get: function() {
+      const that = this;
+      return createCommand_default(function() {
+        that.tile = that.tile.northwestChild;
+      });
+    }
+  },
+  /**
+   * Gets the command to pick a tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  selectNE: {
+    get: function() {
+      const that = this;
+      return createCommand_default(function() {
+        that.tile = that.tile.northeastChild;
+      });
+    }
+  },
+  /**
+   * Gets the command to pick a tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  selectSW: {
+    get: function() {
+      const that = this;
+      return createCommand_default(function() {
+        that.tile = that.tile.southwestChild;
+      });
+    }
+  },
+  /**
+   * Gets the command to pick a tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  selectSE: {
+    get: function() {
+      const that = this;
+      return createCommand_default(function() {
+        that.tile = that.tile.southeastChild;
+      });
+    }
+  },
+  /**
+   * Gets or sets the current selected primitive
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  primitive: {
+    get: function() {
+      return this._primitive;
+    },
+    set: function(newPrimitive) {
+      const oldPrimitive = this._primitive;
+      if (newPrimitive !== oldPrimitive) {
+        this.hasPickedPrimitive = true;
+        if (defined_default(oldPrimitive)) {
+          oldPrimitive.debugShowBoundingVolume = false;
+        }
+        this._scene.debugCommandFilter = void 0;
+        if (defined_default(this._modelMatrixPrimitive)) {
+          this._scene.primitives.remove(this._modelMatrixPrimitive);
+          this._modelMatrixPrimitive = void 0;
+        }
+        this._primitive = newPrimitive;
+        newPrimitive.show = false;
+        setTimeout(function() {
+          newPrimitive.show = true;
+        }, 50);
+        this.showPrimitiveBoundingSphere();
+        this.showPrimitiveReferenceFrame();
+        this.doFilterPrimitive();
+      }
+    }
+  },
+  /**
+   * Gets or sets the current selected tile
+   * @memberof CesiumInspectorViewModel.prototype
+   *
+   * @type {Command}
+   */
+  tile: {
+    get: function() {
+      return this._tile;
+    },
+    set: function(newTile) {
+      if (defined_default(newTile)) {
+        this.hasPickedTile = true;
+        const oldTile = this._tile;
+        if (newTile !== oldTile) {
+          this.tileText = `L: ${newTile.level} X: ${newTile.x} Y: ${newTile.y}`;
+          this.tileText += `<br>SW corner: ${newTile.rectangle.west}, ${newTile.rectangle.south}`;
+          this.tileText += `<br>NE corner: ${newTile.rectangle.east}, ${newTile.rectangle.north}`;
+          const data = newTile.data;
+          if (defined_default(data) && defined_default(data.tileBoundingRegion)) {
+            this.tileText += `<br>Min: ${data.tileBoundingRegion.minimumHeight} Max: ${data.tileBoundingRegion.maximumHeight}`;
+          } else {
+            this.tileText += "<br>(Tile is not loaded)";
+          }
+        }
+        this._tile = newTile;
+        this.showTileBoundingSphere();
+        this.doFilterTile();
+      } else {
+        this.hasPickedTile = false;
+        this._tile = void 0;
+      }
     }
   }
 });
-var BaseLayerPickerViewModel_default = BaseLayerPickerViewModel;
+CesiumInspectorViewModel.prototype._update = function() {
+  if (this.frustums) {
+    this.frustumStatisticText = frustumStatisticsToString(
+      this._scene.debugFrustumStatistics
+    );
+  }
+  const numberOfFrustums = this._scene.numberOfFrustums;
+  this._numberOfFrustums = numberOfFrustums;
+  this.depthFrustum = boundDepthFrustum(1, numberOfFrustums, this.depthFrustum);
+  this.depthFrustumText = `${this.depthFrustum} of ${numberOfFrustums}`;
+  if (this.performance) {
+    this._performanceDisplay.update();
+  }
+  if (this.primitiveReferenceFrame) {
+    this._modelMatrixPrimitive.modelMatrix = this._primitive.modelMatrix;
+  }
+  this.shaderCacheText = `Cached shaders: ${this._scene.context.shaderCache.numberOfShaders}`;
+};
+CesiumInspectorViewModel.prototype.isDestroyed = function() {
+  return false;
+};
+CesiumInspectorViewModel.prototype.destroy = function() {
+  this._eventHandler.destroy();
+  this._removePostRenderEvent();
+  this._frustumsSubscription.dispose();
+  this._frustumPlanesSubscription.dispose();
+  this._performanceSubscription.dispose();
+  this._primitiveBoundingSphereSubscription.dispose();
+  this._primitiveReferenceFrameSubscription.dispose();
+  this._filterPrimitiveSubscription.dispose();
+  this._wireframeSubscription.dispose();
+  this._depthFrustumSubscription.dispose();
+  this._suspendUpdatesSubscription.dispose();
+  this._tileCoordinatesSubscription.dispose();
+  this._tileBoundingSphereSubscription.dispose();
+  this._filterTileSubscription.dispose();
+  this._pickPrimitiveActiveSubscription.dispose();
+  this._pickTileActiveSubscription.dispose();
+  return destroyObject_default(this);
+};
+var CesiumInspectorViewModel_default = CesiumInspectorViewModel;
 
-// packages/widgets/Source/BaseLayerPicker/BaseLayerPicker.js
-function BaseLayerPicker(container, options) {
+// packages/widgets/Source/CesiumInspector/CesiumInspector.js
+function CesiumInspector(container, scene) {
   if (!defined_default(container)) {
     throw new DeveloperError_default("container is required.");
   }
+  if (!defined_default(scene)) {
+    throw new DeveloperError_default("scene is required.");
+  }
   container = getElement_default(container);
-  const viewModel = new BaseLayerPickerViewModel_default(options);
-  const element = document.createElement("button");
-  element.type = "button";
-  element.className = "cesium-button cesium-toolbar-button";
-  element.setAttribute(
-    "data-bind",
-    "attr: { title: buttonTooltip },click: toggleDropDown"
-  );
-  container.appendChild(element);
-  const imgElement = document.createElement("img");
-  imgElement.setAttribute("draggable", "false");
-  imgElement.className = "cesium-baseLayerPicker-selected";
-  imgElement.setAttribute(
-    "data-bind",
-    "attr: { src: buttonImageUrl }, visible: !!buttonImageUrl"
-  );
-  element.appendChild(imgElement);
-  const dropPanel = document.createElement("div");
-  dropPanel.className = "cesium-baseLayerPicker-dropDown";
-  dropPanel.setAttribute(
-    "data-bind",
-    'css: { "cesium-baseLayerPicker-dropDown-visible" : dropDownVisible }'
-  );
-  container.appendChild(dropPanel);
-  const imageryTitle = document.createElement("div");
-  imageryTitle.className = "cesium-baseLayerPicker-sectionTitle";
-  imageryTitle.setAttribute(
-    "data-bind",
-    "visible: imageryProviderViewModels.length > 0"
-  );
-  imageryTitle.innerHTML = "Imagery";
-  dropPanel.appendChild(imageryTitle);
-  const imagerySection = document.createElement("div");
-  imagerySection.className = "cesium-baseLayerPicker-section";
-  imagerySection.setAttribute("data-bind", "foreach: _imageryProviders");
-  dropPanel.appendChild(imagerySection);
-  const imageryCategories = document.createElement("div");
-  imageryCategories.className = "cesium-baseLayerPicker-category";
-  imagerySection.appendChild(imageryCategories);
-  const categoryTitle = document.createElement("div");
-  categoryTitle.className = "cesium-baseLayerPicker-categoryTitle";
-  categoryTitle.setAttribute("data-bind", "text: name");
-  imageryCategories.appendChild(categoryTitle);
-  const imageryChoices = document.createElement("div");
-  imageryChoices.className = "cesium-baseLayerPicker-choices";
-  imageryChoices.setAttribute("data-bind", "foreach: providers");
-  imageryCategories.appendChild(imageryChoices);
-  const imageryProvider = document.createElement("div");
-  imageryProvider.className = "cesium-baseLayerPicker-item";
-  imageryProvider.setAttribute(
-    "data-bind",
-    'css: { "cesium-baseLayerPicker-selectedItem" : $data === $parents[1].selectedImagery },attr: { title: tooltip },visible: creationCommand.canExecute,click: function($data) { $parents[1].selectedImagery = $data; }'
-  );
-  imageryChoices.appendChild(imageryProvider);
-  const providerIcon = document.createElement("img");
-  providerIcon.className = "cesium-baseLayerPicker-itemIcon";
-  providerIcon.setAttribute("data-bind", "attr: { src: iconUrl }");
-  providerIcon.setAttribute("draggable", "false");
-  imageryProvider.appendChild(providerIcon);
-  const providerLabel = document.createElement("div");
-  providerLabel.className = "cesium-baseLayerPicker-itemLabel";
-  providerLabel.setAttribute("data-bind", "text: name");
-  imageryProvider.appendChild(providerLabel);
-  const terrainTitle = document.createElement("div");
-  terrainTitle.className = "cesium-baseLayerPicker-sectionTitle";
-  terrainTitle.setAttribute(
-    "data-bind",
-    "visible: terrainProviderViewModels.length > 0"
-  );
-  terrainTitle.innerHTML = "Terrain";
-  dropPanel.appendChild(terrainTitle);
-  const terrainSection = document.createElement("div");
-  terrainSection.className = "cesium-baseLayerPicker-section";
-  terrainSection.setAttribute("data-bind", "foreach: _terrainProviders");
-  dropPanel.appendChild(terrainSection);
-  const terrainCategories = document.createElement("div");
-  terrainCategories.className = "cesium-baseLayerPicker-category";
-  terrainSection.appendChild(terrainCategories);
-  const terrainCategoryTitle = document.createElement("div");
-  terrainCategoryTitle.className = "cesium-baseLayerPicker-categoryTitle";
-  terrainCategoryTitle.setAttribute("data-bind", "text: name");
-  terrainCategories.appendChild(terrainCategoryTitle);
-  const terrainChoices = document.createElement("div");
-  terrainChoices.className = "cesium-baseLayerPicker-choices";
-  terrainChoices.setAttribute("data-bind", "foreach: providers");
-  terrainCategories.appendChild(terrainChoices);
-  const terrainProvider = document.createElement("div");
-  terrainProvider.className = "cesium-baseLayerPicker-item";
-  terrainProvider.setAttribute(
-    "data-bind",
-    'css: { "cesium-baseLayerPicker-selectedItem" : $data === $parents[1].selectedTerrain },attr: { title: tooltip },visible: creationCommand.canExecute,click: function($data) { $parents[1].selectedTerrain = $data; }'
-  );
-  terrainChoices.appendChild(terrainProvider);
-  const terrainProviderIcon = document.createElement("img");
-  terrainProviderIcon.className = "cesium-baseLayerPicker-itemIcon";
-  terrainProviderIcon.setAttribute("data-bind", "attr: { src: iconUrl }");
-  terrainProviderIcon.setAttribute("draggable", "false");
-  terrainProvider.appendChild(terrainProviderIcon);
-  const terrainProviderLabel = document.createElement("div");
-  terrainProviderLabel.className = "cesium-baseLayerPicker-itemLabel";
-  terrainProviderLabel.setAttribute("data-bind", "text: name");
-  terrainProvider.appendChild(terrainProviderLabel);
-  knockout_default.applyBindings(viewModel, element);
-  knockout_default.applyBindings(viewModel, dropPanel);
+  const performanceContainer = document.createElement("div");
+  const viewModel = new CesiumInspectorViewModel_default(scene, performanceContainer);
   this._viewModel = viewModel;
   this._container = container;
+  const element = document.createElement("div");
   this._element = element;
-  this._dropPanel = dropPanel;
-  this._closeDropDown = function(e) {
-    if (!(element.contains(e.target) || dropPanel.contains(e.target))) {
-      viewModel.dropDownVisible = false;
-    }
-  };
-  if (FeatureDetection_default.supportsPointerEvents()) {
-    document.addEventListener("pointerdown", this._closeDropDown, true);
-  } else {
-    document.addEventListener("mousedown", this._closeDropDown, true);
-    document.addEventListener("touchstart", this._closeDropDown, true);
-  }
+  const text2 = document.createElement("div");
+  text2.textContent = "Cesium Inspector";
+  text2.className = "cesium-cesiumInspector-button";
+  text2.setAttribute("data-bind", "click: toggleDropDown");
+  element.appendChild(text2);
+  element.className = "cesium-cesiumInspector";
+  element.setAttribute(
+    "data-bind",
+    'css: { "cesium-cesiumInspector-visible" : dropDownVisible, "cesium-cesiumInspector-hidden" : !dropDownVisible }'
+  );
+  container.appendChild(this._element);
+  const panel = document.createElement("div");
+  panel.className = "cesium-cesiumInspector-dropDown";
+  element.appendChild(panel);
+  const createSection = InspectorShared_default.createSection;
+  const createCheckbox = InspectorShared_default.createCheckbox;
+  const generalSection = createSection(
+    panel,
+    "General",
+    "generalVisible",
+    "toggleGeneral"
+  );
+  const debugShowFrustums = createCheckbox("Show Frustums", "frustums");
+  const frustumStatistics = document.createElement("div");
+  frustumStatistics.className = "cesium-cesiumInspector-frustumStatistics";
+  frustumStatistics.setAttribute(
+    "data-bind",
+    "visible: frustums, html: frustumStatisticText"
+  );
+  debugShowFrustums.appendChild(frustumStatistics);
+  generalSection.appendChild(debugShowFrustums);
+  generalSection.appendChild(
+    createCheckbox("Show Frustum Planes", "frustumPlanes")
+  );
+  generalSection.appendChild(
+    createCheckbox("Performance Display", "performance")
+  );
+  performanceContainer.className = "cesium-cesiumInspector-performanceDisplay";
+  generalSection.appendChild(performanceContainer);
+  const shaderCacheDisplay = document.createElement("div");
+  shaderCacheDisplay.className = "cesium-cesiumInspector-shaderCache";
+  shaderCacheDisplay.setAttribute("data-bind", "html: shaderCacheText");
+  generalSection.appendChild(shaderCacheDisplay);
+  const depthFrustum = document.createElement("div");
+  generalSection.appendChild(depthFrustum);
+  const gLabel = document.createElement("span");
+  gLabel.setAttribute(
+    "data-bind",
+    'html: "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frustum:"'
+  );
+  depthFrustum.appendChild(gLabel);
+  const gText = document.createElement("span");
+  gText.setAttribute("data-bind", "text: depthFrustumText");
+  depthFrustum.appendChild(gText);
+  const gMinusButton = document.createElement("input");
+  gMinusButton.type = "button";
+  gMinusButton.value = "-";
+  gMinusButton.className = "cesium-cesiumInspector-pickButton";
+  gMinusButton.setAttribute("data-bind", "click: decrementDepthFrustum");
+  depthFrustum.appendChild(gMinusButton);
+  const gPlusButton = document.createElement("input");
+  gPlusButton.type = "button";
+  gPlusButton.value = "+";
+  gPlusButton.className = "cesium-cesiumInspector-pickButton";
+  gPlusButton.setAttribute("data-bind", "click: incrementDepthFrustum");
+  depthFrustum.appendChild(gPlusButton);
+  const primSection = createSection(
+    panel,
+    "Primitives",
+    "primitivesVisible",
+    "togglePrimitives"
+  );
+  const pickPrimRequired = document.createElement("div");
+  pickPrimRequired.className = "cesium-cesiumInspector-pickSection";
+  primSection.appendChild(pickPrimRequired);
+  const pickPrimitiveButton = document.createElement("input");
+  pickPrimitiveButton.type = "button";
+  pickPrimitiveButton.value = "Pick a primitive";
+  pickPrimitiveButton.className = "cesium-cesiumInspector-pickButton";
+  pickPrimitiveButton.setAttribute(
+    "data-bind",
+    'css: {"cesium-cesiumInspector-pickButtonHighlight" : pickPrimitiveActive}, click: pickPrimitive'
+  );
+  let buttonWrap = document.createElement("div");
+  buttonWrap.className = "cesium-cesiumInspector-center";
+  buttonWrap.appendChild(pickPrimitiveButton);
+  pickPrimRequired.appendChild(buttonWrap);
+  pickPrimRequired.appendChild(
+    createCheckbox(
+      "Show bounding sphere",
+      "primitiveBoundingSphere",
+      "hasPickedPrimitive"
+    )
+  );
+  pickPrimRequired.appendChild(
+    createCheckbox(
+      "Show reference frame",
+      "primitiveReferenceFrame",
+      "hasPickedPrimitive"
+    )
+  );
+  this._primitiveOnly = createCheckbox(
+    "Show only selected",
+    "filterPrimitive",
+    "hasPickedPrimitive"
+  );
+  pickPrimRequired.appendChild(this._primitiveOnly);
+  const terrainSection = createSection(
+    panel,
+    "Terrain",
+    "terrainVisible",
+    "toggleTerrain"
+  );
+  const pickTileRequired = document.createElement("div");
+  pickTileRequired.className = "cesium-cesiumInspector-pickSection";
+  terrainSection.appendChild(pickTileRequired);
+  const pickTileButton = document.createElement("input");
+  pickTileButton.type = "button";
+  pickTileButton.value = "Pick a tile";
+  pickTileButton.className = "cesium-cesiumInspector-pickButton";
+  pickTileButton.setAttribute(
+    "data-bind",
+    'css: {"cesium-cesiumInspector-pickButtonHighlight" : pickTileActive}, click: pickTile'
+  );
+  buttonWrap = document.createElement("div");
+  buttonWrap.appendChild(pickTileButton);
+  buttonWrap.className = "cesium-cesiumInspector-center";
+  pickTileRequired.appendChild(buttonWrap);
+  const tileInfo = document.createElement("div");
+  pickTileRequired.appendChild(tileInfo);
+  const parentTile = document.createElement("input");
+  parentTile.type = "button";
+  parentTile.value = "Parent";
+  parentTile.className = "cesium-cesiumInspector-pickButton";
+  parentTile.setAttribute("data-bind", "click: selectParent");
+  const nwTile = document.createElement("input");
+  nwTile.type = "button";
+  nwTile.value = "NW";
+  nwTile.className = "cesium-cesiumInspector-pickButton";
+  nwTile.setAttribute("data-bind", "click: selectNW");
+  const neTile = document.createElement("input");
+  neTile.type = "button";
+  neTile.value = "NE";
+  neTile.className = "cesium-cesiumInspector-pickButton";
+  neTile.setAttribute("data-bind", "click: selectNE");
+  const swTile = document.createElement("input");
+  swTile.type = "button";
+  swTile.value = "SW";
+  swTile.className = "cesium-cesiumInspector-pickButton";
+  swTile.setAttribute("data-bind", "click: selectSW");
+  const seTile = document.createElement("input");
+  seTile.type = "button";
+  seTile.value = "SE";
+  seTile.className = "cesium-cesiumInspector-pickButton";
+  seTile.setAttribute("data-bind", "click: selectSE");
+  const tileText = document.createElement("div");
+  tileText.className = "cesium-cesiumInspector-tileText";
+  tileInfo.className = "cesium-cesiumInspector-frustumStatistics";
+  tileInfo.appendChild(tileText);
+  tileInfo.setAttribute("data-bind", "visible: hasPickedTile");
+  tileText.setAttribute("data-bind", "html: tileText");
+  const relativeText = document.createElement("div");
+  relativeText.className = "cesium-cesiumInspector-relativeText";
+  relativeText.textContent = "Select relative:";
+  tileInfo.appendChild(relativeText);
+  const table2 = document.createElement("table");
+  const tr1 = document.createElement("tr");
+  const tr2 = document.createElement("tr");
+  const td1 = document.createElement("td");
+  td1.appendChild(parentTile);
+  const td2 = document.createElement("td");
+  td2.appendChild(nwTile);
+  const td3 = document.createElement("td");
+  td3.appendChild(neTile);
+  tr1.appendChild(td1);
+  tr1.appendChild(td2);
+  tr1.appendChild(td3);
+  const td4 = document.createElement("td");
+  const td5 = document.createElement("td");
+  td5.appendChild(swTile);
+  const td6 = document.createElement("td");
+  td6.appendChild(seTile);
+  tr2.appendChild(td4);
+  tr2.appendChild(td5);
+  tr2.appendChild(td6);
+  table2.appendChild(tr1);
+  table2.appendChild(tr2);
+  tileInfo.appendChild(table2);
+  pickTileRequired.appendChild(
+    createCheckbox(
+      "Show bounding volume",
+      "tileBoundingSphere",
+      "hasPickedTile"
+    )
+  );
+  pickTileRequired.appendChild(
+    createCheckbox("Show only selected", "filterTile", "hasPickedTile")
+  );
+  terrainSection.appendChild(createCheckbox("Wireframe", "wireframe"));
+  terrainSection.appendChild(
+    createCheckbox("Suspend LOD update", "suspendUpdates")
+  );
+  terrainSection.appendChild(
+    createCheckbox("Show tile coordinates", "tileCoordinates")
+  );
+  knockout_default.applyBindings(viewModel, this._element);
 }
-Object.defineProperties(BaseLayerPicker.prototype, {
+Object.defineProperties(CesiumInspector.prototype, {
   /**
    * Gets the parent container.
-   * @memberof BaseLayerPicker.prototype
+   * @memberof CesiumInspector.prototype
    *
    * @type {Element}
    */
@@ -247334,9 +248433,9 @@ Object.defineProperties(BaseLayerPicker.prototype, {
   },
   /**
    * Gets the view model.
-   * @memberof BaseLayerPicker.prototype
+   * @memberof CesiumInspector.prototype
    *
-   * @type {BaseLayerPickerViewModel}
+   * @type {CesiumInspectorViewModel}
    */
   viewModel: {
     get: function() {
@@ -247344,356 +248443,16 @@ Object.defineProperties(BaseLayerPicker.prototype, {
     }
   }
 });
-BaseLayerPicker.prototype.isDestroyed = function() {
+CesiumInspector.prototype.isDestroyed = function() {
   return false;
 };
-BaseLayerPicker.prototype.destroy = function() {
-  if (FeatureDetection_default.supportsPointerEvents()) {
-    document.removeEventListener("pointerdown", this._closeDropDown, true);
-  } else {
-    document.removeEventListener("mousedown", this._closeDropDown, true);
-    document.removeEventListener("touchstart", this._closeDropDown, true);
-  }
+CesiumInspector.prototype.destroy = function() {
   knockout_default.cleanNode(this._element);
-  knockout_default.cleanNode(this._dropPanel);
   this._container.removeChild(this._element);
-  this._container.removeChild(this._dropPanel);
+  this.viewModel.destroy();
   return destroyObject_default(this);
 };
-var BaseLayerPicker_default = BaseLayerPicker;
-
-// packages/widgets/Source/BaseLayerPicker/ProviderViewModel.js
-function ProviderViewModel(options) {
-  if (!defined_default(options.name)) {
-    throw new DeveloperError_default("options.name is required.");
-  }
-  if (!defined_default(options.tooltip)) {
-    throw new DeveloperError_default("options.tooltip is required.");
-  }
-  if (!defined_default(options.iconUrl)) {
-    throw new DeveloperError_default("options.iconUrl is required.");
-  }
-  if (typeof options.creationFunction !== "function") {
-    throw new DeveloperError_default("options.creationFunction is required.");
-  }
-  let creationCommand = options.creationFunction;
-  if (!defined_default(creationCommand.canExecute)) {
-    creationCommand = createCommand_default(creationCommand);
-  }
-  this._creationCommand = creationCommand;
-  this.name = options.name;
-  this.tooltip = options.tooltip;
-  this.iconUrl = options.iconUrl;
-  this._category = defaultValue_default(options.category, "");
-  knockout_default.track(this, ["name", "tooltip", "iconUrl"]);
-}
-Object.defineProperties(ProviderViewModel.prototype, {
-  /**
-   * Gets the Command that creates one or more providers which will be added to
-   * the globe when this item is selected.
-   * @memberof ProviderViewModel.prototype
-   * @memberof ProviderViewModel.prototype
-   * @type {Command}
-   * @readonly
-   */
-  creationCommand: {
-    get: function() {
-      return this._creationCommand;
-    }
-  },
-  /**
-   * Gets the category
-   * @type {string}
-   * @memberof ProviderViewModel.prototype
-   * @readonly
-   */
-  category: {
-    get: function() {
-      return this._category;
-    }
-  }
-});
-var ProviderViewModel_default = ProviderViewModel;
-
-// packages/widgets/Source/BaseLayerPicker/createDefaultImageryProviderViewModels.js
-function createDefaultImageryProviderViewModels() {
-  const providerViewModels = [];
-  const useRetinaTiles = devicePixelRatio >= 2;
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Bing Maps Aerial",
-      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/bingAerial.png"),
-      tooltip: "Bing Maps aerial imagery, provided by Cesium ion",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return createWorldImageryAsync_default({
-          style: IonWorldImageryStyle_default.AERIAL
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Bing Maps Aerial with Labels",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/bingAerialLabels.png"
-      ),
-      tooltip: "Bing Maps aerial imagery with labels, provided by Cesium ion",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return createWorldImageryAsync_default({
-          style: IonWorldImageryStyle_default.AERIAL_WITH_LABELS
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Bing Maps Roads",
-      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/bingRoads.png"),
-      tooltip: "Bing Maps standard road maps, provided by Cesium ion",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return createWorldImageryAsync_default({
-          style: IonWorldImageryStyle_default.ROAD
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "ArcGIS World Imagery",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/ArcGisMapServiceWorldImagery.png"
-      ),
-      tooltip: "ArcGIS World Imagery provides one meter or better satellite and aerial imagery in many parts of the world and lower resolution satellite imagery worldwide. The map includes 15m TerraColor imagery at small and mid-scales (~1:591M down to ~1:288k) for the world. The map features Maxar imagery at 0.3m resolution for select metropolitan areas around the world, 0.5m resolution across the United States and parts of Western Europe, and 1m resolution imagery across the rest of the world. In addition to commercial sources, the World Imagery map features high-resolution aerial photography contributed by the GIS User Community. This imagery ranges from 0.3m to 0.03m resolution (down to ~1:280 nin select communities). For more information on this map, including the terms of use, visit us online at \nhttps://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9",
-      category: "Other",
-      creationFunction: function() {
-        return ArcGisMapServerImageryProvider_default.fromBasemapType(
-          ArcGisBaseMapType_default.SATELLITE,
-          {
-            enablePickFeatures: false
-          }
-        );
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "ArcGIS World Hillshade",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/ArcGisMapServiceWorldHillshade.png"
-      ),
-      tooltip: "ArcGIS World Hillshade map portrays elevation as an artistic hillshade. This map is designed to be used as a backdrop for topographical, soil, hydro, landcover or other outdoor recreational maps. The map was compiled from a variety of sources from several data providers. The basemap has global coverage down to a scale of ~1:72k. In select areas of the United States and Europe, coverage is available down to ~1:9k. For more information on this map, including the terms of use, visit us online at \nhttps://www.arcgis.com/home/item.html?id=1b243539f4514b6ba35e7d995890db1d",
-      category: "Other",
-      creationFunction: function() {
-        return ArcGisMapServerImageryProvider_default.fromBasemapType(
-          ArcGisBaseMapType_default.HILLSHADE,
-          {
-            enablePickFeatures: false
-          }
-        );
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Esri World Ocean",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/ArcGisMapServiceWorldOcean.png"
-      ),
-      tooltip: "ArcGIS World Ocean map is designed to be used as a base map by marine GIS professionals and as a reference map by anyone interested in ocean data.  The base map features marine bathymetry. Land features include inland waters and roads overlaid on land cover and shaded relief imagery. The map was compiled from a variety of best available sources from several data providers, including General Bathymetric Chart of the Oceans GEBCO_08 Grid, National Oceanic and Atmospheric Administration (NOAA), and National Geographic, Garmin, HERE, Geonames.org, and Esri, and various other contributors. The base map currently provides coverage for the world down to a scale of ~1:577k, and coverage down to 1:72k in US coastal areas, and various other areas. Coverage down to ~ 1:9k is available limited areas based on regional hydrographic survey data. The base map was designed and developed by Esri. For more information on this map, including our terms of use, visit us online at \nhttps://www.arcgis.com/home/item.html?id=1e126e7520f9466c9ca28b8f28b5e500",
-      category: "Other",
-      creationFunction: function() {
-        return ArcGisMapServerImageryProvider_default.fromBasemapType(
-          ArcGisBaseMapType_default.OCEANS,
-          {
-            enablePickFeatures: false
-          }
-        );
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Open\xADStreet\xADMap",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/openStreetMap.png"
-      ),
-      tooltip: "OpenStreetMap (OSM) is a collaborative project to create a free editable map of the world.\nhttp://www.openstreetmap.org",
-      category: "Other",
-      creationFunction: function() {
-        return new OpenStreetMapImageryProvider_default({
-          url: "https://tile.openstreetmap.org/"
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Stadia x Stamen Watercolor",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/stamenWatercolor.png"
-      ),
-      tooltip: "Based on the original basemaps created for the Knight Foundation and reminiscent of hand drawn maps, the watercolor maps from Stamen Design apply raster effect area washes and organic edges over a paper texture to add warm pop to any map.\nhttps://docs.stadiamaps.com/map-styles/stamen-watercolor/",
-      category: "Other",
-      creationFunction: function() {
-        return new OpenStreetMapImageryProvider_default({
-          url: "https://tiles.stadiamaps.com/tiles/stamen_watercolor/",
-          fileExtension: "jpg",
-          credit: `&copy; <a href="https://stamen.com/" target="_blank">Stamen Design</a>
-           &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
-           &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
-           &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Stadia x Stamen Toner",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/stamenToner.png"
-      ),
-      tooltip: "Based on the original basemaps created for the Knight Foundation and the most popular of the excellent styles from Stamen Design, these high-contrast B+W (black and white) maps are the perfect backdrop for your colorful and eye-catching overlays.\nhttps://docs.stadiamaps.com/map-styles/stamen-toner/",
-      category: "Other",
-      creationFunction: function() {
-        return new OpenStreetMapImageryProvider_default({
-          url: "https://tiles.stadiamaps.com/tiles/stamen_toner/",
-          retinaTiles: useRetinaTiles,
-          credit: `&copy; <a href="https://stamen.com/" target="_blank">Stamen Design</a>
-            &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
-            &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
-            &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Stadia Alidade Smooth",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/stadiaAlidadeSmooth.png"
-      ),
-      tooltip: "Stadia's custom Alidade Smooth style is designed for maps that use a lot of markers or overlays. It features a muted color scheme and fewer points of interest to allow your added data to shine.\nhttps://docs.stadiamaps.com/map-styles/alidade-smooth/",
-      category: "Other",
-      creationFunction: function() {
-        return new OpenStreetMapImageryProvider_default({
-          url: "https://tiles.stadiamaps.com/tiles/alidade_smooth/",
-          retinaTiles: useRetinaTiles,
-          credit: `&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
-            &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
-            &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Stadia Alidade Smooth Dark",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/stadiaAlidadeSmoothDark.png"
-      ),
-      tooltip: "Stadia Alidade Smooth Dark, like its lighter cousin, is also designed to stay out of the way. It just flips the dark mode switch on the color scheme. With the lights out, your data can now literally shine.\nhttps://docs.stadiamaps.com/map-styles/alidade-smooth-dark/",
-      category: "Other",
-      creationFunction: function() {
-        return new OpenStreetMapImageryProvider_default({
-          url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/",
-          retinaTiles: useRetinaTiles,
-          credit: `&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a>
-            &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a>
-            &copy; <a href="https://www.openstreetmap.org/about/" target="_blank">OpenStreetMap contributors</a>`
-        });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Sentinel-2",
-      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/sentinel-2.png"),
-      tooltip: "Sentinel-2 cloudless by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016 and 2017).",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return IonImageryProvider_default.fromAssetId(3954);
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Blue Marble",
-      iconUrl: buildModuleUrl_default("Widgets/Images/ImageryProviders/blueMarble.png"),
-      tooltip: "Blue Marble Next Generation July, 2004 imagery from NASA.",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return IonImageryProvider_default.fromAssetId(3845);
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Earth at night",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/earthAtNight.png"
-      ),
-      tooltip: "The Earth at night, also known as The Black Marble, is a 500 meter resolution global composite imagery layer released by NASA.",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return IonImageryProvider_default.fromAssetId(3812);
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Natural Earth\xA0II",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/ImageryProviders/naturalEarthII.png"
-      ),
-      tooltip: "Natural Earth II, darkened for contrast.\nhttp://www.naturalearthdata.com/",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return TileMapServiceImageryProvider_default.fromUrl(
-          buildModuleUrl_default("Assets/Textures/NaturalEarthII")
-        );
-      }
-    })
-  );
-  return providerViewModels;
-}
-var createDefaultImageryProviderViewModels_default = createDefaultImageryProviderViewModels;
-
-// packages/widgets/Source/BaseLayerPicker/createDefaultTerrainProviderViewModels.js
-function createDefaultTerrainProviderViewModels() {
-  const providerViewModels = [];
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "WGS84 Ellipsoid",
-      iconUrl: buildModuleUrl_default("Widgets/Images/TerrainProviders/Ellipsoid.png"),
-      tooltip: "WGS84 standard ellipsoid, also known as EPSG:4326",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return new EllipsoidTerrainProvider_default({ ellipsoid: Ellipsoid_default.WGS84 });
-      }
-    })
-  );
-  providerViewModels.push(
-    new ProviderViewModel_default({
-      name: "Cesium World Terrain",
-      iconUrl: buildModuleUrl_default(
-        "Widgets/Images/TerrainProviders/CesiumWorldTerrain.png"
-      ),
-      tooltip: "High-resolution global terrain tileset curated from several datasources and hosted by Cesium ion",
-      category: "Cesium ion",
-      creationFunction: function() {
-        return createWorldTerrainAsync_default({
-          requestWaterMask: true,
-          requestVertexNormals: true
-        });
-      }
-    })
-  );
-  return providerViewModels;
-}
-var createDefaultTerrainProviderViewModels_default = createDefaultTerrainProviderViewModels;
+var CesiumInspector_default = CesiumInspector;
 
 // packages/widgets/Source/FullscreenButton/FullscreenButtonViewModel.js
 function FullscreenButtonViewModel(fullscreenElement, container) {
@@ -248414,120 +249173,6 @@ Geocoder.prototype.destroy = function() {
 };
 var Geocoder_default = Geocoder;
 
-// packages/widgets/Source/HomeButton/HomeButtonViewModel.js
-function HomeButtonViewModel(scene, duration) {
-  if (!defined_default(scene)) {
-    throw new DeveloperError_default("scene is required.");
-  }
-  this._scene = scene;
-  this._duration = duration;
-  const that = this;
-  this._command = createCommand_default(function() {
-    that._scene.camera.flyHome(that._duration);
-  });
-  this.tooltip = "View Home";
-  knockout_default.track(this, ["tooltip"]);
-}
-Object.defineProperties(HomeButtonViewModel.prototype, {
-  /**
-   * Gets the scene to control.
-   * @memberof HomeButtonViewModel.prototype
-   *
-   * @type {Scene}
-   */
-  scene: {
-    get: function() {
-      return this._scene;
-    }
-  },
-  /**
-   * Gets the Command that is executed when the button is clicked.
-   * @memberof HomeButtonViewModel.prototype
-   *
-   * @type {Command}
-   */
-  command: {
-    get: function() {
-      return this._command;
-    }
-  },
-  /**
-   * Gets or sets the the duration of the camera flight in seconds.
-   * A value of zero causes the camera to instantly switch to home view.
-   * The duration will be computed based on the distance when undefined.
-   * @memberof HomeButtonViewModel.prototype
-   *
-   * @type {number|undefined}
-   */
-  duration: {
-    get: function() {
-      return this._duration;
-    },
-    set: function(value) {
-      if (defined_default(value) && value < 0) {
-        throw new DeveloperError_default("value must be positive.");
-      }
-      this._duration = value;
-    }
-  }
-});
-var HomeButtonViewModel_default = HomeButtonViewModel;
-
-// packages/widgets/Source/HomeButton/HomeButton.js
-function HomeButton(container, scene, duration) {
-  if (!defined_default(container)) {
-    throw new DeveloperError_default("container is required.");
-  }
-  container = getElement_default(container);
-  const viewModel = new HomeButtonViewModel_default(scene, duration);
-  viewModel._svgPath = "M14,4l-10,8.75h20l-4.25-3.7188v-4.6562h-2.812v2.1875l-2.938-2.5625zm-7.0938,9.906v10.094h14.094v-10.094h-14.094zm2.1876,2.313h3.3122v4.25h-3.3122v-4.25zm5.8442,1.281h3.406v6.438h-3.406v-6.438z";
-  const element = document.createElement("button");
-  element.type = "button";
-  element.className = "cesium-button cesium-toolbar-button cesium-home-button";
-  element.setAttribute(
-    "data-bind",
-    "attr: { title: tooltip },click: command,cesiumSvgPath: { path: _svgPath, width: 28, height: 28 }"
-  );
-  container.appendChild(element);
-  knockout_default.applyBindings(viewModel, element);
-  this._container = container;
-  this._viewModel = viewModel;
-  this._element = element;
-}
-Object.defineProperties(HomeButton.prototype, {
-  /**
-   * Gets the parent container.
-   * @memberof HomeButton.prototype
-   *
-   * @type {Element}
-   */
-  container: {
-    get: function() {
-      return this._container;
-    }
-  },
-  /**
-   * Gets the view model.
-   * @memberof HomeButton.prototype
-   *
-   * @type {HomeButtonViewModel}
-   */
-  viewModel: {
-    get: function() {
-      return this._viewModel;
-    }
-  }
-});
-HomeButton.prototype.isDestroyed = function() {
-  return false;
-};
-HomeButton.prototype.destroy = function() {
-  knockout_default.cleanNode(this._element);
-  this._container.removeChild(this._element);
-  return destroyObject_default(this);
-};
-var HomeButton_default = HomeButton;
-
 // packages/widgets/Source/I3SBuildingSceneLayerExplorer/I3SBuildingSceneLayerExplorerViewModel.js
 function expandItemsHandler(data, event) {
   const nestedList = event.currentTarget.parentElement.parentElement.querySelector(
@@ -248918,6 +249563,120 @@ InfoBox.prototype.destroy = function() {
   return destroyObject_default(this);
 };
 var InfoBox_default = InfoBox;
+
+// packages/widgets/Source/HomeButton/HomeButtonViewModel.js
+function HomeButtonViewModel(scene, duration) {
+  if (!defined_default(scene)) {
+    throw new DeveloperError_default("scene is required.");
+  }
+  this._scene = scene;
+  this._duration = duration;
+  const that = this;
+  this._command = createCommand_default(function() {
+    that._scene.camera.flyHome(that._duration);
+  });
+  this.tooltip = "View Home";
+  knockout_default.track(this, ["tooltip"]);
+}
+Object.defineProperties(HomeButtonViewModel.prototype, {
+  /**
+   * Gets the scene to control.
+   * @memberof HomeButtonViewModel.prototype
+   *
+   * @type {Scene}
+   */
+  scene: {
+    get: function() {
+      return this._scene;
+    }
+  },
+  /**
+   * Gets the Command that is executed when the button is clicked.
+   * @memberof HomeButtonViewModel.prototype
+   *
+   * @type {Command}
+   */
+  command: {
+    get: function() {
+      return this._command;
+    }
+  },
+  /**
+   * Gets or sets the the duration of the camera flight in seconds.
+   * A value of zero causes the camera to instantly switch to home view.
+   * The duration will be computed based on the distance when undefined.
+   * @memberof HomeButtonViewModel.prototype
+   *
+   * @type {number|undefined}
+   */
+  duration: {
+    get: function() {
+      return this._duration;
+    },
+    set: function(value) {
+      if (defined_default(value) && value < 0) {
+        throw new DeveloperError_default("value must be positive.");
+      }
+      this._duration = value;
+    }
+  }
+});
+var HomeButtonViewModel_default = HomeButtonViewModel;
+
+// packages/widgets/Source/HomeButton/HomeButton.js
+function HomeButton(container, scene, duration) {
+  if (!defined_default(container)) {
+    throw new DeveloperError_default("container is required.");
+  }
+  container = getElement_default(container);
+  const viewModel = new HomeButtonViewModel_default(scene, duration);
+  viewModel._svgPath = "M14,4l-10,8.75h20l-4.25-3.7188v-4.6562h-2.812v2.1875l-2.938-2.5625zm-7.0938,9.906v10.094h14.094v-10.094h-14.094zm2.1876,2.313h3.3122v4.25h-3.3122v-4.25zm5.8442,1.281h3.406v6.438h-3.406v-6.438z";
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "cesium-button cesium-toolbar-button cesium-home-button";
+  element.setAttribute(
+    "data-bind",
+    "attr: { title: tooltip },click: command,cesiumSvgPath: { path: _svgPath, width: 28, height: 28 }"
+  );
+  container.appendChild(element);
+  knockout_default.applyBindings(viewModel, element);
+  this._container = container;
+  this._viewModel = viewModel;
+  this._element = element;
+}
+Object.defineProperties(HomeButton.prototype, {
+  /**
+   * Gets the parent container.
+   * @memberof HomeButton.prototype
+   *
+   * @type {Element}
+   */
+  container: {
+    get: function() {
+      return this._container;
+    }
+  },
+  /**
+   * Gets the view model.
+   * @memberof HomeButton.prototype
+   *
+   * @type {HomeButtonViewModel}
+   */
+  viewModel: {
+    get: function() {
+      return this._viewModel;
+    }
+  }
+});
+HomeButton.prototype.isDestroyed = function() {
+  return false;
+};
+HomeButton.prototype.destroy = function() {
+  knockout_default.cleanNode(this._element);
+  this._container.removeChild(this._element);
+  return destroyObject_default(this);
+};
+var HomeButton_default = HomeButton;
 
 // packages/widgets/Source/NavigationHelpButton/NavigationHelpButtonViewModel.js
 function NavigationHelpButtonViewModel() {
@@ -249473,248 +250232,6 @@ ProjectionPicker.prototype.destroy = function() {
   return destroyObject_default(this);
 };
 var ProjectionPicker_default = ProjectionPicker;
-
-// packages/widgets/Source/SceneModePicker/SceneModePickerViewModel.js
-function SceneModePickerViewModel(scene, duration) {
-  if (!defined_default(scene)) {
-    throw new DeveloperError_default("scene is required.");
-  }
-  this._scene = scene;
-  const that = this;
-  const morphStart = function(transitioner, oldMode, newMode, isMorphing) {
-    that.sceneMode = newMode;
-    that.dropDownVisible = false;
-  };
-  this._eventHelper = new EventHelper_default();
-  this._eventHelper.add(scene.morphStart, morphStart);
-  this._duration = defaultValue_default(duration, 2);
-  this.sceneMode = scene.mode;
-  this.dropDownVisible = false;
-  this.tooltip2D = "2D";
-  this.tooltip3D = "3D";
-  this.tooltipColumbusView = "Columbus View";
-  knockout_default.track(this, [
-    "sceneMode",
-    "dropDownVisible",
-    "tooltip2D",
-    "tooltip3D",
-    "tooltipColumbusView"
-  ]);
-  this.selectedTooltip = void 0;
-  knockout_default.defineProperty(this, "selectedTooltip", function() {
-    const mode2 = that.sceneMode;
-    if (mode2 === SceneMode_default.SCENE2D) {
-      return that.tooltip2D;
-    }
-    if (mode2 === SceneMode_default.SCENE3D) {
-      return that.tooltip3D;
-    }
-    return that.tooltipColumbusView;
-  });
-  this._toggleDropDown = createCommand_default(function() {
-    that.dropDownVisible = !that.dropDownVisible;
-  });
-  this._morphTo2D = createCommand_default(function() {
-    scene.morphTo2D(that._duration);
-  });
-  this._morphTo3D = createCommand_default(function() {
-    scene.morphTo3D(that._duration);
-  });
-  this._morphToColumbusView = createCommand_default(function() {
-    scene.morphToColumbusView(that._duration);
-  });
-  this._sceneMode = SceneMode_default;
-}
-Object.defineProperties(SceneModePickerViewModel.prototype, {
-  /**
-   * Gets the scene
-   * @memberof SceneModePickerViewModel.prototype
-   * @type {Scene}
-   */
-  scene: {
-    get: function() {
-      return this._scene;
-    }
-  },
-  /**
-   * Gets or sets the the duration of scene mode transition animations in seconds.
-   * A value of zero causes the scene to instantly change modes.
-   * @memberof SceneModePickerViewModel.prototype
-   * @type {number}
-   */
-  duration: {
-    get: function() {
-      return this._duration;
-    },
-    set: function(value) {
-      if (value < 0) {
-        throw new DeveloperError_default("duration value must be positive.");
-      }
-      this._duration = value;
-    }
-  },
-  /**
-   * Gets the command to toggle the drop down box.
-   * @memberof SceneModePickerViewModel.prototype
-   *
-   * @type {Command}
-   */
-  toggleDropDown: {
-    get: function() {
-      return this._toggleDropDown;
-    }
-  },
-  /**
-   * Gets the command to morph to 2D.
-   * @memberof SceneModePickerViewModel.prototype
-   *
-   * @type {Command}
-   */
-  morphTo2D: {
-    get: function() {
-      return this._morphTo2D;
-    }
-  },
-  /**
-   * Gets the command to morph to 3D.
-   * @memberof SceneModePickerViewModel.prototype
-   *
-   * @type {Command}
-   */
-  morphTo3D: {
-    get: function() {
-      return this._morphTo3D;
-    }
-  },
-  /**
-   * Gets the command to morph to Columbus View.
-   * @memberof SceneModePickerViewModel.prototype
-   *
-   * @type {Command}
-   */
-  morphToColumbusView: {
-    get: function() {
-      return this._morphToColumbusView;
-    }
-  }
-});
-SceneModePickerViewModel.prototype.isDestroyed = function() {
-  return false;
-};
-SceneModePickerViewModel.prototype.destroy = function() {
-  this._eventHelper.removeAll();
-  destroyObject_default(this);
-};
-var SceneModePickerViewModel_default = SceneModePickerViewModel;
-
-// packages/widgets/Source/SceneModePicker/SceneModePicker.js
-var globePath = "m 32.401392,4.9330437 c -7.087603,0 -14.096095,2.884602 -19.10793,7.8946843 -5.0118352,5.010083 -7.9296167,11.987468 -7.9296167,19.072999 0,7.085531 2.9177815,14.097848 7.9296167,19.107931 4.837653,4.835961 11.541408,7.631372 18.374354,7.82482 0.05712,0.01231 0.454119,0.139729 0.454119,0.139729 l 0.03493,-0.104797 c 0.08246,7.84e-4 0.162033,0.03493 0.244525,0.03493 0.08304,0 0.161515,-0.03414 0.244526,-0.03493 l 0.03493,0.104797 c 0,0 0.309474,-0.129487 0.349323,-0.139729 6.867765,-0.168094 13.582903,-2.965206 18.444218,-7.82482 2.558195,-2.5573 4.551081,-5.638134 5.903547,-8.977584 1.297191,-3.202966 2.02607,-6.661489 2.02607,-10.130347 0,-6.237309 -2.366261,-12.31219 -6.322734,-17.116794 -0.0034,-0.02316 0.0049,-0.04488 0,-0.06986 -0.01733,-0.08745 -0.104529,-0.278855 -0.104797,-0.279458 -5.31e-4,-0.0012 -0.522988,-0.628147 -0.523984,-0.62878         -3.47e-4,-2.2e-4 -0.133444,-0.03532 -0.244525,-0.06987 C 51.944299,13.447603 51.751076,13.104317 51.474391,12.827728 46.462556,7.8176457 39.488996,4.9330437 32.401392,4.9330437 z m -2.130866,3.5281554 0.104797,9.6762289 c -4.111695,-0.08361 -7.109829,-0.423664 -9.257041,-0.943171 1.198093,-2.269271 2.524531,-4.124404 3.91241,-5.414496 2.167498,-2.0147811 3.950145,-2.8540169 5.239834,-3.3185619 z m 2.794579,0 c 1.280302,0.4754953 3.022186,1.3285948 5.065173,3.2486979 1.424667,1.338973 2.788862,3.303645 3.982275,5.728886 -2.29082,0.403367 -5.381258,0.621049 -8.942651,0.698645 L 33.065105,8.4611991 z m 5.728886,0.2445256 c 4.004072,1.1230822 7.793098,3.1481363 10.724195,6.0782083 0.03468,0.03466 0.07033,0.06991 0.104797,0.104797 -0.45375,0.313891 -0.923054,0.663002 -1.956205,1.082899 -0.647388,0.263114 -1.906242,0.477396 -2.829511,0.733577 -1.382296,-2.988132         -3.027146,-5.368585 -4.785716,-7.0213781 -0.422866,-0.397432 -0.835818,-0.6453247 -1.25756,-0.9781032 z m -15.33525,0.7685092 c -0.106753,0.09503 -0.207753,0.145402 -0.31439,0.244526 -1.684973,1.5662541 -3.298068,3.8232211 -4.680919,6.5672591 -0.343797,-0.14942 -1.035052,-0.273198 -1.292493,-0.419186 -0.956528,-0.542427 -1.362964,-1.022024 -1.537018,-1.292493 -0.0241,-0.03745 -0.01868,-0.0401 -0.03493,-0.06986 2.250095,-2.163342 4.948824,-3.869984 7.859752,-5.0302421 z m -9.641296,7.0912431 c 0.464973,0.571618 0.937729,1.169056 1.956205,1.746612 0.349907,0.198425 1.107143,0.335404 1.537018,0.523983 -1.20166,3.172984 -1.998037,7.051901 -2.165798,11.772162 C 14.256557,30.361384 12.934823,30.161483 12.280427,29.90959 10.644437,29.279855 9.6888882,28.674891 9.1714586,28.267775 8.6540289,27.860658 8.6474751,27.778724 8.6474751,27.778724 l -0.069864,0.03493 C 9.3100294,23.691285         11.163248,19.798527 13.817445,16.565477 z m 37.552149,0.523984 c 2.548924,3.289983 4.265057,7.202594 4.890513,11.318043 -0.650428,0.410896 -1.756876,1.001936 -3.563088,1.606882 -1.171552,0.392383 -3.163859,0.759153 -4.960377,1.117832 -0.04367,-4.752703 -0.784809,-8.591423 -1.88634,-11.807094 0.917574,-0.263678 2.170552,-0.486495 2.864443,-0.76851 1.274693,-0.518066 2.003942,-1.001558 2.654849,-1.467153 z m -31.439008,2.619917 c 2.487341,0.672766 5.775813,1.137775 10.479669,1.222628 l 0.104797,10.689263 0,0.03493 0,0.733577 c -5.435005,-0.09059 -9.512219,-0.519044 -12.610536,-1.117831 0.106127,-4.776683 0.879334,-8.55791 2.02607,-11.562569 z m 23.264866,0.31439 c 1.073459,3.067541 1.833795,6.821314 1.816476,11.702298 -3.054474,0.423245 -7.062018,0.648559 -11.702298,0.698644 l 0,-0.838373 -0.104796,-10.654331 c 4.082416,-0.0864 7.404468,-0.403886 9.990618,-0.908238 z         M 8.2632205,30.922625 c 0.7558676,0.510548 1.5529563,1.013339 3.0041715,1.57195 0.937518,0.360875 2.612202,0.647642 3.91241,0.978102 0.112814,3.85566 0.703989,7.107756 1.606883,9.920754 -1.147172,-0.324262 -2.644553,-0.640648 -3.423359,-0.978102 -1.516688,-0.657177 -2.386627,-1.287332 -2.864443,-1.71168 -0.477816,-0.424347 -0.489051,-0.489051 -0.489051,-0.489051 L 9.8002387,40.319395 C 8.791691,37.621767 8.1584238,34.769583 8.1584238,31.900727 c 0,-0.330153 0.090589,-0.648169 0.1047967,-0.978102 z m 48.2763445,0.419186 c 0.0047,0.188973 0.06986,0.36991 0.06986,0.558916 0,2.938869 -0.620228,5.873558 -1.676747,8.628261 -0.07435,0.07583 -0.06552,0.07411 -0.454119,0.349323 -0.606965,0.429857 -1.631665,1.042044 -3.318562,1.676747 -1.208528,0.454713 -3.204964,0.850894 -5.135038,1.25756 0.84593,-2.765726 1.41808,-6.005357 1.606883,-9.815957 2.232369,-0.413371 4.483758,-0.840201         5.938479,-1.327425 1.410632,-0.472457 2.153108,-0.89469 2.96924,-1.327425 z m -38.530252,2.864443 c 3.208141,0.56697 7.372279,0.898588 12.575603,0.978103 l 0.174662,9.885821 c -4.392517,-0.06139 -8.106722,-0.320566 -10.863925,-0.803441 -1.051954,-2.664695 -1.692909,-6.043794 -1.88634,-10.060483 z m 26.793022,0.31439 c -0.246298,3.923551 -0.877762,7.263679 -1.816476,9.885822 -2.561957,0.361954 -5.766249,0.560708 -9.431703,0.62878 l -0.174661,-9.815957 c 4.491734,-0.04969 8.334769,-0.293032 11.42284,-0.698645 z M 12.035901,44.860585 c 0.09977,0.04523 0.105535,0.09465 0.209594,0.139729 1.337656,0.579602 3.441099,1.058072 5.589157,1.537018 1.545042,3.399208 3.548524,5.969402 5.589157,7.789888 -3.034411,-1.215537 -5.871615,-3.007978 -8.174142,-5.309699 -1.245911,-1.245475 -2.271794,-2.662961 -3.213766,-4.156936 z m 40.69605,0 c -0.941972,1.493975 -1.967855,2.911461         -3.213765,4.156936 -2.74253,2.741571 -6.244106,4.696717 -9.955686,5.868615 0.261347,-0.241079 0.507495,-0.394491 0.768509,-0.663713 1.674841,-1.727516 3.320792,-4.181056 4.645987,-7.265904 2.962447,-0.503021 5.408965,-1.122293 7.161107,-1.781544 0.284034,-0.106865 0.337297,-0.207323 0.593848,-0.31439 z m -31.404076,2.305527 c 2.645807,0.376448 5.701178,0.649995 9.466635,0.698645 l 0.139729,7.789888 c -1.38739,-0.480844 -3.316218,-1.29837 -5.659022,-3.388427 -1.388822,-1.238993 -2.743668,-3.0113 -3.947342,-5.100106 z m 20.365491,0.104797 c -1.04872,2.041937 -2.174337,3.779068 -3.353494,4.995309 -1.853177,1.911459 -3.425515,2.82679 -4.611055,3.353494 l -0.139729,-7.789887 c 3.13091,-0.05714 5.728238,-0.278725 8.104278,-0.558916 z";
-var flatMapPath = "m 2.9825053,17.550598 0,1.368113 0,26.267766 0,1.368113 1.36811,0 54.9981397,0 1.36811,0 0,-1.368113 0,-26.267766 0,-1.368113 -1.36811,0 -54.9981397,0 -1.36811,0 z m 2.73623,2.736226 10.3292497,0 0,10.466063 -10.3292497,0 0,-10.466063 z m 13.0654697,0 11.69737,0 0,10.466063 -11.69737,0 0,-10.466063 z m 14.43359,0 11.69737,0 0,10.466063 -11.69737,0 0,-10.466063 z m 14.43359,0 10.32926,0 0,10.466063 -10.32926,0 0,-10.466063 z m -41.9326497,13.202288 10.3292497,0 0,10.329252 -10.3292497,0 0,-10.329252 z m 13.0654697,0 11.69737,0 0,10.329252 -11.69737,0 0,-10.329252 z m 14.43359,0 11.69737,0 0,10.329252 -11.69737,0 0,-10.329252 z m 14.43359,0 10.32926,0 0,10.329252 -10.32926,0 0,-10.329252 z";
-var columbusViewPath = "m 14.723969,17.675598 -0.340489,0.817175 -11.1680536,26.183638 -0.817175,1.872692 2.076986,0 54.7506996,0 2.07698,0 -0.81717,-1.872692 -11.16805,-26.183638 -0.34049,-0.817175 -0.91933,0 -32.414586,0 -0.919322,0 z m 1.838643,2.723916 6.196908,0 -2.928209,10.418977 -7.729111,0 4.460412,-10.418977 z m 9.02297,0 4.903049,0 0,10.418977 -7.831258,0 2.928209,-10.418977 z m 7.626964,0 5.584031,0 2.62176,10.418977 -8.205791,0 0,-10.418977 z m 8.410081,0 5.51593,0 4.46042,10.418977 -7.38863,0 -2.58772,-10.418977 z m -30.678091,13.142892 8.103649,0 -2.89416,10.282782 -9.6018026,0 4.3923136,-10.282782 z m 10.929711,0 8.614384,0 0,10.282782 -11.508544,0 2.89416,-10.282782 z m 11.338299,0 8.852721,0 2.58772,10.282782 -11.440441,0 0,-10.282782 z m 11.678781,0 7.86531,0 4.39231,10.282782 -9.6699,0 -2.58772,-10.282782 z";
-function SceneModePicker(container, scene, duration) {
-  if (!defined_default(container)) {
-    throw new DeveloperError_default("container is required.");
-  }
-  if (!defined_default(scene)) {
-    throw new DeveloperError_default("scene is required.");
-  }
-  container = getElement_default(container);
-  const viewModel = new SceneModePickerViewModel_default(scene, duration);
-  viewModel._globePath = globePath;
-  viewModel._flatMapPath = flatMapPath;
-  viewModel._columbusViewPath = columbusViewPath;
-  const wrapper = document.createElement("span");
-  wrapper.className = "cesium-sceneModePicker-wrapper cesium-toolbar-button";
-  container.appendChild(wrapper);
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "cesium-button cesium-toolbar-button";
-  button.setAttribute(
-    "data-bind",
-    'css: { "cesium-sceneModePicker-button2D": sceneMode === _sceneMode.SCENE2D,       "cesium-sceneModePicker-button3D": sceneMode === _sceneMode.SCENE3D,       "cesium-sceneModePicker-buttonColumbusView": sceneMode === _sceneMode.COLUMBUS_VIEW,       "cesium-sceneModePicker-selected": dropDownVisible },attr: { title: selectedTooltip },click: toggleDropDown'
-  );
-  button.innerHTML = '<!-- ko cesiumSvgPath: { path: _globePath, width: 64, height: 64, css: "cesium-sceneModePicker-slide-svg cesium-sceneModePicker-icon3D" } --><!-- /ko --><!-- ko cesiumSvgPath: { path: _flatMapPath, width: 64, height: 64, css: "cesium-sceneModePicker-slide-svg cesium-sceneModePicker-icon2D" } --><!-- /ko --><!-- ko cesiumSvgPath: { path: _columbusViewPath, width: 64, height: 64, css: "cesium-sceneModePicker-slide-svg cesium-sceneModePicker-iconColumbusView" } --><!-- /ko -->';
-  wrapper.appendChild(button);
-  const morphTo3DButton = document.createElement("button");
-  morphTo3DButton.type = "button";
-  morphTo3DButton.className = "cesium-button cesium-toolbar-button cesium-sceneModePicker-dropDown-icon";
-  morphTo3DButton.setAttribute(
-    "data-bind",
-    'css: { "cesium-sceneModePicker-visible" : (dropDownVisible && (sceneMode !== _sceneMode.SCENE3D)) || (!dropDownVisible && (sceneMode === _sceneMode.SCENE3D)),       "cesium-sceneModePicker-none" : sceneMode === _sceneMode.SCENE3D,       "cesium-sceneModePicker-hidden" : !dropDownVisible },attr: { title: tooltip3D },click: morphTo3D,cesiumSvgPath: { path: _globePath, width: 64, height: 64 }'
-  );
-  wrapper.appendChild(morphTo3DButton);
-  const morphTo2DButton = document.createElement("button");
-  morphTo2DButton.type = "button";
-  morphTo2DButton.className = "cesium-button cesium-toolbar-button cesium-sceneModePicker-dropDown-icon";
-  morphTo2DButton.setAttribute(
-    "data-bind",
-    'css: { "cesium-sceneModePicker-visible" : (dropDownVisible && (sceneMode !== _sceneMode.SCENE2D)),       "cesium-sceneModePicker-none" : sceneMode === _sceneMode.SCENE2D,       "cesium-sceneModePicker-hidden" : !dropDownVisible },attr: { title: tooltip2D },click: morphTo2D,cesiumSvgPath: { path: _flatMapPath, width: 64, height: 64 }'
-  );
-  wrapper.appendChild(morphTo2DButton);
-  const morphToCVButton = document.createElement("button");
-  morphToCVButton.type = "button";
-  morphToCVButton.className = "cesium-button cesium-toolbar-button cesium-sceneModePicker-dropDown-icon";
-  morphToCVButton.setAttribute(
-    "data-bind",
-    'css: { "cesium-sceneModePicker-visible" : (dropDownVisible && (sceneMode !== _sceneMode.COLUMBUS_VIEW)) || (!dropDownVisible && (sceneMode === _sceneMode.COLUMBUS_VIEW)),       "cesium-sceneModePicker-none" : sceneMode === _sceneMode.COLUMBUS_VIEW,       "cesium-sceneModePicker-hidden" : !dropDownVisible},attr: { title: tooltipColumbusView },click: morphToColumbusView,cesiumSvgPath: { path: _columbusViewPath, width: 64, height: 64 }'
-  );
-  wrapper.appendChild(morphToCVButton);
-  knockout_default.applyBindings(viewModel, wrapper);
-  this._viewModel = viewModel;
-  this._container = container;
-  this._wrapper = wrapper;
-  this._closeDropDown = function(e) {
-    if (!wrapper.contains(e.target)) {
-      viewModel.dropDownVisible = false;
-    }
-  };
-  if (FeatureDetection_default.supportsPointerEvents()) {
-    document.addEventListener("pointerdown", this._closeDropDown, true);
-  } else {
-    document.addEventListener("mousedown", this._closeDropDown, true);
-    document.addEventListener("touchstart", this._closeDropDown, true);
-  }
-}
-Object.defineProperties(SceneModePicker.prototype, {
-  /**
-   * Gets the parent container.
-   * @memberof SceneModePicker.prototype
-   *
-   * @type {Element}
-   */
-  container: {
-    get: function() {
-      return this._container;
-    }
-  },
-  /**
-   * Gets the view model.
-   * @memberof SceneModePicker.prototype
-   *
-   * @type {SceneModePickerViewModel}
-   */
-  viewModel: {
-    get: function() {
-      return this._viewModel;
-    }
-  }
-});
-SceneModePicker.prototype.isDestroyed = function() {
-  return false;
-};
-SceneModePicker.prototype.destroy = function() {
-  this._viewModel.destroy();
-  if (FeatureDetection_default.supportsPointerEvents()) {
-    document.removeEventListener("pointerdown", this._closeDropDown, true);
-  } else {
-    document.removeEventListener("mousedown", this._closeDropDown, true);
-    document.removeEventListener("touchstart", this._closeDropDown, true);
-  }
-  knockout_default.cleanNode(this._wrapper);
-  this._container.removeChild(this._wrapper);
-  return destroyObject_default(this);
-};
-var SceneModePicker_default = SceneModePicker;
 
 // packages/widgets/Source/SelectionIndicator/SelectionIndicatorViewModel.js
 var screenSpacePos = new Cartesian2_default();
@@ -251899,6 +252416,248 @@ function makeCoordinateRange(maxXTitle, minXTitle, maxYTitle, minYTitle, maxZTit
   boundsElement.appendChild(createRangeInput(minZTitle, minZVar, min3.z, max3.z));
 }
 var VoxelInspector_default = VoxelInspector;
+
+// packages/widgets/Source/SceneModePicker/SceneModePickerViewModel.js
+function SceneModePickerViewModel(scene, duration) {
+  if (!defined_default(scene)) {
+    throw new DeveloperError_default("scene is required.");
+  }
+  this._scene = scene;
+  const that = this;
+  const morphStart = function(transitioner, oldMode, newMode, isMorphing) {
+    that.sceneMode = newMode;
+    that.dropDownVisible = false;
+  };
+  this._eventHelper = new EventHelper_default();
+  this._eventHelper.add(scene.morphStart, morphStart);
+  this._duration = defaultValue_default(duration, 2);
+  this.sceneMode = scene.mode;
+  this.dropDownVisible = false;
+  this.tooltip2D = "2D";
+  this.tooltip3D = "3D";
+  this.tooltipColumbusView = "Columbus View";
+  knockout_default.track(this, [
+    "sceneMode",
+    "dropDownVisible",
+    "tooltip2D",
+    "tooltip3D",
+    "tooltipColumbusView"
+  ]);
+  this.selectedTooltip = void 0;
+  knockout_default.defineProperty(this, "selectedTooltip", function() {
+    const mode2 = that.sceneMode;
+    if (mode2 === SceneMode_default.SCENE2D) {
+      return that.tooltip2D;
+    }
+    if (mode2 === SceneMode_default.SCENE3D) {
+      return that.tooltip3D;
+    }
+    return that.tooltipColumbusView;
+  });
+  this._toggleDropDown = createCommand_default(function() {
+    that.dropDownVisible = !that.dropDownVisible;
+  });
+  this._morphTo2D = createCommand_default(function() {
+    scene.morphTo2D(that._duration);
+  });
+  this._morphTo3D = createCommand_default(function() {
+    scene.morphTo3D(that._duration);
+  });
+  this._morphToColumbusView = createCommand_default(function() {
+    scene.morphToColumbusView(that._duration);
+  });
+  this._sceneMode = SceneMode_default;
+}
+Object.defineProperties(SceneModePickerViewModel.prototype, {
+  /**
+   * Gets the scene
+   * @memberof SceneModePickerViewModel.prototype
+   * @type {Scene}
+   */
+  scene: {
+    get: function() {
+      return this._scene;
+    }
+  },
+  /**
+   * Gets or sets the the duration of scene mode transition animations in seconds.
+   * A value of zero causes the scene to instantly change modes.
+   * @memberof SceneModePickerViewModel.prototype
+   * @type {number}
+   */
+  duration: {
+    get: function() {
+      return this._duration;
+    },
+    set: function(value) {
+      if (value < 0) {
+        throw new DeveloperError_default("duration value must be positive.");
+      }
+      this._duration = value;
+    }
+  },
+  /**
+   * Gets the command to toggle the drop down box.
+   * @memberof SceneModePickerViewModel.prototype
+   *
+   * @type {Command}
+   */
+  toggleDropDown: {
+    get: function() {
+      return this._toggleDropDown;
+    }
+  },
+  /**
+   * Gets the command to morph to 2D.
+   * @memberof SceneModePickerViewModel.prototype
+   *
+   * @type {Command}
+   */
+  morphTo2D: {
+    get: function() {
+      return this._morphTo2D;
+    }
+  },
+  /**
+   * Gets the command to morph to 3D.
+   * @memberof SceneModePickerViewModel.prototype
+   *
+   * @type {Command}
+   */
+  morphTo3D: {
+    get: function() {
+      return this._morphTo3D;
+    }
+  },
+  /**
+   * Gets the command to morph to Columbus View.
+   * @memberof SceneModePickerViewModel.prototype
+   *
+   * @type {Command}
+   */
+  morphToColumbusView: {
+    get: function() {
+      return this._morphToColumbusView;
+    }
+  }
+});
+SceneModePickerViewModel.prototype.isDestroyed = function() {
+  return false;
+};
+SceneModePickerViewModel.prototype.destroy = function() {
+  this._eventHelper.removeAll();
+  destroyObject_default(this);
+};
+var SceneModePickerViewModel_default = SceneModePickerViewModel;
+
+// packages/widgets/Source/SceneModePicker/SceneModePicker.js
+var globePath = "m 32.401392,4.9330437 c -7.087603,0 -14.096095,2.884602 -19.10793,7.8946843 -5.0118352,5.010083 -7.9296167,11.987468 -7.9296167,19.072999 0,7.085531 2.9177815,14.097848 7.9296167,19.107931 4.837653,4.835961 11.541408,7.631372 18.374354,7.82482 0.05712,0.01231 0.454119,0.139729 0.454119,0.139729 l 0.03493,-0.104797 c 0.08246,7.84e-4 0.162033,0.03493 0.244525,0.03493 0.08304,0 0.161515,-0.03414 0.244526,-0.03493 l 0.03493,0.104797 c 0,0 0.309474,-0.129487 0.349323,-0.139729 6.867765,-0.168094 13.582903,-2.965206 18.444218,-7.82482 2.558195,-2.5573 4.551081,-5.638134 5.903547,-8.977584 1.297191,-3.202966 2.02607,-6.661489 2.02607,-10.130347 0,-6.237309 -2.366261,-12.31219 -6.322734,-17.116794 -0.0034,-0.02316 0.0049,-0.04488 0,-0.06986 -0.01733,-0.08745 -0.104529,-0.278855 -0.104797,-0.279458 -5.31e-4,-0.0012 -0.522988,-0.628147 -0.523984,-0.62878         -3.47e-4,-2.2e-4 -0.133444,-0.03532 -0.244525,-0.06987 C 51.944299,13.447603 51.751076,13.104317 51.474391,12.827728 46.462556,7.8176457 39.488996,4.9330437 32.401392,4.9330437 z m -2.130866,3.5281554 0.104797,9.6762289 c -4.111695,-0.08361 -7.109829,-0.423664 -9.257041,-0.943171 1.198093,-2.269271 2.524531,-4.124404 3.91241,-5.414496 2.167498,-2.0147811 3.950145,-2.8540169 5.239834,-3.3185619 z m 2.794579,0 c 1.280302,0.4754953 3.022186,1.3285948 5.065173,3.2486979 1.424667,1.338973 2.788862,3.303645 3.982275,5.728886 -2.29082,0.403367 -5.381258,0.621049 -8.942651,0.698645 L 33.065105,8.4611991 z m 5.728886,0.2445256 c 4.004072,1.1230822 7.793098,3.1481363 10.724195,6.0782083 0.03468,0.03466 0.07033,0.06991 0.104797,0.104797 -0.45375,0.313891 -0.923054,0.663002 -1.956205,1.082899 -0.647388,0.263114 -1.906242,0.477396 -2.829511,0.733577 -1.382296,-2.988132         -3.027146,-5.368585 -4.785716,-7.0213781 -0.422866,-0.397432 -0.835818,-0.6453247 -1.25756,-0.9781032 z m -15.33525,0.7685092 c -0.106753,0.09503 -0.207753,0.145402 -0.31439,0.244526 -1.684973,1.5662541 -3.298068,3.8232211 -4.680919,6.5672591 -0.343797,-0.14942 -1.035052,-0.273198 -1.292493,-0.419186 -0.956528,-0.542427 -1.362964,-1.022024 -1.537018,-1.292493 -0.0241,-0.03745 -0.01868,-0.0401 -0.03493,-0.06986 2.250095,-2.163342 4.948824,-3.869984 7.859752,-5.0302421 z m -9.641296,7.0912431 c 0.464973,0.571618 0.937729,1.169056 1.956205,1.746612 0.349907,0.198425 1.107143,0.335404 1.537018,0.523983 -1.20166,3.172984 -1.998037,7.051901 -2.165798,11.772162 C 14.256557,30.361384 12.934823,30.161483 12.280427,29.90959 10.644437,29.279855 9.6888882,28.674891 9.1714586,28.267775 8.6540289,27.860658 8.6474751,27.778724 8.6474751,27.778724 l -0.069864,0.03493 C 9.3100294,23.691285         11.163248,19.798527 13.817445,16.565477 z m 37.552149,0.523984 c 2.548924,3.289983 4.265057,7.202594 4.890513,11.318043 -0.650428,0.410896 -1.756876,1.001936 -3.563088,1.606882 -1.171552,0.392383 -3.163859,0.759153 -4.960377,1.117832 -0.04367,-4.752703 -0.784809,-8.591423 -1.88634,-11.807094 0.917574,-0.263678 2.170552,-0.486495 2.864443,-0.76851 1.274693,-0.518066 2.003942,-1.001558 2.654849,-1.467153 z m -31.439008,2.619917 c 2.487341,0.672766 5.775813,1.137775 10.479669,1.222628 l 0.104797,10.689263 0,0.03493 0,0.733577 c -5.435005,-0.09059 -9.512219,-0.519044 -12.610536,-1.117831 0.106127,-4.776683 0.879334,-8.55791 2.02607,-11.562569 z m 23.264866,0.31439 c 1.073459,3.067541 1.833795,6.821314 1.816476,11.702298 -3.054474,0.423245 -7.062018,0.648559 -11.702298,0.698644 l 0,-0.838373 -0.104796,-10.654331 c 4.082416,-0.0864 7.404468,-0.403886 9.990618,-0.908238 z         M 8.2632205,30.922625 c 0.7558676,0.510548 1.5529563,1.013339 3.0041715,1.57195 0.937518,0.360875 2.612202,0.647642 3.91241,0.978102 0.112814,3.85566 0.703989,7.107756 1.606883,9.920754 -1.147172,-0.324262 -2.644553,-0.640648 -3.423359,-0.978102 -1.516688,-0.657177 -2.386627,-1.287332 -2.864443,-1.71168 -0.477816,-0.424347 -0.489051,-0.489051 -0.489051,-0.489051 L 9.8002387,40.319395 C 8.791691,37.621767 8.1584238,34.769583 8.1584238,31.900727 c 0,-0.330153 0.090589,-0.648169 0.1047967,-0.978102 z m 48.2763445,0.419186 c 0.0047,0.188973 0.06986,0.36991 0.06986,0.558916 0,2.938869 -0.620228,5.873558 -1.676747,8.628261 -0.07435,0.07583 -0.06552,0.07411 -0.454119,0.349323 -0.606965,0.429857 -1.631665,1.042044 -3.318562,1.676747 -1.208528,0.454713 -3.204964,0.850894 -5.135038,1.25756 0.84593,-2.765726 1.41808,-6.005357 1.606883,-9.815957 2.232369,-0.413371 4.483758,-0.840201         5.938479,-1.327425 1.410632,-0.472457 2.153108,-0.89469 2.96924,-1.327425 z m -38.530252,2.864443 c 3.208141,0.56697 7.372279,0.898588 12.575603,0.978103 l 0.174662,9.885821 c -4.392517,-0.06139 -8.106722,-0.320566 -10.863925,-0.803441 -1.051954,-2.664695 -1.692909,-6.043794 -1.88634,-10.060483 z m 26.793022,0.31439 c -0.246298,3.923551 -0.877762,7.263679 -1.816476,9.885822 -2.561957,0.361954 -5.766249,0.560708 -9.431703,0.62878 l -0.174661,-9.815957 c 4.491734,-0.04969 8.334769,-0.293032 11.42284,-0.698645 z M 12.035901,44.860585 c 0.09977,0.04523 0.105535,0.09465 0.209594,0.139729 1.337656,0.579602 3.441099,1.058072 5.589157,1.537018 1.545042,3.399208 3.548524,5.969402 5.589157,7.789888 -3.034411,-1.215537 -5.871615,-3.007978 -8.174142,-5.309699 -1.245911,-1.245475 -2.271794,-2.662961 -3.213766,-4.156936 z m 40.69605,0 c -0.941972,1.493975 -1.967855,2.911461         -3.213765,4.156936 -2.74253,2.741571 -6.244106,4.696717 -9.955686,5.868615 0.261347,-0.241079 0.507495,-0.394491 0.768509,-0.663713 1.674841,-1.727516 3.320792,-4.181056 4.645987,-7.265904 2.962447,-0.503021 5.408965,-1.122293 7.161107,-1.781544 0.284034,-0.106865 0.337297,-0.207323 0.593848,-0.31439 z m -31.404076,2.305527 c 2.645807,0.376448 5.701178,0.649995 9.466635,0.698645 l 0.139729,7.789888 c -1.38739,-0.480844 -3.316218,-1.29837 -5.659022,-3.388427 -1.388822,-1.238993 -2.743668,-3.0113 -3.947342,-5.100106 z m 20.365491,0.104797 c -1.04872,2.041937 -2.174337,3.779068 -3.353494,4.995309 -1.853177,1.911459 -3.425515,2.82679 -4.611055,3.353494 l -0.139729,-7.789887 c 3.13091,-0.05714 5.728238,-0.278725 8.104278,-0.558916 z";
+var flatMapPath = "m 2.9825053,17.550598 0,1.368113 0,26.267766 0,1.368113 1.36811,0 54.9981397,0 1.36811,0 0,-1.368113 0,-26.267766 0,-1.368113 -1.36811,0 -54.9981397,0 -1.36811,0 z m 2.73623,2.736226 10.3292497,0 0,10.466063 -10.3292497,0 0,-10.466063 z m 13.0654697,0 11.69737,0 0,10.466063 -11.69737,0 0,-10.466063 z m 14.43359,0 11.69737,0 0,10.466063 -11.69737,0 0,-10.466063 z m 14.43359,0 10.32926,0 0,10.466063 -10.32926,0 0,-10.466063 z m -41.9326497,13.202288 10.3292497,0 0,10.329252 -10.3292497,0 0,-10.329252 z m 13.0654697,0 11.69737,0 0,10.329252 -11.69737,0 0,-10.329252 z m 14.43359,0 11.69737,0 0,10.329252 -11.69737,0 0,-10.329252 z m 14.43359,0 10.32926,0 0,10.329252 -10.32926,0 0,-10.329252 z";
+var columbusViewPath = "m 14.723969,17.675598 -0.340489,0.817175 -11.1680536,26.183638 -0.817175,1.872692 2.076986,0 54.7506996,0 2.07698,0 -0.81717,-1.872692 -11.16805,-26.183638 -0.34049,-0.817175 -0.91933,0 -32.414586,0 -0.919322,0 z m 1.838643,2.723916 6.196908,0 -2.928209,10.418977 -7.729111,0 4.460412,-10.418977 z m 9.02297,0 4.903049,0 0,10.418977 -7.831258,0 2.928209,-10.418977 z m 7.626964,0 5.584031,0 2.62176,10.418977 -8.205791,0 0,-10.418977 z m 8.410081,0 5.51593,0 4.46042,10.418977 -7.38863,0 -2.58772,-10.418977 z m -30.678091,13.142892 8.103649,0 -2.89416,10.282782 -9.6018026,0 4.3923136,-10.282782 z m 10.929711,0 8.614384,0 0,10.282782 -11.508544,0 2.89416,-10.282782 z m 11.338299,0 8.852721,0 2.58772,10.282782 -11.440441,0 0,-10.282782 z m 11.678781,0 7.86531,0 4.39231,10.282782 -9.6699,0 -2.58772,-10.282782 z";
+function SceneModePicker(container, scene, duration) {
+  if (!defined_default(container)) {
+    throw new DeveloperError_default("container is required.");
+  }
+  if (!defined_default(scene)) {
+    throw new DeveloperError_default("scene is required.");
+  }
+  container = getElement_default(container);
+  const viewModel = new SceneModePickerViewModel_default(scene, duration);
+  viewModel._globePath = globePath;
+  viewModel._flatMapPath = flatMapPath;
+  viewModel._columbusViewPath = columbusViewPath;
+  const wrapper = document.createElement("span");
+  wrapper.className = "cesium-sceneModePicker-wrapper cesium-toolbar-button";
+  container.appendChild(wrapper);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "cesium-button cesium-toolbar-button";
+  button.setAttribute(
+    "data-bind",
+    'css: { "cesium-sceneModePicker-button2D": sceneMode === _sceneMode.SCENE2D,       "cesium-sceneModePicker-button3D": sceneMode === _sceneMode.SCENE3D,       "cesium-sceneModePicker-buttonColumbusView": sceneMode === _sceneMode.COLUMBUS_VIEW,       "cesium-sceneModePicker-selected": dropDownVisible },attr: { title: selectedTooltip },click: toggleDropDown'
+  );
+  button.innerHTML = '<!-- ko cesiumSvgPath: { path: _globePath, width: 64, height: 64, css: "cesium-sceneModePicker-slide-svg cesium-sceneModePicker-icon3D" } --><!-- /ko --><!-- ko cesiumSvgPath: { path: _flatMapPath, width: 64, height: 64, css: "cesium-sceneModePicker-slide-svg cesium-sceneModePicker-icon2D" } --><!-- /ko --><!-- ko cesiumSvgPath: { path: _columbusViewPath, width: 64, height: 64, css: "cesium-sceneModePicker-slide-svg cesium-sceneModePicker-iconColumbusView" } --><!-- /ko -->';
+  wrapper.appendChild(button);
+  const morphTo3DButton = document.createElement("button");
+  morphTo3DButton.type = "button";
+  morphTo3DButton.className = "cesium-button cesium-toolbar-button cesium-sceneModePicker-dropDown-icon";
+  morphTo3DButton.setAttribute(
+    "data-bind",
+    'css: { "cesium-sceneModePicker-visible" : (dropDownVisible && (sceneMode !== _sceneMode.SCENE3D)) || (!dropDownVisible && (sceneMode === _sceneMode.SCENE3D)),       "cesium-sceneModePicker-none" : sceneMode === _sceneMode.SCENE3D,       "cesium-sceneModePicker-hidden" : !dropDownVisible },attr: { title: tooltip3D },click: morphTo3D,cesiumSvgPath: { path: _globePath, width: 64, height: 64 }'
+  );
+  wrapper.appendChild(morphTo3DButton);
+  const morphTo2DButton = document.createElement("button");
+  morphTo2DButton.type = "button";
+  morphTo2DButton.className = "cesium-button cesium-toolbar-button cesium-sceneModePicker-dropDown-icon";
+  morphTo2DButton.setAttribute(
+    "data-bind",
+    'css: { "cesium-sceneModePicker-visible" : (dropDownVisible && (sceneMode !== _sceneMode.SCENE2D)),       "cesium-sceneModePicker-none" : sceneMode === _sceneMode.SCENE2D,       "cesium-sceneModePicker-hidden" : !dropDownVisible },attr: { title: tooltip2D },click: morphTo2D,cesiumSvgPath: { path: _flatMapPath, width: 64, height: 64 }'
+  );
+  wrapper.appendChild(morphTo2DButton);
+  const morphToCVButton = document.createElement("button");
+  morphToCVButton.type = "button";
+  morphToCVButton.className = "cesium-button cesium-toolbar-button cesium-sceneModePicker-dropDown-icon";
+  morphToCVButton.setAttribute(
+    "data-bind",
+    'css: { "cesium-sceneModePicker-visible" : (dropDownVisible && (sceneMode !== _sceneMode.COLUMBUS_VIEW)) || (!dropDownVisible && (sceneMode === _sceneMode.COLUMBUS_VIEW)),       "cesium-sceneModePicker-none" : sceneMode === _sceneMode.COLUMBUS_VIEW,       "cesium-sceneModePicker-hidden" : !dropDownVisible},attr: { title: tooltipColumbusView },click: morphToColumbusView,cesiumSvgPath: { path: _columbusViewPath, width: 64, height: 64 }'
+  );
+  wrapper.appendChild(morphToCVButton);
+  knockout_default.applyBindings(viewModel, wrapper);
+  this._viewModel = viewModel;
+  this._container = container;
+  this._wrapper = wrapper;
+  this._closeDropDown = function(e) {
+    if (!wrapper.contains(e.target)) {
+      viewModel.dropDownVisible = false;
+    }
+  };
+  if (FeatureDetection_default.supportsPointerEvents()) {
+    document.addEventListener("pointerdown", this._closeDropDown, true);
+  } else {
+    document.addEventListener("mousedown", this._closeDropDown, true);
+    document.addEventListener("touchstart", this._closeDropDown, true);
+  }
+}
+Object.defineProperties(SceneModePicker.prototype, {
+  /**
+   * Gets the parent container.
+   * @memberof SceneModePicker.prototype
+   *
+   * @type {Element}
+   */
+  container: {
+    get: function() {
+      return this._container;
+    }
+  },
+  /**
+   * Gets the view model.
+   * @memberof SceneModePicker.prototype
+   *
+   * @type {SceneModePickerViewModel}
+   */
+  viewModel: {
+    get: function() {
+      return this._viewModel;
+    }
+  }
+});
+SceneModePicker.prototype.isDestroyed = function() {
+  return false;
+};
+SceneModePicker.prototype.destroy = function() {
+  this._viewModel.destroy();
+  if (FeatureDetection_default.supportsPointerEvents()) {
+    document.removeEventListener("pointerdown", this._closeDropDown, true);
+  } else {
+    document.removeEventListener("mousedown", this._closeDropDown, true);
+    document.removeEventListener("touchstart", this._closeDropDown, true);
+  }
+  knockout_default.cleanNode(this._wrapper);
+  this._container.removeChild(this._wrapper);
+  return destroyObject_default(this);
+};
+var SceneModePicker_default = SceneModePicker;
 
 // packages/widgets/Source/VRButton/VRButtonViewModel.js
 var import_nosleep = __toESM(require_src(), 1);
@@ -254872,6 +255631,7 @@ export {
   TerrainQuantization_default as TerrainQuantization,
   TerrainState_default as TerrainState,
   Texture_default as Texture,
+  Texture3D_default as Texture3D,
   TextureAtlas_default as TextureAtlas,
   TextureCache_default as TextureCache,
   TextureMagnificationFilter_default as TextureMagnificationFilter,

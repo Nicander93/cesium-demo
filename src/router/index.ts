@@ -190,6 +190,13 @@ const routes: RouteRecordRaw[] = [
       title: '绘制命令Primitive',
     },
   },
+  {
+    path: '/volume-rendering',
+    component: () => import('@/views/volume-rendering/index.vue'),
+    meta: {
+      title: '体渲染',
+    },
+  },
 ]
 
 export default createRouter({
