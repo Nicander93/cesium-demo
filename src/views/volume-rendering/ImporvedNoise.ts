@@ -1,4 +1,10 @@
+/**
+ * 改进的Perlin噪声实现
+ * 基于Ken Perlin的原始算法，用于生成平滑的3D噪声
+ */
 export const ImprovedNoise = function () {
+  // 预定义的256个随机值，用于噪声生成
+  // 这些值经过精心选择，确保噪声的随机性和平滑性
   const p = [
     151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140,
     36, 103, 30, 69, 142, 8, 99, 37, 240, 21, 10, 23, 190, 6, 148, 247, 120,
@@ -18,54 +24,95 @@ export const ImprovedNoise = function () {
     141, 128, 195, 78, 66, 215, 61, 156, 180,
   ]
 
+  // 扩展数组到512个元素，避免边界检查
+  // 这样可以通过简单的模运算来访问数组元素
   for (var i = 0; i < 256; i++) {
     p[256 + i] = p[i]
   }
 
-  function fade(t) {
+  /**
+   * 平滑插值函数，使用五次多项式
+   * 确保噪声在整数点处平滑过渡
+   * @param t 插值参数 (0-1)
+   * @returns 平滑后的插值值
+   */
+  function fade(t: number) {
     return t * t * t * (t * (t * 6 - 15) + 10)
   }
 
-  function lerp(t, a, b) {
+  /**
+   * 线性插值函数
+   * @param t 插值参数 (0-1)
+   * @param a 起始值
+   * @param b 结束值
+   * @returns 插值结果
+   */
+  function lerp(t: number, a: number, b: number) {
     return a + t * (b - a)
   }
 
-  function grad(hash, x, y, z) {
-    var h = hash & 15
-    var u = h < 8 ? x : y,
-      v = h < 4 ? y : h == 12 || h == 14 ? x : z
-    return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v)
+  /**
+   * 梯度函数，根据哈希值计算梯度向量
+   * 用于确定噪声在特定方向上的变化率
+   * @param hash 哈希值
+   * @param x x坐标
+   * @param y y坐标
+   * @param z z坐标
+   * @returns 梯度值
+   */
+  function grad(hash: number, x: number, y: number, z: number) {
+    var h = hash & 15  // 取哈希值的低4位
+    var u = h < 8 ? x : y,  // 根据哈希值选择x或y
+      v = h < 4 ? y : h == 12 || h == 14 ? x : z  // 根据哈希值选择y、x或z
+    return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v)  // 根据哈希值确定正负号
   }
 
   return {
-    noise: function (x, y, z) {
-      var floorX = Math.floor(x),
+    /**
+     * 生成3D Perlin噪声
+     * @param x x坐标
+     * @param y y坐标
+     * @param z z坐标
+     * @returns 噪声值 (-1 到 1)
+     */
+    noise: function (x: number, y: number, z: number) {
+      // 计算整数部分，用于确定晶格点
+      const floorX = Math.floor(x),
         floorY = Math.floor(y),
         floorZ = Math.floor(z)
 
-      var X = floorX & 255,
+      // 将坐标映射到0-255范围内，用于数组索引
+      // 这里的 & 255 是将 floorX 限制在 0~255 之间（相当于 floorX % 256），常用于数组下标循环
+      const X = floorX & 255,
         Y = floorY & 255,
         Z = floorZ & 255
 
+      // 计算小数部分，用于插值
       x -= floorX
       y -= floorY
       z -= floorZ
 
-      var xMinus1 = x - 1,
+      // 计算相对于下一个晶格点的偏移
+      const xMinus1 = x - 1,
         yMinus1 = y - 1,
         zMinus1 = z - 1
 
-      var u = fade(x),
+      // 应用平滑函数到小数部分
+      const u = fade(x),
         v = fade(y),
         w = fade(z)
 
-      var A = p[X] + Y,
+      // 计算8个晶格点的哈希值
+      // 这些点构成了包含输入坐标的立方体
+      const A = p[X] + Y,
         AA = p[A] + Z,
         AB = p[A + 1] + Z,
         B = p[X + 1] + Y,
         BA = p[B] + Z,
         BB = p[B + 1] + Z
 
+      // 使用三线性插值计算最终噪声值
+      // 在8个晶格点之间进行插值
       return lerp(
         w,
         lerp(
