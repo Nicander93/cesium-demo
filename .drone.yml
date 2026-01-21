@@ -2,26 +2,19 @@ kind: pipeline
 type: docker
 name: deploy-static-site
 
-# 禁用默认克隆，使用 SSH 连接
+# 禁用默认克隆，使用镜像加速
 clone:
   disable: true
 
 steps:
-  # 0. 使用 SSH 克隆
+  # 0. 使用镜像加速克隆
   - name: clone
     image: alpine/git
     pull: if-not-exists
-    environment:
-      SSH_KEY:
-        from_secret: github_ssh_key
     commands:
-      - mkdir -p ~/.ssh
-      - echo "$SSH_KEY" > ~/.ssh/id_rsa
-      - chmod 600 ~/.ssh/id_rsa
-      - ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-      - SSH_URL=$(echo $DRONE_GIT_HTTP_URL | sed 's|https://github.com/|git@github.com:|')
-      - echo "使用 SSH 克隆：$SSH_URL"
-      - git clone --depth=1 --branch=$DRONE_BRANCH $SSH_URL .
+      - MIRROR_URL=$(echo $DRONE_GIT_HTTP_URL | sed 's|https://github.com|https://ghfast.top/https://github.com|')
+      - echo "使用镜像克隆：$MIRROR_URL"
+      - git clone --depth=1 --branch=$DRONE_BRANCH $MIRROR_URL .
       - git checkout $DRONE_COMMIT
 
   # 1. 构建项目
