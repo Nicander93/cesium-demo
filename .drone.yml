@@ -1,0 +1,78 @@
+kind: pipeline
+type: docker
+name: deploy-static-site
+
+# 只克隆最新一次提交，加快构建速度
+clone:
+  depth: 1
+
+environment:
+  TZ: Asia/Shanghai
+  DEPLOY_PATH:
+    from_secret: deploy_path
+
+steps:
+  # 1. 构建项目
+  - name: build
+    image: node:20
+    pull: if-not-exists
+    commands:
+      - echo "开始构建..."
+      - corepack enable
+      - pnpm config set registry https://registry.npmmirror.com
+      - pnpm install --frozen-lockfile
+      - pnpm run build
+      - echo "构建完成，产物在 dist/"
+  
+  # 2. 通过 SCP 上传到服务器临时目录（只上传 dist/）
+  - name: upload
+    image: appleboy/drone-scp
+    pull: if-not-exists
+    settings:
+      host:
+        from_secret: server_host
+      username:
+        from_secret: server_user
+      port: 22
+      key:
+        from_secret: server_ssh_key
+      # 上传前清空临时目录
+      rm: true
+      # 本地构建目录（根据你的项目调整）
+      source: dist/*
+      # 服务器临时目录
+      target: /tmp/drone-deploy
+  
+  # 3. 通过 SSH 执行部署命令（同步到你指定的目录）
+  - name: deploy
+    image: appleboy/drone-ssh
+    pull: if-not-exists
+    settings:
+      host:
+        from_secret: server_host
+      username:
+        from_secret: server_user
+      port: 22
+      key:
+        from_secret: server_ssh_key
+      script:
+        - echo "开始部署..."
+        - if [ -z "$DEPLOY_PATH" ]; then echo "缺少部署目录：请在 Drone Secret 配置 deploy_path" && exit 1; fi
+        - echo "目标目录：$DEPLOY_PATH"
+        - mkdir -p "$DEPLOY_PATH"
+        - RELEASES_DIR="$DEPLOY_PATH/.releases"
+        - mkdir -p "$RELEASES_DIR"
+        - RELEASE_DIR="$RELEASES_DIR/$(date +%Y%m%d%H%M%S)"
+        - mkdir -p "$RELEASE_DIR"
+        - rsync -a --delete /tmp/drone-deploy/ "$RELEASE_DIR/"
+        - ln -sfn "$RELEASE_DIR" "$DEPLOY_PATH/current"
+        - echo "部署完成：$DEPLOY_PATH/current"
+
+# 触发条件
+trigger:
+  branch:
+    - main
+    - master
+  event:
+    - push
+
