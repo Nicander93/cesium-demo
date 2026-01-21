@@ -31,6 +31,11 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Move cesium assets
+        run: |
+          mv dist/cesium-demo/cesium dist/cesium
+          rm -rf dist/cesium-demo
+
       - name: Deploy to Aliyun ECS
         uses: easingthemes/ssh-deploy@main
         with:
