@@ -70,7 +70,7 @@ steps:
         - ln -sfn "$RELEASE_DIR" "$DEPLOY_PATH/current"
         - echo "部署完成：$DEPLOY_PATH/current"
 
-# 触发条件1
+# 触发条件11
 trigger:
   branch:
     - main
