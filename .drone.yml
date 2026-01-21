@@ -11,6 +11,8 @@ steps:
   - name: build
     image: node:20
     pull: if-not-exists
+    environment:
+      COREPACK_NPM_REGISTRY: https://registry.npmmirror.com
     commands:
       - echo "开始构建..."
       - corepack enable
