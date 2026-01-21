@@ -6,11 +6,6 @@ name: deploy-static-site
 clone:
   depth: 1
 
-environment:
-  TZ: Asia/Shanghai
-  DEPLOY_PATH:
-    from_secret: deploy_path
-
 steps:
   # 1. 构建项目
   - name: build
@@ -47,6 +42,9 @@ steps:
   - name: deploy
     image: appleboy/drone-ssh
     pull: if-not-exists
+    environment:
+      DEPLOY_PATH:
+        from_secret: deploy_path
     settings:
       host:
         from_secret: server_host
@@ -55,6 +53,8 @@ steps:
       port: 22
       key:
         from_secret: server_ssh_key
+      envs:
+        - DEPLOY_PATH
       script:
         - echo "开始部署..."
         - if [ -z "$DEPLOY_PATH" ]; then echo "缺少部署目录：请在 Drone Secret 配置 deploy_path" && exit 1; fi
