@@ -125,6 +125,8 @@ function applyMask() {
 
 onMounted(async () => {
     viewer.value = new Cesium.Viewer('cesiumContainer');
+    // 默认加载Cesium地形服务
+    viewer.value.terrainProvider = await Cesium.createWorldTerrainAsync();
     viewer.value.scene.globe.depthTestAgainstTerrain = true;
    // 设置Cesium的分辨率缩放比例为设备像素比
     viewer.value.resolutionScale = Number(window.devicePixelRatio);
