@@ -1,66 +1,71 @@
-import * as Cesium from 'cesium';
-
 /**
- * 反选遮罩（mask + hole）实现。
- * 思路：用 4 个象限面（NE/NW/SE/SW）覆盖全球，再把用户传入的 polygon 当作 hole 挂到对应象限上，
- * 这样能避免跨 180°/跨极点时的大面三角化问题，并且在范围较大时视觉更稳定。
- *
- * 输入建议：优先传 `Cesium.Cartesian3`（一个或多个闭合 ring；不强制你手动闭合，内部画 outline 时会自动补回起点）。
- *
+ * 多边形遮罩工具类
+ * 
  * 用法示例：
- * ```ts
- * const mask = new PolygonMask(viewer);
- * const ring = Cesium.Cartesian3.fromDegreesArray([
- *   116.0, 39.5,
- *   117.0, 39.5,
- *   117.0, 40.5,
- *   116.0, 40.5
- * ]);
+ * ```typescript
+ * const mask = new PolygonMaskPrimitive(viewer);
+ * 
+ * // 基本用法：使用坐标数组创建遮罩
  * mask.setMask({
- *   polygons: ring, // 或者 polygons: [ring1, ring2]
- *   maskColor: Cesium.Color.fromCssColorString('rgb(2,26,79)').withAlpha(0.7),
+ *   polygons: Cesium.Cartesian3.fromDegreesArray([
+ *     120, 30,
+ *     121, 30,
+ *     121, 31,
+ *     120, 31
+ *   ]),
+ *   maskColor: Cesium.Color.BLACK.withAlpha(0.7),
  *   clampToGround: true,
- *   outline: { show: true, color: Cesium.Color.fromCssColorString('#39E09B'), width: 2, clampToGround: true }
+ *   outline: {
+ *     show: true,
+ *     color: Cesium.Color.YELLOW,
+ *     width: 2.0
+ *   }
  * });
+ * 
+ * // 更新遮罩颜色
+ * mask.updateMaskColor(Cesium.Color.BLUE.withAlpha(0.5));
+ * 
+ * // 更新轮廓样式
+ * mask.updateOutlineStyle({ width: 3.0, color: Cesium.Color.RED });
+ * 
+ * // 清除遮罩
+ * mask.clearMask();
+ * 
+ * // 销毁实例
+ * mask.destroy();
  * ```
  */
-export type MaskPolygonInput =
-  | Cesium.PolygonHierarchy
-  | Cesium.PolygonHierarchy[]
-  | Cesium.Cartesian3[]
-  | Cesium.Cartesian3[][];
 
-export interface MaskOutlineStyle {
-  /** 是否显示轮廓线 */
-  show?: boolean;
-  /** 轮廓线颜色 */
-  color?: Cesium.Color;
-  /** 轮廓线宽度（像素） */
-  width?: number;
-  /** 轮廓线是否贴地 */
-  clampToGround?: boolean;
-}
+import * as Cesium from 'cesium';
+import type { MaskOptions, MaskOutlineStyle, MaskPolygonInput } from './mask-types';
 
-export interface MaskOptions {
-  /** 一个或多个 polygon ring（推荐 Cartesian3）；多个 ring 会生成多个 hole */
-  polygons: MaskPolygonInput;
-  /** 遮罩颜色（hole 以外区域的颜色） */
-  maskColor?: Cesium.Color;
-  /** 遮罩面是否贴地（使用 classificationType） */
-  clampToGround?: boolean;
-  /** 轮廓线样式 */
-  outline?: MaskOutlineStyle;
-}
+type MaskPrimitive = Cesium.Primitive | Cesium.GroundPrimitive;
+type OutlinePrimitive = Cesium.Primitive | Cesium.GroundPolylinePrimitive;
 
-export class PolygonMask {
+/**
+ * 多边形遮罩类
+ * 通过创建四个象限的全屏遮罩，并在其中挖空指定多边形区域来实现遮罩效果
+ */
+export class PolygonMaskPrimitive {
   private viewer: Cesium.Viewer;
-  private maskEntities: Cesium.Entity[] = [];
-  private edgeEntities: Cesium.Entity[] = [];
+  /** 遮罩图元数组（四个象限） */
+  private maskPrimitives: MaskPrimitive[] = [];
+  /** 轮廓图元数组 */
+  private outlinePrimitives: OutlinePrimitive[] = [];
+  /** 多边形层级数组 */
   private polygonHierarchies: Cesium.PolygonHierarchy[] = [];
+
+  /** 遮罩颜色 */
   private maskColor: Cesium.Color;
+  /** 轮廓样式 */
   private outlineStyle: Required<MaskOutlineStyle>;
+  /** 是否贴地 */
   private clampToGround: boolean;
 
+  /**
+   * 构造函数
+   * @param viewer Cesium 视图器实例
+   */
   constructor(viewer: Cesium.Viewer) {
     this.viewer = viewer;
     this.maskColor = Cesium.Color.BLACK.withAlpha(0.6);
@@ -73,7 +78,10 @@ export class PolygonMask {
     this.clampToGround = false;
   }
 
-  /** 将外部输入统一转为 `PolygonHierarchy[]`（每个 hierarchy 对应一个 hole） */
+  /**
+   * 将输入转换为多边形层级数组
+   * 支持多种输入格式：PolygonHierarchy、坐标数组等
+   */
   private createPolygonHierarchies(input: MaskPolygonInput): Cesium.PolygonHierarchy[] {
     if (input instanceof Cesium.PolygonHierarchy) return [input];
     if (Array.isArray(input) && input.length && input[0] instanceof Cesium.PolygonHierarchy) return input as Cesium.PolygonHierarchy[];
@@ -91,7 +99,9 @@ export class PolygonMask {
     return [];
   }
 
-  /** 计算一个 hole 的中心点，用于把 hole 分配到哪个象限面上 */
+  /**
+   * 计算多边形中心点的经纬度
+   */
   private getHierarchyCenter(h: Cesium.PolygonHierarchy): { lon: number; lat: number } {
     const positions = h.positions;
     let totalLng = 0;
@@ -107,7 +117,10 @@ export class PolygonMask {
     };
   }
 
-  /** 生成某个象限的外环（用经纬度构造，避开 0/±180/±90 的边界） */
+  /**
+   * 创建象限边界坐标
+   * 用于生成覆盖整个象限的全屏遮罩多边形
+   */
   private createQuadrantPositions(isEast: boolean, isNorth: boolean): Cesium.Cartesian3[] {
     const lonMin = isEast ? 0.1 : -179.9;
     const lonMax = isEast ? 179.9 : -0.1;
@@ -128,23 +141,20 @@ export class PolygonMask {
   }
 
   /**
-   * 设置/更新遮罩。
-   * - `polygons`：一个或多个 ring（每个 ring >= 3 个点）
-   * - `outline`：可选；`show=false` 时不创建轮廓线
+   * 设置遮罩
+   * @param options 遮罩配置选项
+   * - polygons: 多边形输入，支持多种格式
+   * - maskColor: 遮罩颜色（默认黑色半透明）
+   * - clampToGround: 是否贴地（默认false）
+   * - outline: 轮廓样式配置
    */
   setMask(options: MaskOptions): void {
     this.clearMask();
 
     this.polygonHierarchies = this.createPolygonHierarchies(options.polygons);
-    
-    if (options.maskColor) {
-      this.maskColor = options.maskColor;
-    }
 
-    if (options.clampToGround !== undefined) {
-      this.clampToGround = options.clampToGround;
-    }
-
+    if (options.maskColor) this.maskColor = options.maskColor;
+    if (options.clampToGround !== undefined) this.clampToGround = options.clampToGround;
     if (options.outline) {
       this.outlineStyle = {
         show: options.outline.show ?? this.outlineStyle.show,
@@ -174,55 +184,130 @@ export class PolygonMask {
       else holesSW.push(h);
     }
 
-    const makePolygonEntity = (isEast: boolean, isNorth: boolean, holes: Cesium.PolygonHierarchy[]) => {
+    const makeMaskPrimitive = (id: string, isEast: boolean, isNorth: boolean, holes: Cesium.PolygonHierarchy[]) => {
       const hierarchy = new Cesium.PolygonHierarchy(
         this.createQuadrantPositions(isEast, isNorth),
         holes.length ? holes : undefined
       );
 
-      const polygon: any = {
-        hierarchy,
-        material: this.maskColor,
-        perPositionHeight: false,
-        heightReference: this.clampToGround ? Cesium.HeightReference.CLAMP_TO_GROUND : undefined,
-        classificationType: this.clampToGround ? Cesium.ClassificationType.TERRAIN : undefined
-      };
+      const geometry = new Cesium.PolygonGeometry({
+        polygonHierarchy: hierarchy,
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
+      });
 
-      const entity = this.viewer.entities.add({ polygon });
-      this.maskEntities.push(entity);
+      const instance = new Cesium.GeometryInstance({
+        id,
+        geometry,
+        attributes: {
+          color: Cesium.ColorGeometryInstanceAttribute.fromColor(this.maskColor)
+        }
+      });
+
+      const appearance = new Cesium.PerInstanceColorAppearance({
+        flat: true,
+        translucent: true,
+        closed: false
+      });
+
+      const primitive: MaskPrimitive = this.clampToGround
+        ? new Cesium.GroundPrimitive({
+            geometryInstances: instance,
+            appearance,
+            allowPicking: false,
+            releaseGeometryInstances: false,
+            classificationType: Cesium.ClassificationType.TERRAIN
+          })
+        : new Cesium.Primitive({
+            geometryInstances: instance,
+            appearance,
+            allowPicking: false,
+            releaseGeometryInstances: false
+          });
+
+      this.viewer.scene.primitives.add(primitive);
+      this.maskPrimitives.push(primitive);
     };
 
-    makePolygonEntity(true, true, holesNE);
-    makePolygonEntity(false, true, holesNW);
-    makePolygonEntity(true, false, holesSE);
-    makePolygonEntity(false, false, holesSW);
+    makeMaskPrimitive('mask_NE', true, true, holesNE);
+    makeMaskPrimitive('mask_NW', false, true, holesNW);
+    makeMaskPrimitive('mask_SE', true, false, holesSE);
+    makeMaskPrimitive('mask_SW', false, false, holesSW);
 
     if (this.outlineStyle.show) {
       this.createOutline();
     }
   }
 
-  /** 为每个 hole 生成一条 polyline 作为轮廓线 */
+  /**
+   * 创建多边形轮廓线
+   */
   private createOutline(): void {
     if (!this.polygonHierarchies.length) return;
 
-    for (const h of this.polygonHierarchies) {
+    const instances: Cesium.GeometryInstance[] = [];
+
+    for (let i = 0; i < this.polygonHierarchies.length; i++) {
+      const h = this.polygonHierarchies[i];
       const positions = [...h.positions, h.positions[0]];
       if (positions.length < 4) continue;
 
-      const e = this.viewer.entities.add({
-        polyline: {
+      if (this.outlineStyle.clampToGround) {
+        const geometry = new Cesium.GroundPolylineGeometry({
           positions,
           width: this.outlineStyle.width,
-          material: new Cesium.ColorMaterialProperty(this.outlineStyle.color),
-          clampToGround: this.outlineStyle.clampToGround
-        }
-      });
-      this.edgeEntities.push(e);
+          loop: false
+        });
+        instances.push(
+          new Cesium.GeometryInstance({
+            id: `mask_outline_${i}`,
+            geometry,
+            attributes: {
+              color: Cesium.ColorGeometryInstanceAttribute.fromColor(this.outlineStyle.color)
+            }
+          })
+        );
+      } else {
+        const geometry = new Cesium.PolylineGeometry({
+          positions,
+          width: this.outlineStyle.width,
+          vertexFormat: Cesium.PolylineColorAppearance.VERTEX_FORMAT
+        });
+        instances.push(
+          new Cesium.GeometryInstance({
+            id: `mask_outline_${i}`,
+            geometry,
+            attributes: {
+              color: Cesium.ColorGeometryInstanceAttribute.fromColor(this.outlineStyle.color)
+            }
+          })
+        );
+      }
     }
+
+    if (!instances.length) return;
+
+    const primitive: OutlinePrimitive = this.outlineStyle.clampToGround
+      ? new Cesium.GroundPolylinePrimitive({
+          geometryInstances: instances,
+          appearance: new Cesium.PolylineColorAppearance(),
+          allowPicking: false,
+          releaseGeometryInstances: false
+        })
+      : new Cesium.Primitive({
+          geometryInstances: instances,
+          appearance: new Cesium.PolylineColorAppearance(),
+          allowPicking: false,
+          releaseGeometryInstances: false
+        });
+
+    this.viewer.scene.primitives.add(primitive);
+    this.outlinePrimitives.push(primitive);
   }
 
-  /** 更新轮廓线样式（会重建轮廓线） */
+  /**
+   * 更新轮廓样式
+   * @param style 轮廓样式配置
+   */
   updateOutlineStyle(style: MaskOutlineStyle): void {
     this.outlineStyle = {
       show: style.show ?? this.outlineStyle.show,
@@ -231,24 +316,39 @@ export class PolygonMask {
       clampToGround: style.clampToGround ?? this.outlineStyle.clampToGround
     };
 
-    this.edgeEntities.forEach(e => this.viewer.entities.remove(e));
-    this.edgeEntities = [];
+    this.outlinePrimitives.forEach(p => this.viewer.scene.primitives.remove(p));
+    this.outlinePrimitives = [];
 
     if (this.outlineStyle.show) {
       this.createOutline();
     }
   }
 
-  /** 更新遮罩颜色（不重建几何） */
+  /**
+   * 更新遮罩颜色
+   * @param color 新的遮罩颜色
+   */
   updateMaskColor(color: Cesium.Color): void {
     this.maskColor = color;
-    this.maskEntities.forEach(entity => {
-      if (entity.polygon) {
-        entity.polygon.material = color as any;
+    const ids = ['mask_NE', 'mask_NW', 'mask_SE', 'mask_SW'];
+
+    for (const p of this.maskPrimitives) {
+      const anyP = p as any;
+      if (!anyP.getGeometryInstanceAttributes) continue;
+
+      for (const id of ids) {
+        const attrs = anyP.getGeometryInstanceAttributes(id);
+        if (attrs && attrs.color) {
+          attrs.color = Cesium.ColorGeometryInstanceAttribute.toValue(color);
+        }
       }
-    });
+    }
   }
 
+  /**
+   * 获取当前遮罩配置
+   * @returns 当前遮罩的配置选项
+   */
   getOptions(): { maskColor: Cesium.Color; clampToGround: boolean; outline: Required<MaskOutlineStyle> } {
     return {
       maskColor: this.maskColor,
@@ -257,20 +357,24 @@ export class PolygonMask {
     };
   }
 
-  /** 清理当前遮罩（可重复调用 setMask 重新生成） */
+  /**
+   * 清除遮罩
+   * 移除所有遮罩和轮廓图元
+   */
   clearMask(): void {
-    this.maskEntities.forEach(entity => {
-      this.viewer.entities.remove(entity);
-    });
-    this.maskEntities = [];
+    this.maskPrimitives.forEach(p => this.viewer.scene.primitives.remove(p));
+    this.maskPrimitives = [];
 
-    this.edgeEntities.forEach(e => this.viewer.entities.remove(e));
-    this.edgeEntities = [];
+    this.outlinePrimitives.forEach(p => this.viewer.scene.primitives.remove(p));
+    this.outlinePrimitives = [];
 
     this.polygonHierarchies = [];
   }
 
-  /** 销毁（等价于 clearMask） */
+  /**
+   * 销毁实例
+   * 清除所有遮罩并释放资源
+   */
   destroy(): void {
     this.clearMask();
   }

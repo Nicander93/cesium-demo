@@ -1,14 +1,35 @@
 <template>
-    <div id="cesiumContainer"></div>
+    <div class="page">
+        <div id="cesiumContainer"></div>
+
+        <div class="mask-switch">
+            <label>
+                <input type="radio" value="entity" v-model="maskMode" />
+                Entity版
+            </label>
+            <label>
+                <input type="radio" value="primitive" v-model="maskMode" />
+                Primitive版（allowPicking=false）
+            </label>
+        </div>
+    </div>
 </template>
 
 <script setup lang="ts">
 import * as Cesium from 'cesium';
-import { onMounted, ref, onUnmounted } from 'vue';
-import { PolygonMask } from './primitive-mask';
+import { onMounted, ref, onUnmounted, watch } from 'vue';
+import { PolygonMask, type MaskOptions } from './entity-mask';
+import { PolygonMaskPrimitive } from './primitive-mask';
 
 const viewer = ref<Cesium.Viewer | null>(null);
-const polygonMask = ref<PolygonMask | null>(null);
+
+type MaskMode = 'entity' | 'primitive';
+type MaskApi = { setMask: (options: MaskOptions) => void; destroy: () => void };
+
+const maskMode = ref<MaskMode>('primitive');
+const maskInstance = ref<MaskApi | null>(null);
+const preparedPolygons = ref<Cesium.Cartesian3[][]>([]);
+const preparedCenter = ref<[number, number]>([116.5, 40]);
 
 function extractRingsFromGeoJSON(geojson: any): number[][][] {
     const rings: number[][][] = [];
@@ -72,6 +93,36 @@ function calcCenterFromRings(rings: number[][][]): [number, number] {
 
 const geojsonUrl = new URL('./polygon.geojson', import.meta.url).href;
 
+function destroyMask() {
+    maskInstance.value?.destroy();
+    maskInstance.value = null;
+}
+
+function buildMaskInstance(v: Cesium.Viewer, mode: MaskMode): MaskApi {
+    return mode === 'primitive' ? new PolygonMaskPrimitive(v) : new PolygonMask(v);
+}
+
+function applyMask() {
+    const v = viewer.value;
+    if (!v) return;
+    if (!preparedPolygons.value.length) return;
+
+    destroyMask();
+    maskInstance.value = buildMaskInstance(v, maskMode.value);
+
+    maskInstance.value.setMask({
+        polygons: preparedPolygons.value,
+        maskColor: Cesium.Color.fromCssColorString("rgb(2,26,79)").withAlpha(0.7),
+        clampToGround: true,
+        outline: {
+            show: true,
+            color: Cesium.Color.fromCssColorString('#39E09B').withAlpha(0.9),
+            width: 2,
+            clampToGround: true
+        }
+    });
+}
+
 onMounted(async () => {
     viewer.value = new Cesium.Viewer('cesiumContainer');
     viewer.value.scene.globe.depthTestAgainstTerrain = true;
@@ -79,8 +130,6 @@ onMounted(async () => {
     viewer.value.resolutionScale = Number(window.devicePixelRatio);
      // 开启Cesium抗锯齿（FXAA抗锯齿）
     viewer.value.scene.postProcessStages.fxaa.enabled = true;
-    polygonMask.value = new PolygonMask(viewer.value);
-
     try {
         const resp = await fetch(geojsonUrl);
         const geojson = await resp.json();
@@ -96,17 +145,10 @@ onMounted(async () => {
             if (cart.length >= 3) polygons.push(cart);
         }
 
-        polygonMask.value.setMask({
-            polygons,
-            maskColor: Cesium.Color.fromCssColorString("rgb(2,26,79)").withAlpha(0.7),
-            clampToGround: true,
-            outline: {
-                show: true,
-                color: Cesium.Color.fromCssColorString('#39E09B').withAlpha(0.9),
-                width: 2,
-                clampToGround: true
-            }
-        });
+        preparedPolygons.value = polygons;
+        preparedCenter.value = [centerLon, centerLat];
+
+        applyMask();
 
         viewer.value.camera.flyTo({
             destination: Cesium.Cartesian3.fromDegrees(centerLon, centerLat, 800000)
@@ -116,7 +158,33 @@ onMounted(async () => {
     }
 });
 
+watch(maskMode, () => {
+    applyMask();
+});
+
 onUnmounted(() => {
-    polygonMask.value?.destroy();
+    destroyMask();
 });
 </script>
+
+<style scoped>
+.page {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+.mask-switch {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 6px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    user-select: none;
+}
+</style>

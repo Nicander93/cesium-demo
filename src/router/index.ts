@@ -6,7 +6,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Home.vue'),
   },
   {
-    path: '/mask',
+    path: '/mask-shader',
     component: () => import('@/views/mask/mask.vue'),
     meta: {
       title: '着色器遮罩',
@@ -15,11 +15,11 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/mask1',
+    path: '/mask-polygon',
     component: () => import('@/views/mask1/mask.vue'),
     meta: {
-      title: '着色器遮罩1',
-      description: '使用Cesium着色器实现遮罩效果1',
+      title: '多边形遮罩',
+      description: '使用Entity/Primitive实现多边形反选遮罩（支持allowPicking=false）',
       icon: 'fas fa-mask',
     },
   },
