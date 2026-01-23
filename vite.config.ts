@@ -15,6 +15,7 @@ export default defineConfig({
       cesiumBaseUrl: 'cesium',
     }),
   ],
+  assetsInclude: ['**/*.geojson'],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

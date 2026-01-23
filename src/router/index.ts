@@ -15,6 +15,33 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/mask1',
+    component: () => import('@/views/mask1/mask.vue'),
+    meta: {
+      title: '着色器遮罩1',
+      description: '使用Cesium着色器实现遮罩效果1',
+      icon: 'fas fa-mask',
+    },
+  },
+  {
+    path: '/postprocess-mask',
+    component: () => import('@/views/mask1/postProcess-test.vue'),
+    meta: {
+      title: '后处理遮罩',
+      description: '使用PostProcessStage实现遮罩效果',
+      icon: 'fas fa-mask',
+    },
+  },
+  {
+    path: '/texture-mask',
+    component: () => import('@/views/mask1/texture-mask-test.vue'),
+    meta: {
+      title: '纹理遮罩',
+      description: '使用预渲染纹理实现高性能遮罩',
+      icon: 'fas fa-mask',
+    },
+  },
+  {
     path: '/off-screen-render',
     component: () => import('@/views/off-screen-render/index.vue'),
     meta: {
