@@ -6,16 +6,16 @@ import cesium from 'vite-plugin-cesium'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/cesium-demo/',
   plugins: [
     vue(),
     cesium({
-      // 启用源码替换功能
       rebuildCesium: false,
-      // 指定自定义Cesium源码目录
       cesiumBuildPath: './src/cesium',
-      cesiumBaseUrl: './src/cesium',
+      cesiumBaseUrl: 'cesium',
     }),
   ],
+  assetsInclude: ['**/*.geojson'],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

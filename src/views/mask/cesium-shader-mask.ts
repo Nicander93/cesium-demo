@@ -1,13 +1,14 @@
 import * as Cesium from 'cesium';
 
 /**
- * 基于 Shader 的 Cesium 遮罩实现
- * 通过自定义材质和着色器实现高性能遮罩效果
+ * 基于 Shader + 纹理 的 Cesium 遮罩实现
+ * 支持任意多边形，通过将多边形渲染到纹理来实现
  */
 
 interface MaskOptions {
     maskColor?: number[];
     fadeDistance?: number;
+    textureSize?: number; // 纹理分辨率，默认 2048
 }
 
 export class ShaderMask {
@@ -15,120 +16,115 @@ export class ShaderMask {
     private options: {
         maskColor: number[];
         fadeDistance: number;
+        textureSize: number;
     };
-    private maskPolygons: number[][][] = []; // 存储遮罩多边形
-    private maskEntities: Cesium.Entity[] = []; // 存储遮罩实体
-    public globalMaskEntity: Cesium.Entity | null = null;
+    private maskPolygons: number[][][] = [];
+    public globalMaskPrimitive: Cesium.Primitive | null = null;
+    private maskMaterial: Cesium.Material | null = null;
+    private maskCanvas: HTMLCanvasElement | null = null;
+    private maskCtx: CanvasRenderingContext2D | null = null;
 
     constructor(viewer: Cesium.Viewer, options: MaskOptions = {}) {
         this.viewer = viewer;
         this.options = {
-            maskColor: options.maskColor || [0.0, 0.0, 0.0, 0.5], // 遮罩颜色 RGBA
-            fadeDistance: options.fadeDistance || 1000.0, // 边缘渐变距离（米）
+            maskColor: options.maskColor || [0.0, 0.0, 0.0, 0.5],
+            fadeDistance: options.fadeDistance || 1.0,
+            textureSize: options.textureSize || 2048,
         };
         
+        this.initCanvas();
         this.initializeShaderMaterial();
     }
 
-    /**
-     * 初始化自定义着色器材质
-     */
+    private initCanvas(): void {
+        this.maskCanvas = document.createElement('canvas');
+        this.maskCanvas.width = this.options.textureSize;
+        this.maskCanvas.height = this.options.textureSize;
+        this.maskCtx = this.maskCanvas.getContext('2d');
+    }
+
     private initializeShaderMaterial(): void {
-        // 注册自定义材质类型
-        (Cesium.Material as any).MaskType = 'Mask';
-        (Cesium.Material as any)._materialCache?.addMaterial((Cesium.Material as any).MaskType, {
+        const materialType = 'PolygonMaskMaterial_' + Date.now();
+        
+        // 创建初始空白纹理
+        this.updateMaskTexture();
+
+        (Cesium.Material as any)._materialCache?.addMaterial(materialType, {
             fabric: {
-                type: (Cesium.Material as any).MaskType,
+                type: materialType,
                 uniforms: {
                     maskColor: new Cesium.Color(0.0, 0.0, 0.0, 0.5),
-                    fadeDistance: 1000.0,
-                    // 简化：只支持一个矩形区域
-                    minLng: -180.0,
-                    maxLng: 180.0,
-                    minLat: -90.0,
-                    maxLat: 90.0,
+                    fadeDistance: 1.0,
                     enableMask: false,
-                    time: 0.0
+                    maskTexture: this.maskCanvas
                 },
                 source: this.getFragmentShader()
             }
         });
 
-        // 创建全球覆盖的矩形，使用自定义材质
-        this.globalMaskEntity = this.viewer.entities.add({
-            rectangle: {
-                coordinates: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90),
-                material: new Cesium.Material({
-                    fabric: {
-                        type: (Cesium.Material as any).MaskType,
-                        uniforms: {
-                            maskColor: new Cesium.Color(...this.options.maskColor),
-                            fadeDistance: this.options.fadeDistance,
-                            minLng: -180.0,
-                            maxLng: 180.0,
-                            minLat: -90.0,
-                            maxLat: 90.0,
-                            enableMask: false,
-                            time: 0.0
-                        }
-                    }
-                }) as any,
-                height: 0,
-                extrudedHeight: 0
+        this.maskMaterial = new Cesium.Material({
+            fabric: {
+                type: materialType,
+                uniforms: {
+                    maskColor: new Cesium.Color(...this.options.maskColor),
+                    fadeDistance: this.options.fadeDistance,
+                    enableMask: false,
+                    maskTexture: this.maskCanvas
+                }
             }
         });
+
+        const rectangleInstance = new Cesium.GeometryInstance({
+            geometry: new Cesium.RectangleGeometry({
+                rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90),
+                vertexFormat: Cesium.MaterialAppearance.MaterialSupport.ALL.vertexFormat
+            })
+        });
+
+        this.globalMaskPrimitive = this.viewer.scene.primitives.add(
+            new Cesium.Primitive({
+                geometryInstances: rectangleInstance,
+                appearance: new Cesium.MaterialAppearance({
+                    material: this.maskMaterial,
+                    translucent: true,
+                    flat: true
+                }),
+                asynchronous: false
+            })
+        );
     }
 
-    /**
-     * 获取片段着色器代码
-     */
     private getFragmentShader(): string {
         return `
             uniform vec4 maskColor;
             uniform float fadeDistance;
-            uniform float minLng;
-            uniform float maxLng;
-            uniform float minLat;
-            uniform float maxLat;
             uniform bool enableMask;
-            uniform float time;
+            uniform sampler2D maskTexture;
             
             czm_material czm_getMaterial(czm_materialInput materialInput) {
                 czm_material material = czm_getDefaultMaterial(materialInput);
                 
-                // 获取当前像素的地理坐标
                 vec2 st = materialInput.st;
-                
-                // 将纹理坐标转换为经纬度
-                float longitude = mix(-180.0, 180.0, st.x);
-                float latitude = mix(-90.0, 90.0, st.y);
-                
-                // 默认不遮罩
                 float maskAlpha = 0.0;
                 
                 if (enableMask) {
-                    // 检查是否在指定的矩形区域外
-                    bool outsideRegion = longitude < minLng || longitude > maxLng || 
-                                        latitude < minLat || latitude > maxLat;
+                    // 采样蒙版纹理 (R通道: 1.0=透明区域, 0.0=遮罩区域)
+                    float maskValue = texture(maskTexture, st).r;
                     
-                    if (outsideRegion) {
-                        maskAlpha = maskColor.a;
-                        
-                        // 计算到边界的距离，实现边缘渐变
-                        if (fadeDistance > 0.0) {
-                            float distToLng = min(abs(longitude - minLng), abs(longitude - maxLng));
-                            float distToLat = min(abs(latitude - minLat), abs(latitude - maxLat));
-                            float minDist = min(distToLng, distToLat);
-                            
-                            // 基于距离计算渐变
-                            float fadeRatio = clamp(minDist / (fadeDistance * 0.01), 0.0, 1.0);
-                            maskAlpha *= fadeRatio;
-                        }
+                    // maskValue = 1.0 表示在多边形内部（透明），0.0 表示外部（遮罩）
+                    float isOutside = 1.0 - maskValue;
+                    
+                    if (fadeDistance > 0.0) {
+                        // 使用 G 通道存储的距离信息实现边缘渐变
+                        float distValue = texture(maskTexture, st).g;
+                        float fadeRatio = clamp(distValue / fadeDistance, 0.0, 1.0);
+                        maskAlpha = isOutside * maskColor.a * fadeRatio;
+                    } else {
+                        maskAlpha = isOutside * maskColor.a;
                     }
                 }
                 
-                // 应用遮罩效果
-                material.diffuse = mix(vec3(1.0), maskColor.rgb, maskAlpha);
+                material.diffuse = maskColor.rgb;
                 material.alpha = maskAlpha;
                 
                 return material;
@@ -137,35 +133,144 @@ export class ShaderMask {
     }
 
     /**
-     * 添加遮罩多边形（简化版：只支持矩形区域）
-     * @param coordinates 矩形坐标数组 [[lng, lat], [lng, lat], ...]
+     * 将经纬度坐标转换为纹理坐标
      */
-    addMaskPolygon(coordinates: number[][]): void {
-        if (!coordinates || coordinates.length < 2) {
-            console.warn('矩形区域至少需要2个顶点');
-            return;
-        }
-
-        // 计算边界框
-        const lngs = coordinates.map(coord => coord[0]);
-        const lats = coordinates.map(coord => coord[1]);
-        
-        const minLng = Math.min(...lngs);
-        const maxLng = Math.max(...lngs);
-        const minLat = Math.min(...lats);
-        const maxLat = Math.max(...lats);
-
-        this.maskPolygons.push(coordinates);
-        this.updateShaderUniforms(minLng, maxLng, minLat, maxLat);
+    private lngLatToTextureCoord(lng: number, lat: number): [number, number] {
+        const x = ((lng + 180) / 360) * this.options.textureSize;
+        const y = ((90 - lat) / 180) * this.options.textureSize; // Y轴翻转
+        return [x, y];
     }
 
     /**
-     * 设置矩形遮罩区域
-     * @param bounds 边界 [minLng, minLat, maxLng, maxLat]
+     * 更新蒙版纹理
      */
-    setMaskBounds(bounds: [number, number, number, number]): void {
-        const [minLng, minLat, maxLng, maxLat] = bounds;
-        this.updateShaderUniforms(minLng, maxLng, minLat, maxLat);
+    private updateMaskTexture(): void {
+        if (!this.maskCtx || !this.maskCanvas) return;
+
+        const ctx = this.maskCtx;
+        const size = this.options.textureSize;
+
+        // 清空画布 - 黑色表示遮罩区域
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, size, size);
+
+        // 绘制所有多边形 - 白色表示透明区域
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'white';
+
+        for (const polygon of this.maskPolygons) {
+            if (polygon.length < 3) continue;
+
+            ctx.beginPath();
+            const [startX, startY] = this.lngLatToTextureCoord(polygon[0][0], polygon[0][1]);
+            ctx.moveTo(startX, startY);
+
+            for (let i = 1; i < polygon.length; i++) {
+                const [x, y] = this.lngLatToTextureCoord(polygon[i][0], polygon[i][1]);
+                ctx.lineTo(x, y);
+            }
+
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 生成距离场用于边缘渐变
+        this.generateDistanceField();
+    }
+
+    /**
+     * 生成简化的距离场（用于边缘渐变效果）
+     */
+    private generateDistanceField(): void {
+        if (!this.maskCtx || !this.maskCanvas) return;
+
+        const ctx = this.maskCtx;
+        const size = this.options.textureSize;
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const data = imageData.data;
+
+        // 简化的距离场：基于采样点到边界的曼哈顿距离
+        const maxDist = Math.min(size * 0.1, 100); // 最大渐变距离
+
+        // 找到边界像素并计算距离
+        const isInside = new Uint8Array(size * size);
+        for (let i = 0; i < size * size; i++) {
+            isInside[i] = data[i * 4] > 127 ? 1 : 0;
+        }
+
+        // 简化的距离计算：只检查周围像素
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+                const pixelIdx = idx * 4;
+
+                if (isInside[idx] === 0) {
+                    // 外部像素：计算到最近内部像素的距离
+                    let minDist = maxDist;
+                    const searchRadius = Math.ceil(maxDist);
+
+                    for (let dy = -searchRadius; dy <= searchRadius && minDist > 0; dy++) {
+                        for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+                                if (isInside[ny * size + nx] === 1) {
+                                    const dist = Math.sqrt(dx * dx + dy * dy);
+                                    minDist = Math.min(minDist, dist);
+                                }
+                            }
+                        }
+                    }
+
+                    // 将距离存储在 G 通道，归一化到 0-1
+                    data[pixelIdx + 1] = Math.floor((minDist / maxDist) * 255);
+                } else {
+                    // 内部像素
+                    data[pixelIdx + 1] = 0;
+                }
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    /**
+     * 添加遮罩多边形（支持任意多边形）
+     * @param coordinates 多边形坐标数组 [[lng, lat], [lng, lat], ...]
+     */
+    addMaskPolygon(coordinates: number[][]): void {
+        if (!coordinates || coordinates.length < 3) {
+            console.warn('多边形至少需要3个顶点');
+            return;
+        }
+
+        this.maskPolygons.push([...coordinates]);
+        this.updateMaskTexture();
+        this.refreshMaterialTexture();
+        this.enableMask();
+    }
+
+    /**
+     * 添加多个遮罩多边形
+     */
+    addMaskPolygons(polygons: number[][][]): void {
+        for (const polygon of polygons) {
+            if (polygon && polygon.length >= 3) {
+                this.maskPolygons.push([...polygon]);
+            }
+        }
+        this.updateMaskTexture();
+        this.refreshMaterialTexture();
+        this.enableMask();
+    }
+
+    /**
+     * 刷新材质纹理
+     */
+    private refreshMaterialTexture(): void {
+        if (this.maskMaterial && this.maskCanvas) {
+            (this.maskMaterial as any).uniforms.maskTexture = this.maskCanvas;
+        }
     }
 
     /**
@@ -173,77 +278,65 @@ export class ShaderMask {
      */
     clearMaskPolygons(): void {
         this.maskPolygons = [];
+        this.updateMaskTexture();
+        this.refreshMaterialTexture();
         this.disableMask();
     }
 
-    /**
-     * 启用遮罩
-     */
     enableMask(): void {
-        if (this.globalMaskEntity) {
-            const material = this.globalMaskEntity.rectangle?.material as unknown as Cesium.Material;
-            (material as any).uniforms.enableMask = true;
+        if (this.maskMaterial) {
+            (this.maskMaterial as any).uniforms.enableMask = true;
         }
     }
 
-    /**
-     * 禁用遮罩
-     */
     disableMask(): void {
-        if (this.globalMaskEntity) {
-            const material = this.globalMaskEntity.rectangle?.material as unknown as Cesium.Material;
-            (material as any).uniforms.enableMask = false;
+        if (this.maskMaterial) {
+            (this.maskMaterial as any).uniforms.enableMask = false;
         }
     }
 
-    /**
-     * 更新着色器的uniform变量
-     */
-    private updateShaderUniforms(minLng: number, maxLng: number, minLat: number, maxLat: number): void {
-        if (!this.globalMaskEntity) return;
-
-        const material = this.globalMaskEntity.rectangle?.material as unknown as Cesium.Material;
-        const uniforms = (material as any).uniforms;
-
-        uniforms.minLng = minLng;
-        uniforms.maxLng = maxLng;
-        uniforms.minLat = minLat;
-        uniforms.maxLat = maxLat;
-        uniforms.enableMask = true;
-    }
-
-    /**
-     * 设置遮罩颜色
-     * @param color RGBA数组 [r, g, b, a]
-     */
     setMaskColor(color: number[]): void {
-        if (this.globalMaskEntity) {
-            const material = this.globalMaskEntity.rectangle?.material as unknown as Cesium.Material;
-            (material as any).uniforms.maskColor = new Cesium.Color(...color);
+        if (this.maskMaterial) {
+            (this.maskMaterial as any).uniforms.maskColor = new Cesium.Color(...color);
         }
     }
 
-    /**
-     * 设置边缘渐变距离
-     * @param distance 距离（度）
-     */
     setFadeDistance(distance: number): void {
-        if (this.globalMaskEntity) {
-            const material = this.globalMaskEntity.rectangle?.material as unknown as Cesium.Material;
-            (material as any).uniforms.fadeDistance = distance;
+        this.options.fadeDistance = distance;
+        if (this.maskMaterial) {
+            (this.maskMaterial as any).uniforms.fadeDistance = distance;
         }
     }
 
     /**
-     * 销毁遮罩
+     * 设置纹理分辨率（需要重新初始化）
      */
-    destroy(): void {
-        if (this.globalMaskEntity) {
-            this.viewer.entities.remove(this.globalMaskEntity);
-            this.globalMaskEntity = null;
+    setTextureSize(size: number): void {
+        this.options.textureSize = size;
+        if (this.maskCanvas) {
+            this.maskCanvas.width = size;
+            this.maskCanvas.height = size;
         }
+        this.updateMaskTexture();
+        this.refreshMaterialTexture();
+    }
+
+    /**
+     * 获取当前蒙版纹理的 Canvas（用于调试）
+     */
+    getMaskCanvas(): HTMLCanvasElement | null {
+        return this.maskCanvas;
+    }
+
+    destroy(): void {
+        if (this.globalMaskPrimitive) {
+            this.viewer.scene.primitives.remove(this.globalMaskPrimitive);
+            this.globalMaskPrimitive = null;
+        }
+        this.maskMaterial = null;
         this.maskPolygons = [];
-        this.maskEntities = [];
+        this.maskCanvas = null;
+        this.maskCtx = null;
     }
 }
 
@@ -257,40 +350,52 @@ export class MaskExample {
     }
 
     private async initViewer(): Promise<void> {
-        // 初始化 Cesium Viewer
         this.viewer = new Cesium.Viewer('cesiumContainer', {
             terrainProvider: await Cesium.createWorldTerrainAsync(),
             timeline: false,
             animation: false
         });
 
-        // 等待viewer初始化完成后再设置遮罩
         this.setupMask();
         this.addTestData();
     }
 
     private setupMask(): void {
-        // 创建着色器遮罩
         this.shaderMask = new ShaderMask(this.viewer, {
-            maskColor: [0.0, 0.0, 0.0, 0.6], // 黑色半透明遮罩
-            fadeDistance: 0.5 // 边缘渐变距离（度）
+            maskColor: [0.0, 0.0, 0.0, 0.6],
+            fadeDistance: 0.5,
+            textureSize: 2048 // 纹理分辨率，越大越精细
         });
 
-        // 添加一个矩形遮罩区域（北京周边）
+        // 添加矩形区域（北京周边）
         const beijingArea: number[][] = [
             [116.0, 39.5],
             [117.0, 39.5],
             [117.0, 40.5],
-            [116.0, 40.5],
-            [116.0, 39.5]
+            [116.0, 40.5]
         ];
-        this.shaderMask.addMaskPolygon(beijingArea);
 
-        // 添加一个圆形遮罩区域（上海周边）
-        const shanghaiCenter: [number, number] = [121.5, 31.2];
-        const radius = 0.5;
-        const shanghaiArea = this.generateCircleCoordinates(shanghaiCenter, radius, 16);
-        this.shaderMask.addMaskPolygon(shanghaiArea);
+        // 添加圆形区域（上海周边）
+        const shanghaiArea = this.generateCircleCoordinates([121.5, 31.2], 0.5, 32);
+
+        // 添加不规则多边形（广东省简化边界示例）
+        const guangdongArea: number[][] = [
+            [109.5, 21.5],
+            [110.5, 20.5],
+            [113.0, 21.0],
+            [115.5, 22.5],
+            [117.0, 23.5],
+            [116.5, 25.0],
+            [114.0, 25.5],
+            [111.0, 25.0],
+            [110.0, 23.5]
+        ];
+
+        // 添加星形区域（成都）
+        const chengduStar = this.generateStarCoordinates([104.0, 30.6], 1.0, 0.4, 5);
+
+        // 批量添加多个多边形
+        this.shaderMask.addMaskPolygons([beijingArea, shanghaiArea, guangdongArea, chengduStar]);
     }
 
     /**
@@ -298,7 +403,7 @@ export class MaskExample {
      */
     private generateCircleCoordinates(center: [number, number], radius: number, segments: number = 32): number[][] {
         const coordinates: number[][] = [];
-        for (let i = 0; i <= segments; i++) {
+        for (let i = 0; i < segments; i++) {
             const angle = (i / segments) * 2 * Math.PI;
             const lng = center[0] + radius * Math.cos(angle);
             const lat = center[1] + radius * Math.sin(angle);
@@ -307,8 +412,22 @@ export class MaskExample {
         return coordinates;
     }
 
+    /**
+     * 生成星形坐标（演示复杂多边形）
+     */
+    private generateStarCoordinates(center: [number, number], outerRadius: number, innerRadius: number, points: number = 5): number[][] {
+        const coordinates: number[][] = [];
+        for (let i = 0; i < points * 2; i++) {
+            const angle = (i / (points * 2)) * 2 * Math.PI - Math.PI / 2;
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const lng = center[0] + radius * Math.cos(angle);
+            const lat = center[1] + radius * Math.sin(angle);
+            coordinates.push([lng, lat]);
+        }
+        return coordinates;
+    }
+
     private addTestData(): void {
-        // 添加一些测试数据点
         const testPoints = [
             { name: '北京', position: [116.4, 39.9] },
             { name: '上海', position: [121.5, 31.2] },
@@ -337,18 +456,14 @@ export class MaskExample {
             });
         });
 
-        // 设置相机视角
         this.viewer.camera.setView({
             destination: Cesium.Cartesian3.fromDegrees(116.4, 39.9, 2000000)
         });
     }
 
-    // 动态控制方法
     toggleMask(): void {
-        if (this.shaderMask.globalMaskEntity?.show) {
-            this.shaderMask.globalMaskEntity.show = false;
-        } else if (this.shaderMask.globalMaskEntity) {
-            this.shaderMask.globalMaskEntity.show = true;
+        if (this.shaderMask.globalMaskPrimitive) {
+            this.shaderMask.globalMaskPrimitive.show = !this.shaderMask.globalMaskPrimitive.show;
         }
     }
 
@@ -358,5 +473,32 @@ export class MaskExample {
 
     changeFadeDistance(distance: number): void {
         this.shaderMask.setFadeDistance(distance);
+    }
+
+    /**
+     * 动态添加新的多边形
+     */
+    addPolygon(coordinates: number[][]): void {
+        this.shaderMask.addMaskPolygon(coordinates);
+    }
+
+    /**
+     * 清除所有多边形
+     */
+    clearAllPolygons(): void {
+        this.shaderMask.clearMaskPolygons();
+    }
+
+    /**
+     * 调试：显示蒙版纹理
+     */
+    debugShowMaskTexture(): void {
+        const canvas = this.shaderMask.getMaskCanvas();
+        if (canvas) {
+            const win = window.open('', '_blank');
+            if (win) {
+                win.document.body.appendChild(canvas.cloneNode(true) as HTMLCanvasElement);
+            }
+        }
     }
 }

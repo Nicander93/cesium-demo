@@ -6,11 +6,38 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Home.vue'),
   },
   {
-    path: '/mask',
+    path: '/mask-shader',
     component: () => import('@/views/mask/mask.vue'),
     meta: {
       title: '着色器遮罩',
       description: '使用Cesium着色器实现遮罩效果',
+      icon: 'fas fa-mask',
+    },
+  },
+  {
+    path: '/mask-polygon',
+    component: () => import('@/views/mask1/mask.vue'),
+    meta: {
+      title: '多边形遮罩',
+      description: '使用Entity/Primitive实现多边形反选遮罩（支持allowPicking=false）',
+      icon: 'fas fa-mask',
+    },
+  },
+  {
+    path: '/postprocess-mask',
+    component: () => import('@/views/mask1/postProcess-test.vue'),
+    meta: {
+      title: '后处理遮罩',
+      description: '使用PostProcessStage实现遮罩效果',
+      icon: 'fas fa-mask',
+    },
+  },
+  {
+    path: '/texture-mask',
+    component: () => import('@/views/mask1/texture-mask-test.vue'),
+    meta: {
+      title: '纹理遮罩',
+      description: '使用预渲染纹理实现高性能遮罩',
       icon: 'fas fa-mask',
     },
   },
@@ -209,6 +236,6 @@ const routes: RouteRecordRaw[] = [
 ]
 
 export default createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
