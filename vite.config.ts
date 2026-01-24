@@ -22,6 +22,16 @@ export default defineConfig({
       cesium: path.resolve(__dirname, 'src/cesium'),
     },
   },
+  server: {
+    proxy: {
+      '/mapServer': {
+        target: 'http://58.42.237.175:6080',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/mapServer/, ''),
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
