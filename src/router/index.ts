@@ -12,6 +12,7 @@ const routes: RouteRecordRaw[] = [
       title: '着色器遮罩',
       description: '使用Cesium着色器实现遮罩效果',
       icon: 'fas fa-mask',
+      category: 'mask',
     },
   },
   {
@@ -21,6 +22,7 @@ const routes: RouteRecordRaw[] = [
       title: '多边形遮罩',
       description: '使用Entity/Primitive实现多边形反选遮罩（支持allowPicking=false）',
       icon: 'fas fa-mask',
+      category: 'mask',
     },
   },
   {
@@ -30,6 +32,7 @@ const routes: RouteRecordRaw[] = [
       title: '后处理遮罩',
       description: '使用PostProcessStage实现遮罩效果',
       icon: 'fas fa-mask',
+      category: 'mask',
     },
   },
   {
@@ -39,6 +42,7 @@ const routes: RouteRecordRaw[] = [
       title: '纹理遮罩',
       description: '使用预渲染纹理实现高性能遮罩',
       icon: 'fas fa-mask',
+      category: 'mask',
     },
   },
   {
@@ -48,6 +52,7 @@ const routes: RouteRecordRaw[] = [
       title: '离屏渲染',
       description: '演示Cesium离屏渲染技术',
       icon: 'fas fa-desktop',
+      category: 'render',
     },
   },
   {
@@ -57,6 +62,7 @@ const routes: RouteRecordRaw[] = [
       title: '水面效果',
       description: '展示逼真的水面渲染效果',
       icon: 'fas fa-water',
+      category: 'effect',
     },
   },
   {
@@ -66,6 +72,7 @@ const routes: RouteRecordRaw[] = [
       title: '绘制命令',
       description: '演示Cesium绘制命令',
       icon: 'fas fa-pencil-ruler',
+      category: 'primitive',
     },
   },
   {
@@ -75,6 +82,7 @@ const routes: RouteRecordRaw[] = [
       title: 'Primitive',
       description: '演示Cesium Primitive',
       icon: 'fas fa-cube',
+      category: 'primitive',
     },
   },
   {
@@ -84,6 +92,7 @@ const routes: RouteRecordRaw[] = [
       title: '自定义Primitive',
       description: '演示Cesium自定义Primitive',
       icon: 'fas fa-cube',
+      category: 'primitive',
     },
   },
   {
@@ -93,6 +102,7 @@ const routes: RouteRecordRaw[] = [
       title: 'Cesium工具类',
       description: '便于创建各种Cesium数据的工具类演示',
       icon: 'fas fa-toolbox',
+      category: 'tool',
     },
   },
   {
@@ -100,6 +110,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/diffusion-circle/index.vue'),
     meta: {
       title: '扩散圆',
+      category: 'effect',
     },
   },
   {
@@ -107,6 +118,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/gradient-box/index.vue'),
     meta: {
       title: '渐变box',
+      category: 'effect',
     },
   },
   {
@@ -114,6 +126,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/shadertoy-simple-demo/index.vue'),
     meta: {
       title: 'ShaderToy简单示例',
+      category: 'effect',
     },
   },
   {
@@ -121,6 +134,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/shadertoy-fluid-water/index.vue'),
     meta: {
       title: 'ShaderToy流体水',
+      category: 'effect',
     },
   },
   {
@@ -128,6 +142,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/shadertoy-water-ripple/index.vue'),
     meta: {
       title: 'ShaderToy水波纹',
+      category: 'effect',
     },
   },
   {
@@ -135,6 +150,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/heatmap-2d/index.vue'),
     meta: {
       title: '热力图(2D)',
+      category: 'effect',
     },
   },
   {
@@ -142,6 +158,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/heatmap-3d/index.vue'),
     meta: {
       title: '热力图(3D)',
+      category: 'effect',
     },
   },
   {
@@ -149,6 +166,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/globe-material/index1.vue'),
     meta: {
       title: '地球材质',
+      category: 'material',
     },
   },
   {
@@ -158,6 +176,7 @@ const routes: RouteRecordRaw[] = [
       title: '局部地球材质',
       description: '局部等高线与高程渲染组合效果',
       icon: 'fas fa-mountain',
+      category: 'material',
     },
   },
   {
@@ -166,6 +185,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '倾斜局部压平',
       description: '倾斜局部压平',
+      category: 'tile',
     },
   },
   {
@@ -173,6 +193,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/draw-util/index.vue'),
     meta: {
       title: '绘制工具',
+      category: 'tool',
     },
   },
   {
@@ -180,6 +201,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/fog-post-process/index.vue'),
     meta: {
       title: '雾化后处理',
+      category: 'effect',
     },
   },
   {
@@ -187,6 +209,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/fog-local-post-process/index.vue'),
     meta: {
       title: '高度雾',
+      category: 'effect',
     },
   },
   {
@@ -194,6 +217,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/snow-local-post-process/index.vue'),
     meta: {
       title: '积雪',
+      category: 'effect',
     },
   },
   {
@@ -201,6 +225,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/model-editor/index.vue'),
     meta: {
       title: '模型编辑器',
+      category: 'tool',
     },
   },
   {
@@ -208,6 +233,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/cesium-event-handler/index.vue'),
     meta: {
       title: '自定义Cesium事件处理器',
+      category: 'tool',
     },
   },
   {
@@ -215,6 +241,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/draw-command-primitive/index.vue'),
     meta: {
       title: '绘制命令Primitive',
+      category: 'primitive',
     },
   },
   {
@@ -222,6 +249,17 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/volume-rendering/index.vue'),
     meta: {
       title: '体渲染',
+      category: 'render',
+    },
+  },
+  {
+    path: '/cesium-tdt-ext',
+    component: () => import('@/views/cesium-tdt-ext/index.vue'),
+    meta: {
+      title: '天地图三维地形',
+      description: '演示加载天地图影像和三维地形',
+      icon: 'fas fa-mountain',
+      category: 'ext',
     },
   },
 ]
