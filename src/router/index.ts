@@ -56,6 +56,15 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/arcgis-mapserver',
+    component: () => import('@/views/arcgis-mapserver/index.vue'),
+    meta: {
+      title: 'ArcGIS地图服务',
+      description: '展示ArcGIS地图服务',
+      icon: 'fas fa-map',
+    },
+  },
+  {
     path: '/water',
     component: () => import('@/views/water/water.vue'),
     meta: {
