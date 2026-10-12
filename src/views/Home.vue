@@ -100,7 +100,7 @@ const navItems = computed<NavItem[]>(() =>
       const title = meta?.title ?? path
       const description = meta?.description ?? ''
       const category = meta?.category ?? 'other'
-      const image = new URL(`./${path.replace(/^\//, '')}/index.png`, import.meta.url).href
+      const image = meta?.image ?? new URL(`./${path.replace(/^\//, '')}/index.png`, import.meta.url).href
       return { path, title, description, image, category }
     })
 )

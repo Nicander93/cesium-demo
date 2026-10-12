@@ -2,6 +2,16 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/flood-valley',
+    component: () => import('@/views/flood-valley/index.vue'),
+    meta: {
+      title: '小山谷泄洪',
+      image: new URL('../views/flood-valley/preview.svg', import.meta.url).href,
+      description: '内置水动力实验与外部模型成果回放',
+      category: 'effect',
+    },
+  },
+  {
     path: '/',
     component: () => import('@/views/Home.vue'),
   },

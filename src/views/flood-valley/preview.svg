@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <rect width="640" height="360" fill="#15242a"/>
+  <path d="M88 320 170 65 510 44 560 289Z" fill="#6b7758"/>
+  <g fill="none" stroke="#a5aa7e" opacity=".45">
+    <path d="m108 298 65-210 82 29 24 51-15 57 33 39 217 5"/>
+    <path d="m125 280 57-167 65 28 8 34-13 51 40 55 211-9"/>
+    <path d="m531 264-47-192-88 24-17 47 8 50-44 29 151 42"/>
+    <path d="m510 250-35-150-62 18-17 35 11 40-41 35 126 25"/>
+  </g>
+  <path d="M310 312c-25-40-20-57 11-84s67-50 44-81-66-39-34-71l28-5c-35 36 19 48 33 77s-14 50-46 79-35 39-12 86Z" fill="#55c2d0"/>
+  <path d="M323 301c-16-33-16-43 14-72s50-52 39-79-55-34-32-64" fill="none" stroke="#b1e6df" stroke-width="3" opacity=".7"/>
+  <text x="30" y="34" fill="#a8d7ca" font-family="sans-serif" font-size="16" letter-spacing="3">FLOOD LAB</text>
+  <text x="30" y="338" fill="#f1f6ee" font-family="sans-serif" font-size="22">小山谷泄洪 · 内置推演 / 成果回放</text>
+</svg>
