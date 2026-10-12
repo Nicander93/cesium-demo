@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.app.json",
+  "include": ["src/water/**/*.ts", "src/views/water/water.vue", "src/views/water/WaterSurface.ts", "src/types/Cesium.d.ts", "src/vite-env.d.ts"]
+}

@@ -1,302 +1,205 @@
 <template>
-  <div id="cesiumContainer">
-
-  </div>
-  <div class="camera-info">
-    <div>经度: {{ cameraInfo.longitude }}°</div>
-    <div>纬度: {{ cameraInfo.latitude }}°</div>
-    <div>高度: {{ cameraInfo.height }}m</div>
-  </div>
-  
-  <div class="water-controls">
-    <div class="control-item">
-      <label>水面高度:</label>
-      <input 
-        type="number" 
-        v-model="waterHeight" 
-        @input="updateWaterHeight"
-        min="0" 
-        max="1000" 
-        step="1"
-        placeholder="输入高度(米)"
-      />
-      <span>米</span>
-    </div>
-  </div>
+  <div ref="container" class="water-demo__map" />
+  <section class="water-controls" aria-label="水面设置">
+    <label class="water-controls__row" for="water-height">水面高度
+      <input id="water-height" v-model.number="waterHeight" type="number" min="0" max="1000" step="1" @change="updateHeight" /> 米
+    </label>
+    <label class="water-controls__row" for="water-opacity">水面不透明度
+      <input id="water-opacity" v-model.number="waterAlpha" type="range" min="0.5" max="1" step="0.05" @input="updateOpacity" />
+      <output for="water-opacity">{{ Math.round(waterAlpha * 100) }}%</output>
+    </label>
+    <label class="water-controls__row" for="water-quality">画质
+      <select id="water-quality" v-model="quality" @change="updateQuality">
+        <option value="low">流畅</option><option value="balanced">均衡</option><option value="high">精细</option>
+      </select>
+    </label>
+    <label class="water-controls__row"><input v-model="reflection" type="checkbox" @change="updateReflection" /> 实时反射</label>
+    <div class="water-controls__actions"><button type="button" @click="focusWater">聚焦水面</button><button type="button" :disabled="!tileset" @click="focusModel">聚焦模型</button></div>
+    <p class="water-controls__status" role="status">{{ status }}</p>
+    <p v-if="error" class="water-controls__error" role="alert">{{ error }}</p>
+    <details class="water-controls__diagnostics">
+      <summary>加载与性能</summary>
+      <dl>
+        <dt>水面首帧</dt><dd>{{ formatMs(diagnostics?.readyMs ?? null) }}</dd>
+        <dt>模型元数据</dt><dd>{{ formatMs(modelReadyMs) }}</dd>
+        <dt>反射尺寸</dt><dd>{{ diagnostics?.reflectionWidth ?? 0 }} × {{ diagnostics?.reflectionHeight ?? 0 }}</dd>
+        <dt>反射目标创建</dt><dd>{{ diagnostics?.reflectionTargetsCreated ?? 0 }} 次</dd>
+        <dt>几何创建</dt><dd>{{ diagnostics?.geometryCreated ?? 0 }} 次</dd>
+        <dt>反射更新</dt><dd>{{ diagnostics?.reflectionFrames ?? 0 }} 次</dd>
+        <dt>最近反射 CPU 提交</dt><dd>{{ formatMs(diagnostics?.lastReflectionMs ?? null) }}</dd>
+        <dt>当前帧率</dt><dd>{{ fps }} FPS</dd>
+      </dl>
+    </details>
+  </section>
+  <div class="camera-info">经度 {{ cameraInfo.longitude }}° · 纬度 {{ cameraInfo.latitude }}° · 高度 {{ cameraInfo.height }}m</div>
 </template>
 
 <script setup lang="ts">
-// 水面反射效果演示
-import { WaterSurface } from './WaterSurface';
 import * as Cesium from 'cesium'
-import { onMounted, ref } from 'vue'
-window.Cesium = Cesium;
+import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { WaterSurface, type WaterQuality } from '../../water'
 
-// 相机信息响应式数据
-const cameraInfo = ref({
-  longitude: 0,
-  latitude: 0,
-  height: 0
-});
+const container = ref<HTMLElement>()
+const waterHeight = ref(44)
+const quality = ref<WaterQuality>('high')
+const waterAlpha = ref(1)
+const reflection = ref(new URLSearchParams(window.location.search).get('reflection') !== 'off')
+const status = ref('正在初始化水面…')
+const error = ref('')
+const cameraInfo = ref({ longitude: 0, latitude: 0, height: 0 })
+const diagnostics = shallowRef<ReturnType<WaterSurface['getDiagnostics']>>()
+const modelReadyMs = ref<number | null>(null)
+const fps = ref(0)
+const tileset = shallowRef<Cesium.Cesium3DTileset>()
+let viewer: Cesium.Viewer | undefined
+let water: WaterSurface | undefined
+let disposed = false
+let removeCameraListener: (() => void) | undefined
+let removeFrameListener: (() => void) | undefined
+let removeModelProgress: (() => void) | undefined
+let diagnosticsTimer: ReturnType<typeof setInterval> | undefined
+const positions = [
+  Cesium.Cartographic.fromDegrees(119.031533, 33.593063),
+  Cesium.Cartographic.fromDegrees(119.030249, 33.592114),
+  Cesium.Cartographic.fromDegrees(119.032524, 33.591157),
+  Cesium.Cartographic.fromDegrees(119.033232, 33.592346),
+  Cesium.Cartographic.fromDegrees(119.032454, 33.592552),
+]
 
-// 水面高度响应式数据
-const waterHeight = ref(44);
+onMounted(() => {
+  if (!container.value) return
+  const started = performance.now()
+  viewer = new Cesium.Viewer(container.value, {
+    infoBox: false, fullscreenButton: false, vrButton: false, geocoder: false, homeButton: false,
+    sceneModePicker: false, selectionIndicator: false, timeline: false, navigationHelpButton: false,
+    animation: false, baseLayerPicker: false, baseLayer: false,
+    useBrowserRecommendedResolution: false,
+  })
+  viewer.scene.globe.depthTestAgainstTerrain = false
+  water = new WaterSurface({
+    scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value,
+    rippleSize: 50, waterAlpha: waterAlpha.value, reflectivity: 0.3, sunShiny: 100, distortionScale: 3.7,
+    reflection: reflection.value,
+    normalMapUrl: `${import.meta.env.BASE_URL}img/waterNormals.jpg`,
+    onError: reason => { console.error('Water reflection failed', reason); error.value = '实时反射暂不可用，已保留基础水面。' },
+  })
+  focusWater()
+  updateCameraInfo()
+  removeCameraListener = viewer.camera.moveEnd.addEventListener(updateCameraInfo)
+  let frames = 0
+  let lastFrameSample = performance.now()
+  removeFrameListener = viewer.scene.postRender.addEventListener(() => {
+    frames++
+    const now = performance.now()
+    if (now - lastFrameSample >= 1000) {
+      fps.value = Math.round(frames * 1000 / (now - lastFrameSample))
+      frames = 0
+      lastFrameSample = now
+    }
+  })
+  diagnosticsTimer = setInterval(() => { diagnostics.value = water?.getDiagnostics() }, 1000)
+  void water.ready.then(ready => { if (ready && !disposed && modelReadyMs.value === null) status.value = '水面已显示，场景模型加载中…' })
+  // Imagery and the context model are independent of water initialization.
+  void loadImagery()
+  void loadModel(started)
+})
 
-// 设置 Cesium Ion 访问令牌
-Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5OWQ2NGJkZS0yODlmLTRlZjItYjZhYy03Mjc5MmM2OWM0OTkiLCJpZCI6NDAyNDQsImlhdCI6MTY2ODIzODM1OX0.au0c5QRIKaUh_Crsz6sfDfdSj2ePoQyaRcXcoXdcqOw'
-
-// 更新相机信息的函数
-function updateCameraInfo(viewer: Cesium.Viewer) {
-  const camera = viewer.camera;
-  const position = camera.position;
-  const cartographic = Cesium.Cartographic.fromCartesian(position);
-  
-  cameraInfo.value = {
-    longitude: parseFloat(Cesium.Math.toDegrees(cartographic.longitude).toFixed(6)),
-    latitude: parseFloat(Cesium.Math.toDegrees(cartographic.latitude).toFixed(6)),
-    height: Math.round(cartographic.height)
-  };
-}
-
-async function initWaterDemo(): Promise<{
-  viewer: any;
-  waterSurface: any;
-  updateWaterProperties: () => void;
-  waterControls: any;
-}> {
-  // 创建Cesium viewer
-  const viewer = new Cesium.Viewer("cesiumContainer", {
-    infoBox: false,
-    fullscreenButton: false,
-    vrButton: false,
-    geocoder: false,
-    homeButton: false,
-    sceneModePicker: false,
-    selectionIndicator: false,
-    timeline: false,
-    navigationHelpButton: false,
-    navigationInstructionsInitiallyVisible: false,
-    animation: false,
-    baseLayerPicker: false,
-    // terrainProvider: await Cesium.createWorldTerrainAsync(),
-  });
-
-  // 隐藏版权信息
-  (viewer.cesiumWidget.creditContainer as HTMLElement).style.display = "none";
-  viewer.scene.globe.depthTestAgainstTerrain = false;
-  viewer.scene.debugShowFramesPerSecond = true;
-
-  // 监听相机移动事件
-  viewer.camera.moveEnd.addEventListener(() => {
-    updateCameraInfo(viewer);
-  });
-
-  // 定义水面多边形位置（只包含经纬度，高度由height参数控制）
-  const waterPositions = [
-    Cesium.Cartographic.fromDegrees(119.031533, 33.593063, 0),
-    Cesium.Cartographic.fromDegrees(119.030249, 33.592114, 0),
-    Cesium.Cartographic.fromDegrees(119.032524, 33.591157, 0),
-    Cesium.Cartographic.fromDegrees(119.033232, 33.592346, 0),
-    Cesium.Cartographic.fromDegrees(119.032454, 33.592552, 0),
-  ];
-
-  // 加载3D瓦片集
+async function loadImagery(): Promise<void> {
   try {
-    // const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(40866);
-    const tileset = await Cesium.Cesium3DTileset.fromUrl('https://data.mars3d.cn/3dtiles/qx-simiao/tileset.json', {
-      skipLevelOfDetail: true,
-      baseScreenSpaceError: 1024,
-      skipScreenSpaceErrorFactor: 16,
-      skipLevels: 1,
-      immediatelyLoadDesiredLevelOfDetail: false,
-      loadSiblings: false,
-      cullWithChildrenBounds: true
-    });
-    
-    // 期望抬高的米数
-    const deltaHeight = 110;
-
-    // 1. 取模型中心的经纬高
-    const bounding = tileset.boundingSphere;
-    const centerCarto = Cesium.Cartographic.fromCartesian(bounding.center);
-
-    // 2. 计算“原始位置”与“抬高后位置”对应的 Cartesian3
-    const surface = Cesium.Cartesian3.fromRadians(
-      centerCarto.longitude,
-      centerCarto.latitude,
-      centerCarto.height
-    );
-    const offset  = Cesium.Cartesian3.fromRadians(
-      centerCarto.longitude,
-      centerCarto.latitude,
-      centerCarto.height + deltaHeight
-    );
-
-    // 3. 两点相减得到沿当地法线方向的平移向量
-    const translation = Cesium.Cartesian3.subtract(offset, surface, new Cesium.Cartesian3());
-
-    // 4. 应用到 tileset
-    tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
-    
-    viewer.scene.primitives.add(tileset);
-
-    // 等待瓦片集准备就绪后再缩放
-    await (tileset as any).readyPromise;
-  
-    viewer.zoomTo(tileset);
-  } catch (error) {
-    console.warn("无法加载3D瓦片集:", error);
-  } finally {
-    
-    // viewer.camera.setView({
-    //   destination: Cesium.Cartesian3.fromDegrees( 119.47758, 28.44004, 500),
-    //   orientation: {
-    //     heading: 0.0,
-    //     pitch: -0.5,
-    //     roll: 0.0
-    //   }
-    // });
-    
-    // 初始化相机信息
-    updateCameraInfo(viewer);
-  }
-
-  // 水面配置选项
-  const waterSurfaceOptions = {
-    scene: viewer.scene,
-    positions: waterPositions,
-    height: 44,      // 设置水面高度为163米
-    rippleSize: 100,
-    waterColor: Cesium.Color.fromCssColorString("#001e0f"),
-    waterAlpha: 0.9,
-    reflectivity: 0.3,
-    sunShiny: 100,
-    distortionScale: 3.7,
-    normalMapUrl: "/img/waterNormals.jpg"
-  };
-
-  // 创建水面反射效果
-  const waterSurface = new WaterSurface(waterSurfaceOptions);
-
-  // 控制参数
-  const waterControls = {
-    波纹大小: 50,
-    透明度: 0.9,
-    反射率: 0.3,
-    扭曲: 3.7,
-    高度: 44,
-  };
-
-  // 更新水面属性的函数
-  function updateWaterProperties(): void {
-    waterSurface.rippleSize = waterControls.波纹大小;
-    waterSurface.waterAlpha = waterControls.透明度;
-    waterSurface.reflectivity = waterControls.反射率;
-    waterSurface.distortionScale = waterControls.扭曲;
-    waterSurface.height = waterControls.高度;
-  }
-
-  // 初始化水面属性
-  updateWaterProperties();
-
-  // 如果需要GUI控制，可以添加lil-gui
-  // const gui = new GUI();
-  // gui.add(waterControls, "波纹大小").min(0).max(300).onChange(updateWaterProperties);
-  // gui.add(waterControls, "透明度").min(0).max(1).onChange(updateWaterProperties);
-  // gui.add(waterControls, "反射率").min(0).max(1).onChange(updateWaterProperties);
-  // gui.add(waterControls, "扭曲").min(0).max(8).onChange(updateWaterProperties);
-  // gui.add(waterControls, "高度").min(70).max(100).onChange(updateWaterProperties);
-
-  return {
-    viewer,
-    waterSurface,
-    updateWaterProperties,
-    waterControls
-  };
+    const provider = await Cesium.createWorldImageryAsync()
+    if (!disposed && viewer) viewer.imageryLayers.addImageryProvider(provider)
+  } catch { if (!disposed) error.value = '影像加载失败，水面和模型仍可使用。' }
 }
 
-// 全局变量存储waterSurface实例
-let globalWaterSurface: any = null;
-
-// 更新水面高度的函数
-const updateWaterHeight = () => {
-  if (globalWaterSurface) {
-    globalWaterSurface.height = waterHeight.value;
-    console.log('水面高度已更新为:', waterHeight.value, '米');
+async function loadModel(started: number): Promise<void> {
+  let loaded: Cesium.Cesium3DTileset | undefined
+  try {
+    loaded = await Cesium.Cesium3DTileset.fromUrl('https://data.mars3d.cn/3dtiles/qx-simiao/tileset.json', { maximumScreenSpaceError: modelScreenSpaceError() })
+    if (disposed || !viewer) { loaded.destroy(); return }
+    modelReadyMs.value = performance.now() - started
+    const center = Cesium.Cartographic.fromCartesian(loaded.boundingSphere.center)
+    const surface = Cesium.Cartesian3.fromRadians(center.longitude, center.latitude, center.height)
+    const offset = Cesium.Cartesian3.fromRadians(center.longitude, center.latitude, center.height + 110)
+    loaded.modelMatrix = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.subtract(offset, surface, new Cesium.Cartesian3()))
+    viewer.scene.primitives.add(loaded)
+    tileset.value = loaded
+    status.value = '水面已显示，模型细节加载中…'
+    removeModelProgress = loaded.loadProgress.addEventListener((pending: number, processing: number) => {
+      if (!disposed) status.value = pending + processing > 0 ? '水面已显示，模型细节加载中…' : '水面与场景已就绪'
+    })
+    viewer.scene.requestRender()
+  } catch {
+    if (loaded && !loaded.isDestroyed()) loaded.destroy()
+    if (!disposed) { status.value = '水面已就绪'; error.value = '场景模型加载失败，可以继续查看和调整水面。' }
   }
-};
-onMounted(async () => {
-  const result = await initWaterDemo();
-  globalWaterSurface = result.waterSurface;
+}
+
+function updateCameraInfo(): void {
+  if (!viewer) return
+  const position = viewer.camera.positionCartographic
+  cameraInfo.value = { longitude: Number(Cesium.Math.toDegrees(position.longitude).toFixed(6)), latitude: Number(Cesium.Math.toDegrees(position.latitude).toFixed(6)), height: Math.round(position.height) }
+}
+
+function focusWater(): void {
+  if (!viewer) return
+  viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(119.0317, 33.5921, waterHeight.value), new Cesium.HeadingPitchRange(-0.4, -0.5, 450))
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+  updateCameraInfo()
+}
+
+function focusModel(): void {
+  if (viewer && tileset.value) void viewer.zoomTo(tileset.value, new Cesium.HeadingPitchRange(-0.4, -0.5, tileset.value.boundingSphere.radius * 2.5))
+}
+
+function updateHeight(): void {
+  if (typeof waterHeight.value !== 'number' || !Number.isFinite(waterHeight.value) || waterHeight.value < 0 || waterHeight.value > 1000) {
+    waterHeight.value = water?.height ?? 44
+    return
+  }
+  if (water) water.height = waterHeight.value
+  diagnostics.value = water?.getDiagnostics()
+}
+function modelScreenSpaceError(): number { return quality.value === 'high' ? 4 : quality.value === 'balanced' ? 8 : 16 }
+function updateQuality(): void {
+  water?.setOptions({ quality: quality.value })
+  if (tileset.value) tileset.value.maximumScreenSpaceError = modelScreenSpaceError()
+  diagnostics.value = water?.getDiagnostics()
+}
+function updateOpacity(): void { water?.setOptions({ waterAlpha: waterAlpha.value }) }
+function updateReflection(): void { water?.setOptions({ reflection: reflection.value }); diagnostics.value = water?.getDiagnostics() }
+function formatMs(value: number | null): string { return value === null ? '等待中' : `${Math.round(value * 10) / 10} ms` }
+
+onBeforeUnmount(() => {
+  disposed = true
+  if (diagnosticsTimer) clearInterval(diagnosticsTimer)
+  removeCameraListener?.()
+  removeFrameListener?.()
+  removeModelProgress?.()
+  water?.destroy()
+  water = undefined
+  tileset.value = undefined
+  viewer?.destroy()
+  viewer = undefined
 })
 </script>
 
 <style scoped>
-.camera-info {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 10px 15px;
-  border-radius: 5px;
-  font-family: monospace;
-  font-size: 14px;
-  z-index: 1000;
-}
-
-.camera-info div {
-  margin: 2px 0;
-}
-
-.water-controls {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 15px;
-  border-radius: 8px;
-  font-family: 'Arial', sans-serif;
-  font-size: 14px;
-  z-index: 1000;
-  min-width: 200px;
-}
-
-.control-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.control-item label {
-  font-weight: bold;
-  min-width: 80px;
-}
-
-.control-item input {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 5px 8px;
-  border-radius: 4px;
-  font-size: 14px;
-  width: 80px;
-}
-
-.control-item input:focus {
-  outline: none;
-  border-color: #4CAF50;
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.control-item input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.control-item span {
-  color: #4CAF50;
-  font-weight: bold;
-}
+.water-demo__map { position: absolute; inset: 0; }
+.water-controls { position: absolute; top: 18px; right: 18px; width: 250px; padding: 14px; color: #eef5f4; background: rgb(15 28 30 / 88%); border: 1px solid rgb(255 255 255 / 18%); border-radius: 8px; font-size: 13px; }
+.water-controls__row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.water-controls input[type=number] { width: 74px; }
+.water-controls input[type=range] { min-width: 0; width: 80px; padding: 0; }
+.water-controls output { font-variant-numeric: tabular-nums; }
+.water-controls input, .water-controls select { padding: 4px 6px; color: #eef5f4; background: #253c3f; border: 1px solid #557073; border-radius: 4px; }
+.water-controls__actions { display: flex; gap: 8px; }
+.water-controls button { padding: 5px 9px; border: 1px solid #557073; color: #eef5f4; background: #253c3f; border-radius: 4px; cursor: pointer; }
+.water-controls button:disabled { opacity: .4; cursor: default; }
+.water-controls__status { margin: 10px 0 0; color: #a9ceca; font-size: 12px; }
+.water-controls__error { color: #ffd395; }
+.water-controls__diagnostics { margin-top: 10px; font-size: 12px; }
+.water-controls__diagnostics summary { cursor: pointer; }
+.water-controls__diagnostics dl { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin-bottom: 0; }
+.water-controls__diagnostics dd { margin: 0; font-variant-numeric: tabular-nums; }
+.camera-info { position: absolute; left: 18px; bottom: 30px; padding: 8px 12px; background: rgb(15 28 30 / 80%); color: #eef5f4; border-radius: 4px; font-size: 12px; }
+@media (max-width: 520px) { .water-controls { top: 64px; right: 10px; width: 216px; } .camera-info { left: 10px; right: 10px; font-size: 11px; } }
 </style>
