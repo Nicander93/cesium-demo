@@ -11,7 +11,6 @@ export default defineConfig({
     vue(),
     cesium({
       rebuildCesium: false,
-      cesiumBuildPath: './src/cesium',
       cesiumBaseUrl: 'cesium',
     }),
   ],
@@ -19,7 +18,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      cesium: path.resolve(__dirname, 'src/cesium'),
     },
   },
   server: {

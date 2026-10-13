@@ -14,9 +14,16 @@
       </select>
     </label>
     <label class="water-controls__row"><input v-model="reflection" type="checkbox" @change="updateReflection" /> 实时反射</label>
-    <div class="water-controls__actions"><button type="button" @click="focusWater">聚焦水面</button><button type="button" :disabled="!tileset" @click="focusModel">聚焦模型</button></div>
+    <label class="water-controls__row"><input v-model="foam" type="checkbox" @change="updateFoam" /> 岸边浪花</label>
+    <label v-if="foam" class="water-controls__row" for="foam-width">浪花宽度
+      <input id="foam-width" v-model.number="foamWidth" type="range" min="0.5" max="6" step="0.5" @input="updateFoam" />
+      <output for="foam-width">{{ foamWidth }} 米</output>
+    </label>
+    <div class="water-controls__actions"><button type="button" @click="focusWater">聚焦水面</button><button type="button" @click="focusShore">近岸视角</button><button type="button" :disabled="!tileset" @click="focusModel">聚焦模型</button></div>
     <p class="water-controls__status" role="status">{{ status }}</p>
     <p v-if="error" class="water-controls__error" role="alert">{{ error }}</p>
+    <p v-if="diagnostics?.error" class="water-controls__error" role="status">{{ diagnostics.reflectionEnabled ? '反射正在恢复，可手动重试。' : '反射暂不可用，可手动重试。' }} <button type="button" @click="retryReflection">重试反射</button></p>
+    <p v-if="diagnostics?.shoreError" class="water-controls__error" role="status">岸边采样暂不可用，正在重试。</p>
     <details class="water-controls__diagnostics">
       <summary>加载与性能</summary>
       <dl>
@@ -26,6 +33,9 @@
         <dt>反射目标创建</dt><dd>{{ diagnostics?.reflectionTargetsCreated ?? 0 }} 次</dd>
         <dt>几何创建</dt><dd>{{ diagnostics?.geometryCreated ?? 0 }} 次</dd>
         <dt>反射更新</dt><dd>{{ diagnostics?.reflectionFrames ?? 0 }} 次</dd>
+        <dt>反射状态</dt><dd>{{ diagnostics?.reflectionAvailable ? '正常' : diagnostics?.error ? '恢复中' : '暂停' }}</dd>
+        <dt>岸边采样</dt><dd>{{ diagnostics?.shoreWidth ?? 0 }} × {{ diagnostics?.shoreHeight ?? 0 }}</dd>
+        <dt>岸边更新</dt><dd>{{ diagnostics?.shoreFrames ?? 0 }} 次</dd>
         <dt>最近反射 CPU 提交</dt><dd>{{ formatMs(diagnostics?.lastReflectionMs ?? null) }}</dd>
         <dt>当前帧率</dt><dd>{{ fps }} FPS</dd>
       </dl>
@@ -44,6 +54,8 @@ const waterHeight = ref(44)
 const quality = ref<WaterQuality>('high')
 const waterAlpha = ref(1)
 const reflection = ref(new URLSearchParams(window.location.search).get('reflection') !== 'off')
+const foam = ref(true)
+const foamWidth = ref(2)
 const status = ref('正在初始化水面…')
 const error = ref('')
 const cameraInfo = ref({ longitude: 0, latitude: 0, height: 0 })
@@ -80,8 +92,9 @@ onMounted(() => {
     scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value,
     rippleSize: 50, waterAlpha: waterAlpha.value, reflectivity: 0.3, sunShiny: 100, distortionScale: 3.7,
     reflection: reflection.value,
+    foam: foam.value, foamWidth: foamWidth.value,
     normalMapUrl: `${import.meta.env.BASE_URL}img/waterNormals.jpg`,
-    onError: reason => { console.error('Water reflection failed', reason); error.value = '实时反射暂不可用，已保留基础水面。' },
+    onError: reason => { console.warn('Water reflection will retry', reason) },
   })
   focusWater()
   updateCameraInfo()
@@ -151,6 +164,13 @@ function focusModel(): void {
   if (viewer && tileset.value) void viewer.zoomTo(tileset.value, new Cesium.HeadingPitchRange(-0.4, -0.5, tileset.value.boundingSphere.radius * 2.5))
 }
 
+function focusShore(): void {
+  if (!viewer) return
+  viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(119.0317, 33.5921, waterHeight.value), new Cesium.HeadingPitchRange(-0.4, -0.2, 150))
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+  updateCameraInfo()
+}
+
 function updateHeight(): void {
   if (typeof waterHeight.value !== 'number' || !Number.isFinite(waterHeight.value) || waterHeight.value < 0 || waterHeight.value > 1000) {
     waterHeight.value = water?.height ?? 44
@@ -167,6 +187,8 @@ function updateQuality(): void {
 }
 function updateOpacity(): void { water?.setOptions({ waterAlpha: waterAlpha.value }) }
 function updateReflection(): void { water?.setOptions({ reflection: reflection.value }); diagnostics.value = water?.getDiagnostics() }
+function retryReflection(): void { reflection.value = true; updateReflection() }
+function updateFoam(): void { water?.setOptions({ foam: foam.value, foamWidth: foamWidth.value }); diagnostics.value = water?.getDiagnostics() }
 function formatMs(value: number | null): string { return value === null ? '等待中' : `${Math.round(value * 10) / 10} ms` }
 
 onBeforeUnmount(() => {
@@ -191,7 +213,7 @@ onBeforeUnmount(() => {
 .water-controls input[type=range] { min-width: 0; width: 80px; padding: 0; }
 .water-controls output { font-variant-numeric: tabular-nums; }
 .water-controls input, .water-controls select { padding: 4px 6px; color: #eef5f4; background: #253c3f; border: 1px solid #557073; border-radius: 4px; }
-.water-controls__actions { display: flex; gap: 8px; }
+.water-controls__actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .water-controls button { padding: 5px 9px; border: 1px solid #557073; color: #eef5f4; background: #253c3f; border-radius: 4px; cursor: pointer; }
 .water-controls button:disabled { opacity: .4; cursor: default; }
 .water-controls__status { margin: 10px 0 0; color: #a9ceca; font-size: 12px; }

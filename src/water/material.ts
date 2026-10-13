@@ -4,12 +4,17 @@ export interface WaterMaterialOptions {
   origin?: Cesium.Cartesian3
   normalMapUrl?: string
   rippleSize?: number
+  waveStrength?: number
   waterColor?: Cesium.Color
   waterAlpha?: number
   reflectivity?: number
   sunShiny?: number
   distortionScale?: number
   lightDirection?: Cesium.Cartesian3
+  foam?: boolean
+  foamWidth?: number
+  foamIntensity?: number
+  foamSpeed?: number
 }
 
 // Uses standard MaterialAppearance inputs, so the material also works on host-owned geometry.
@@ -18,6 +23,7 @@ uniform sampler2D normalTexture;
 uniform sampler2D reflexTexture;
 uniform float time;
 uniform float size;
+uniform float waveStrength;
 uniform vec4 waterColor;
 uniform float waterAlpha;
 uniform float rf0;
@@ -29,6 +35,46 @@ uniform mat4 worldToLocal;
 uniform mat4 reflectionFromEye;
 uniform float localFrameReady;
 uniform float useNormalTexture;
+uniform sampler2D shoreDepthTexture;
+uniform sampler2D shoreMaskTexture;
+uniform mat4 shoreFromEye;
+uniform mat4 shoreHeightFromClip;
+uniform vec2 shoreSize;
+uniform float shoreReady;
+uniform float foamEnabled;
+uniform float foamWidth;
+uniform float foamIntensity;
+uniform float foamSpeed;
+
+float foamNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  vec4 h = fract(sin(vec4(dot(i, vec2(127.1, 311.7)), dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7)), dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7)), dot(i + 1.0, vec2(127.1, 311.7)))) * 43758.5453);
+  return mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y);
+}
+
+float shoreHeight(vec2 uv) {
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return -1000.0;
+  float depth = texture(shoreDepthTexture, uv).r;
+  if (depth >= 0.999999 || depth <= 0.0) return -1000.0;
+  vec4 local = shoreHeightFromClip * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+  return local.z / local.w;
+}
+
+float shoreLand(vec2 uv) { return smoothstep(-0.15, 0.15, shoreHeight(uv)); }
+
+float shoreFoam(vec3 positionEC) {
+  if (foamEnabled < 0.5 || shoreReady < 0.5 || foamWidth <= 0.0) return 0.0;
+  vec4 clip = shoreFromEye * vec4(positionEC, 1.0);
+  vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 0.0;
+  float band = texture(shoreMaskTexture, uv).r;
+  vec2 local = (uv - 0.5) * shoreSize;
+  float noise = foamNoise(local * 2.0 + vec2(time * foamSpeed * 0.3, -time * foamSpeed * 0.2));
+  float wave = 0.5 + 0.5 * sin(band * 14.0 - time * foamSpeed * 6.0 + foamNoise(local * 0.3) * 4.0);
+  return clamp(band * foamIntensity * smoothstep(0.25, 0.75, noise + wave * 0.3), 0.0, 1.0);
+}
 
 vec3 waterNormal(vec2 uv) {
   if (useNormalTexture < 0.5) {
@@ -46,6 +92,7 @@ vec3 waterNormal(vec2 uv) {
 czm_material czm_getMaterial(czm_materialInput materialInput) {
   czm_material material = czm_getDefaultMaterial(materialInput);
   vec3 normal = waterNormal((materialInput.st * 2.0 - 1.0) * size);
+  normal = normalize(vec3(normal.x * waveStrength, normal.y, normal.z * waveStrength));
   // Keep fragment math near the camera; ECEF reconstruction quantizes close-up reflections.
   vec3 toEye = mat3(worldToLocal) * czm_inverseViewRotation * materialInput.positionToEyeEC;
   toEye = vec3(toEye.x, toEye.z, -toEye.y);
@@ -72,6 +119,9 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   vec3 scatter = max(dot(normal, eyeDirection), 0.0) * waterColor.rgb;
   material.diffuse = mix(vec3(diffuse * 0.3) + scatter, vec3(0.1) + reflected * 0.9 + reflected * specular, fresnel);
   material.alpha = waterAlpha;
+  float foam = shoreFoam(-materialInput.positionToEyeEC);
+  material.diffuse = mix(material.diffuse, vec3(0.88, 0.95, 0.93), foam);
+  material.alpha = mix(material.alpha, 1.0, foam);
   return material;
 }`
 
@@ -86,6 +136,7 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         reflexTexture: Cesium.Material.DefaultImageId,
         time: 0,
         size: options.rippleSize ?? 50,
+        waveStrength: options.waveStrength ?? 1,
         waterColor: Cesium.Color.clone(options.waterColor ?? Cesium.Color.fromCssColorString('#001e0f')),
         waterAlpha: options.waterAlpha ?? 0.9,
         rf0: options.reflectivity ?? 0.3,
@@ -97,6 +148,16 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         localFrameReady: options.origin ? 1 : 0,
         worldToLocal: localFrame(options.origin),
         reflectionFromEye: Cesium.Matrix4.toArray(Cesium.Matrix4.IDENTITY),
+        shoreDepthTexture: Cesium.Material.DefaultImageId,
+        shoreMaskTexture: Cesium.Material.DefaultImageId,
+        shoreFromEye: Cesium.Matrix4.toArray(Cesium.Matrix4.IDENTITY),
+        shoreHeightFromClip: Cesium.Matrix4.toArray(Cesium.Matrix4.IDENTITY),
+        shoreSize: new Cesium.Cartesian2(1, 1),
+        shoreReady: 0,
+        foamEnabled: options.foam === false ? 0 : 1,
+        foamWidth: options.foamWidth ?? 2,
+        foamIntensity: options.foamIntensity ?? 0.8,
+        foamSpeed: options.foamSpeed ?? 0.5,
       },
     },
     translucent: (material: Cesium.Material) => material.uniforms.waterAlpha < 1,
@@ -106,7 +167,7 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
 export function updateWaterMaterial(material: Cesium.Material, options: WaterMaterialOptions & { time?: number }): void {
   validateWaterMaterial(options)
   if (options.time !== undefined && !Number.isFinite(options.time)) throw new RangeError('time must be finite')
-  const names = { rippleSize: 'size', waterAlpha: 'waterAlpha', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time' } as const
+  const names = { waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
@@ -114,14 +175,15 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
   if (options.origin !== undefined) { material.uniforms.worldToLocal = localFrame(options.origin); material.uniforms.localFrameReady = 1 }
   if (options.waterColor !== undefined) material.uniforms.waterColor = Cesium.Color.clone(options.waterColor)
   if (options.lightDirection !== undefined) material.uniforms.lightDirection = Cesium.Cartesian3.clone(options.lightDirection)
+  if (options.foam !== undefined) material.uniforms.foamEnabled = options.foam ? 1 : 0
 }
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
-  for (const key of ['rippleSize', 'sunShiny', 'distortionScale'] as const) {
+  for (const key of ['waveStrength', 'rippleSize', 'sunShiny', 'distortionScale', 'foamWidth', 'foamSpeed'] as const) {
     const value = options[key]
     if (value !== undefined && (!Number.isFinite(value) || value < 0 || (key === 'sunShiny' && value === 0))) throw new RangeError(`${key} is invalid`)
   }
-  for (const key of ['waterAlpha', 'reflectivity'] as const) {
+  for (const key of ['waterAlpha', 'reflectivity', 'foamIntensity'] as const) {
     const value = options[key]
     if (value !== undefined && (!Number.isFinite(value) || value < 0 || value > 1)) throw new RangeError(`${key} must be between 0 and 1`)
   }

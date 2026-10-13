@@ -14,6 +14,10 @@ const duration = ref(240)
 const speed = ref(20)
 const depthMode = ref(false)
 const detailWater = ref(true)
+const flowWater = ref(true)
+const foamWater = ref(true)
+const foamIntensity = ref(0.75)
+const previewFlow = ref(true)
 const error = ref('')
 const exampleUrl = `${import.meta.env.BASE_URL}flood-valley-example.json`
 const status = ref('设置泄洪条件，然后开始推演。')
@@ -65,6 +69,8 @@ let renderer: CesiumFloodLayer | undefined
 let handler: Cesium.ScreenSpaceEventHandler | undefined
 let animation = 0
 let lastTick = 0
+let lastVisualTick = 0
+let visualTime = 0
 let lastPaint = 0
 let lastRecord = 0
 let recording: FloodFrame[] = [solver.snapshot()]
@@ -142,6 +148,7 @@ function exportAnalysis(): void {
 }
 
 function paint(): void {
+  renderer?.setVisualOptions({ flow: flowWater.value, foam: foamWater.value, foamIntensity: foamIntensity.value })
   renderer?.updateDamBreach(currentBreach())
   const key = displayMode.value
   if (key === 'inundation' && inundation.value) renderer?.updateInundation(inundation.value)
@@ -300,6 +307,7 @@ function updateState(next: FloodFrame): void {
 }
 
 function reset(): void {
+  renderer?.resetVisuals()
   running.value = false
   error.value = ''
   displayMode.value = 'water'
@@ -320,6 +328,7 @@ function toggleRunning(): void {
   if (displayMode.value !== 'water') { displayMode.value = 'water'; paint() }
   if (frame.value.time >= maxTime.value) reset()
   running.value = !running.value
+  if (!running.value) paint()
   status.value = running.value ? mode.value === 'simulation' ? damEnabled.value ? '正在计算库水下泄，缺口按预设时间发展。' : '水量计算中；到达设定时长后自动停止泄洪。' : '播放外部模型成果。' : '已暂停。'
 }
 
@@ -403,6 +412,7 @@ async function importResult(event: Event): Promise<void> {
 
 function seek(event: Event): void {
   if (!dataset.value) return
+  renderer?.resetVisuals()
   updateState(interpolateFrame(dataset.value.frames, Number((event.target as HTMLInputElement).value)))
   paint()
 }
@@ -424,7 +434,10 @@ function downloadJson(result: unknown, filename: string): void {
 
 function tick(now: number): void {
   animation = requestAnimationFrame(tick)
-  renderer?.animate(now / 1000)
+  // Preview uses real seconds, so accelerated hydraulics do not strobe the water texture.
+  if (lastVisualTick && (running.value || previewFlow.value)) visualTime += Math.min((now - lastVisualTick) / 1000, 0.1)
+  lastVisualTick = now
+  renderer?.animate(visualTime)
   if (now - lastTick < 100) return
   const elapsed = lastTick ? Math.min((now - lastTick) / 1000, 0.2) : 0
   lastTick = now
@@ -453,10 +466,10 @@ onMounted(() => {
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#15242a')
     viewer.scene.globe.depthTestAgainstTerrain = true
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#14212a')
-    viewer.scene.skyBox.show = false
-    viewer.scene.sun.show = false
-    viewer.scene.moon.show = false
-    viewer.scene.skyAtmosphere.show = false
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false
+    if (viewer.scene.sun) viewer.scene.sun.show = false
+    if (viewer.scene.moon) viewer.scene.moon.show = false
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
     viewer.scene.light = new Cesium.DirectionalLight({ direction: new Cesium.Cartesian3(-0.5, -0.3, -0.8), intensity: 1.5 })
     const scene = new URLSearchParams(window.location.search).get('scene')
     if (scene === 'synthetic-breach' || scene === 'synthetic') {
@@ -566,7 +579,13 @@ onBeforeUnmount(() => {
       <template v-if="displayMode === 'water'">
         <label class="flood-demo__check"><input v-model="depthMode" type="checkbox" @change="paint" />显示水深配色</label>
         <label class="flood-demo__check"><input v-model="detailWater" type="checkbox" @change="paint" />细节水面（关闭对比基础效果）</label>
-        <p v-if="detailWater && !depthMode" class="flood-demo__balance">波浪法线 · 流速驱动细节 · 岸边泡沫 · 天空近似反射；细节不改变计算水量。</p>
+        <template v-if="detailWater && !depthMode">
+          <label class="flood-demo__check"><input v-model="flowWater" type="checkbox" @change="paint" />流场驱动细节</label>
+          <label class="flood-demo__check"><input v-model="foamWater" type="checkbox" @change="paint" />随流泡沫</label>
+          <label v-if="foamWater" class="flood-demo__field">泡沫强度 <output>{{ Math.round(foamIntensity * 100) }}%</output><input v-model.number="foamIntensity" aria-label="泡沫强度" type="range" min="0" max="1" step="0.05" @input="paint" /></label>
+          <label class="flood-demo__check"><input v-model="previewFlow" type="checkbox" />暂停时预览水流</label>
+          <p class="flood-demo__balance">{{ frame.velocityEast ? '白色泡沫碎点沿当前流场移动，背景波纹轻微起伏。预览按真实秒播放；时间倍率控制洪水推演。暂停预览不改变模拟时间、水位或水量。' : '当前结果未提供流速，仅显示基础波纹，不推断流向或生成随流泡沫。' }} 天空为近似反射。</p>
+        </template>
       </template>
       <div v-if="displayMode === 'water'" class="flood-demo__metrics">
         <div><span>模拟时间</span><strong>{{ frame.time.toFixed(1) }} <small>s</small></strong></div>

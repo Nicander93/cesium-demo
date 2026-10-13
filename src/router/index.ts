@@ -2,6 +2,37 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/city-three',
+    component: () => import('@/views/city-rendering/three.vue'),
+    meta: {
+      title: '滨水城市 Three.js 对照', standalone: true,
+      description: '同一 GLB 街区、车流、HDR 与模型光照对照',
+      image: new URL('../views/city-rendering/preview.svg', import.meta.url).href,
+      category: 'render',
+    },
+  },
+  {
+    path: '/city-rendering',
+    component: () => import('@/views/city-rendering/index.vue'),
+    meta: {
+      title: '滨水城市环境实验', standalone: true,
+      description: '风格化城市模型、反射水面、车流、体积云、光照与降雨',
+      image: new URL('../views/city-rendering/preview.svg', import.meta.url).href,
+      category: 'render',
+    },
+  },
+  {
+    path: '/model-rendering',
+    component: () => import('@/views/model-rendering/index.vue'),
+    meta: {
+      title: '模型渲染对照',
+      standalone: true,
+      description: '同一 glTF 在 Cesium 与 Three.js 中的光照与材质对照',
+      image: new URL('../views/model-rendering/preview.svg', import.meta.url).href,
+      category: 'render',
+    },
+  },
+  {
     path: '/flood-valley',
     component: () => import('@/views/flood-valley/index.vue'),
     meta: {

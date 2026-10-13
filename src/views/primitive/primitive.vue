@@ -128,12 +128,7 @@ onMounted(async () => {
   const supportsFragmentCulling = Cesium.GroundPrimitive.supportsMaterials(viewer.scene);
   console.log('Supports fragment culling:', supportsFragmentCulling);
 
-  // 在GeometryInstance中添加pickColor属性
-  fillInstances.forEach((instance, i) => {
-    instance.attributes.pickColor = Cesium.ColorGeometryInstanceAttribute.fromColor(
-      Cesium.Color.fromHsl(i / 10000, 1.0, 0.5)
-    );
-  });
+  // Picking colors are assigned internally by Cesium; a custom pickColor duplicates its GLSL accessor.
 
 
   // 使用普通Primitive渲染边框

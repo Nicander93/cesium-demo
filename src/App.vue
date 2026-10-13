@@ -6,6 +6,7 @@ const router = useRouter()
 const route = useRoute()
 
 const isHomePage = computed(() => route.path === '/')
+const showNavigation = computed(() => !isHomePage.value && !route.meta.standalone)
 
 const goHome = () => {
   if (!isHomePage.value) {
@@ -16,14 +17,14 @@ const goHome = () => {
 
 <template>
   <div class="app">
-    <nav v-if="!isHomePage" class="top-nav">  
+    <nav v-if="showNavigation" class="top-nav">
       <button @click="goHome" class="home-btn">
         <i class="fas fa-home"></i>
         <span>返回主页</span>
       </button>
     </nav>
     
-    <main class="main-content" :class="{ 'with-nav': !isHomePage }">
+    <main class="main-content" :class="{ 'with-nav': showNavigation }">
       <router-view />
     </main>
   </div>

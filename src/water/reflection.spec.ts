@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium'
 import { describe, expect, it, vi } from 'vitest'
 import { PlanarReflection, registerWaterPrimitive } from './reflection'
+import { SceneCapture } from './capture'
 
 vi.mock('cesium', async importOriginal => {
   const original = await importOriginal<typeof import('cesium')>()
@@ -40,6 +41,7 @@ function fixture() {
     _environmentState: { originalFramebuffer: 'host' },
     _frameState: { camera, passes: { render: true, postProcess: true }, commandList: [], shadowMaps: [], tilesetPassState: {}, cullingVolume: {} },
     globe: { show: true, beginFrame: vi.fn(), endFrame: vi.fn() }, fog: { update: vi.fn() },
+    postProcessStages: { host: true }, farToNearRatio: 1000,
     atmosphere: new Cesium.Atmosphere(), backgroundColor: Cesium.Color.BLACK, updateFrameState: vi.fn(), updateEnvironment: vi.fn(),
     updateAndExecuteCommands: vi.fn(), resolveFramebuffers: vi.fn(),
   }
@@ -70,11 +72,13 @@ describe('reflection pass isolation', () => {
     const primitive = { show: true } as Cesium.Primitive
     const unregister = registerWaterPrimitive(f.scene as unknown as Cesium.Scene, primitive)
     const shadow = f.scene.shadowMap
+    const postProcess = f.scene.postProcessStages
     f.scene.updateAndExecuteCommands.mockImplementation(() => { f.scene._environmentState.originalFramebuffer = 'reflection'; throw new Error('GPU pass failed') })
     expect(() => f.pass.update(point, normal, options, 0)).toThrow('GPU pass failed')
     expect(f.scene._view).toBe(f.view)
     expect(f.scene._defaultView).toBe(f.view)
     expect(f.scene.shadowMap).toBe(shadow)
+    expect(f.scene.postProcessStages).toBe(postProcess)
     expect(f.scene.globe.show).toBe(true)
     expect(f.scene._hdr).toBe(true)
     expect(f.scene._logDepthBuffer).toBe(true)
@@ -97,10 +101,11 @@ describe('reflection pass isolation', () => {
     f.pass.destroy()
   })
 
-  it('updates projection for camera movement even when reflection capture is throttled', () => {
+  it('captures camera movement immediately and preserves the host frustum', () => {
     const f = fixture()
     f.pass.update(point, normal, options, 0)
     const before = Cesium.Matrix4.fromArray(f.material.uniforms.reflectionFromEye)
+    const fov = f.scene.camera.frustum.fov
     f.scene.camera.inverseViewMatrix = Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(1, 0, 100))
     f.pass.update(point, normal, options, 1)
     const after = Cesium.Matrix4.fromArray(f.material.uniforms.reflectionFromEye)
@@ -111,8 +116,33 @@ describe('reflection pass isolation', () => {
       Cesium.Matrix4.multiplyByVector(after, positionInMovedCamera, new Cesium.Cartesian4()),
       1e-10,
     )).toBe(true)
-    expect(f.pass.getDiagnostics().reflectionFrames).toBe(1)
+    expect(f.pass.getDiagnostics().reflectionFrames).toBe(2)
+    expect(f.scene.camera.frustum.fov).toBe(fov)
     expect(f.pass.getDiagnostics().reflectionTargetsCreated).toBe(1)
+    f.pass.destroy()
+  })
+
+  it('restores single-frustum depth capture state and releases borrowed depth targets once', () => {
+    const f = fixture()
+    const capture = new SceneCapture(f.scene as unknown as Cesium.Scene, f.scene.camera as unknown as Cesium.Camera, f.material as unknown as Cesium.Material, 'shoreDepthTexture', true)
+    const postProcess = f.scene.postProcessStages
+    f.scene.updateAndExecuteCommands.mockImplementationOnce(() => {
+      expect(f.scene.farToNearRatio).toBe(1e9)
+      throw new Error('Depth pass failed')
+    })
+    expect(() => capture.render(512, 256, true)).toThrow('Depth pass failed')
+    expect(f.scene.farToNearRatio).toBe(1000)
+    expect(f.scene.postProcessStages).toBe(postProcess)
+    capture.render(512, 256, true)
+    const texture = f.material.uniforms.shoreDepthTexture
+    expect(texture.width).toBe(512)
+    ;(f.material._textures as Record<string, unknown>).shoreDepthTexture = texture
+    capture.render(256, 128, true)
+    expect(texture.isDestroyed()).toBe(true)
+    expect(f.material._textures).not.toHaveProperty('shoreDepthTexture')
+    expect(capture.targetsCreated).toBe(2)
+    capture.destroy()
+    capture.destroy()
     f.pass.destroy()
   })
 })

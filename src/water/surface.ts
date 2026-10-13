@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium'
 import { createWaterMaterial, updateWaterMaterial, type WaterMaterialOptions } from './material'
 import { PlanarReflection, registerWaterPrimitive, type ReflectionOptions } from './reflection'
+import { ShoreDepth } from './shore'
 
 export type WaterQuality = 'low' | 'balanced' | 'high'
 export interface WaterSurfaceOptions extends Omit<WaterMaterialOptions, 'origin'> {
@@ -8,6 +9,7 @@ export interface WaterSurfaceOptions extends Omit<WaterMaterialOptions, 'origin'
   positions: readonly Cesium.Cartographic[]
   height: number
   flowDegrees?: number
+  waveSpeed?: number
   quality?: WaterQuality
   reflection?: boolean
   reflectionResolutionScale?: number
@@ -16,7 +18,7 @@ export interface WaterSurfaceOptions extends Omit<WaterMaterialOptions, 'origin'
   reflectGlobe?: boolean
   onError?: (error: unknown) => void
 }
-export type WaterSurfaceUpdateOptions = Omit<WaterMaterialOptions, 'origin'> & Partial<Pick<WaterSurfaceOptions, 'height' | 'quality' | 'reflection' | 'reflectionResolutionScale' | 'reflectionMaxSize' | 'reflectionMaxFps' | 'reflectGlobe'>>
+export type WaterSurfaceUpdateOptions = Omit<WaterMaterialOptions, 'origin'> & Partial<Pick<WaterSurfaceOptions, 'waveSpeed' | 'height' | 'quality' | 'reflection' | 'reflectionResolutionScale' | 'reflectionMaxSize' | 'reflectionMaxFps' | 'reflectGlobe'>>
 
 const qualityOptions: Record<WaterQuality, ReflectionOptions> = {
   low: { resolutionScale: 0.35, maxSize: 512, maxFps: 15, reflectGlobe: false },
@@ -31,6 +33,9 @@ export class WaterSurface {
   private scene: Cesium.Scene
   private primitive: Cesium.Primitive
   private reflectionPass: PlanarReflection | undefined
+  private shoreDepth: ShoreDepth | undefined
+  private positions: readonly Cesium.Cartographic[]
+  private shoreError: string | null = null
   private reflectionEnabled: boolean
   private reflectionOptions: ReflectionOptions
   private quality: WaterQuality
@@ -39,9 +44,14 @@ export class WaterSurface {
   private normal: Cesium.Cartesian3
   private currentHeight: number
   private started = performance.now()
+  private lastWaveUpdate = this.started
+  private waveTime = 0
+  private currentWaveSpeed = 1
   private readyMs: number | null = null
   private destroyed = false
   private error: string | null = null
+  private retryAt = 0
+  private reflectionFailures = 0
   private onError: ((error: unknown) => void) | undefined
   private removePreRender: () => void
   private removePostRender: () => void
@@ -50,12 +60,15 @@ export class WaterSurface {
 
   constructor(options: WaterSurfaceOptions) {
     validateHeight(options.height)
+    validateWaveSpeed(options.waveSpeed)
+    this.currentWaveSpeed = options.waveSpeed ?? 1
     if (options.positions.length < 3 || options.positions.length > 10000 || options.positions.some(position => !Number.isFinite(position.longitude) || !Number.isFinite(position.latitude) || Math.abs(position.latitude) > Math.PI / 2 || Math.abs(position.longitude) > Math.PI)) throw new RangeError('positions must contain 3–10000 valid Cartographic points')
     if (options.flowDegrees !== undefined && !Number.isFinite(options.flowDegrees)) throw new RangeError('flowDegrees must be finite')
     this.quality = options.quality ?? 'balanced'
     this.reflectionOptions = resolveReflectionOptions(options, this.quality)
     this.reflectionEnabled = options.reflection ?? true
     this.scene = options.scene
+    this.positions = options.positions.map(position => Cesium.Cartographic.clone(position))
     this.onError = options.onError
     this.currentHeight = options.height
     const positions = options.positions.map(position => Cesium.Cartesian3.fromRadians(position.longitude, position.latitude, options.height))
@@ -86,18 +99,27 @@ export class WaterSurface {
 
   setOptions(options: WaterSurfaceUpdateOptions): void {
     this.assertAlive()
+    validateWaveSpeed(options.waveSpeed)
     if (options.height !== undefined) validateHeight(options.height)
     const quality = options.quality ?? this.quality
     const reflectionOptions = resolveReflectionOptions(options, quality, options.quality === undefined ? this.reflectionOptions : undefined)
     updateWaterMaterial(this.material, options)
+    if (options.waveSpeed !== undefined && options.waveSpeed !== this.currentWaveSpeed) {
+      this.advanceWaveTime(performance.now())
+      this.currentWaveSpeed = options.waveSpeed
+    }
     this.quality = quality
     this.reflectionOptions = reflectionOptions
     if (options.reflection !== undefined) {
       this.reflectionEnabled = options.reflection
+      this.retryAt = 0
+      this.reflectionFailures = 0
+      this.error = null
       if (!options.reflection) this.material.uniforms.reflectionReady = 0
     }
     if (options.height !== undefined) this.height = options.height
     this.reflectionPass?.invalidate()
+    this.shoreDepth?.invalidate()
     this.scene.requestRender()
   }
 
@@ -113,6 +135,7 @@ export class WaterSurface {
     Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(this.point, this.normal)
     this.updateLocalFrame()
     this.reflectionPass?.invalidate()
+    this.shoreDepth?.invalidate()
     this.scene.requestRender()
   }
 
@@ -128,8 +151,12 @@ export class WaterSurface {
   set show(value: boolean) { this.assertAlive(); this.primitive.show = value; this.reflectionPass?.invalidate(); this.scene.requestRender() }
 
   getDiagnostics() {
-    return { readyMs: this.readyMs, quality: this.quality, reflectionEnabled: this.reflectionEnabled, destroyed: this.destroyed, error: this.error, geometryCreated: 1,
-      ...this.reflectionPass?.getDiagnostics() ?? { reflectionFrames: 0, reflectionTargetsCreated: 0, reflectionWidth: 0, reflectionHeight: 0, lastReflectionMs: 0 } }
+    return { readyMs: this.readyMs, quality: this.quality, reflectionEnabled: this.reflectionEnabled, reflectionAvailable: this.material.uniforms.reflectionReady > 0, reflectionFailures: this.reflectionFailures, destroyed: this.destroyed, error: this.error, geometryCreated: 1,
+      ...this.reflectionPass?.getDiagnostics() ?? { reflectionFrames: 0, reflectionTargetsCreated: 0, reflectionWidth: 0, reflectionHeight: 0, lastReflectionMs: 0 },
+      foamEnabled: this.material.uniforms.foamEnabled > 0,
+      foamAvailable: this.material.uniforms.shoreReady > 0,
+      ...this.shoreDepth?.getDiagnostics() ?? { shoreFrames: 0, shoreTargetsCreated: 0, shoreWidth: 0, shoreHeight: 0, shoreError: this.shoreError },
+    }
   }
 
   isDestroyed(): boolean { return this.destroyed }
@@ -143,6 +170,7 @@ export class WaterSurface {
     if (!this.scene.isDestroyed()) this.scene.primitives.remove(this.primitive)
     else if (!this.primitive.isDestroyed()) this.primitive.destroy()
     this.reflectionPass?.destroy()
+    this.shoreDepth?.destroy()
     this.material.destroy()
     this.resolveReady(false)
     if (!this.scene.isDestroyed()) this.scene.requestRender()
@@ -151,17 +179,38 @@ export class WaterSurface {
   private handlePreRender = (): void => {
     if (this.destroyed || !this.primitive.show) return
     const now = performance.now()
-    this.material.uniforms.time = (now - this.started) / 1000
-    if (!this.reflectionEnabled || this.scene.mode !== Cesium.SceneMode.SCENE3D) { this.material.uniforms.reflectionReady = 0; return }
+    this.advanceWaveTime(now)
+    if (this.scene.mode !== Cesium.SceneMode.SCENE3D) { this.material.uniforms.reflectionReady = this.material.uniforms.shoreReady = 0; return }
+    if (this.material.uniforms.foamEnabled > 0) {
+      try {
+        this.shoreDepth ??= new ShoreDepth(this.scene, this.material, this.positions)
+        this.shoreDepth.update(this.point, this.currentHeight, this.quality === 'high' ? 1024 : this.quality === 'balanced' ? 512 : 256, now)
+      } catch (error) {
+        this.shoreError = error instanceof Error ? error.message : String(error)
+        this.material.uniforms.foamEnabled = this.material.uniforms.shoreReady = 0
+      }
+    }
+    if (!this.reflectionEnabled) { this.material.uniforms.reflectionReady = 0; return }
+    if (now < this.retryAt) return
     try {
       this.reflectionPass ??= new PlanarReflection(this.scene, this.material)
       if (!this.reflectionPass.update(this.point, this.normal, this.reflectionOptions, now)) this.material.uniforms.reflectionReady = 0
+      else { this.error = null; this.reflectionFailures = 0 }
     } catch (error) {
-      this.reflectionEnabled = false
       this.material.uniforms.reflectionReady = 0
+      this.reflectionFailures++
+      this.retryAt = now + Math.min(8000, 1000 * 2 ** Math.min(this.reflectionFailures - 1, 3))
+      const networkError = error instanceof Cesium.RequestErrorEvent
+      if (!networkError && this.reflectionFailures >= 3) this.reflectionEnabled = false
       this.error = error instanceof Error ? error.message : String(error)
       this.onError?.(error)
     }
+  }
+
+  private advanceWaveTime(now: number): void {
+    this.waveTime += Math.max(0, now - this.lastWaveUpdate) / 1000 * this.currentWaveSpeed
+    this.lastWaveUpdate = now
+    this.material.uniforms.time = this.waveTime
   }
 
   private updateLocalFrame(): void {
@@ -170,6 +219,10 @@ export class WaterSurface {
   }
 
   private assertAlive(): void { if (this.destroyed) throw new Error('WaterSurface has been destroyed') }
+}
+
+function validateWaveSpeed(speed: number | undefined): void {
+  if (speed !== undefined && (!Number.isFinite(speed) || speed < 0)) throw new RangeError('waveSpeed must be finite and nonnegative')
 }
 
 function validateHeight(height: number): void { if (!Number.isFinite(height)) throw new RangeError('height must be finite') }

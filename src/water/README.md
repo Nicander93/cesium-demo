@@ -45,6 +45,10 @@ const water = new WaterSurface({
   ],
   height: 44,
   quality: 'balanced',
+  foam: true,
+  foamWidth: 2, // 岸边泡沫带宽度，米
+  foamIntensity: 0.8,
+  foamSpeed: 0.5,
   normalMapUrl: '/your-deployment/waterNormals.jpg', // 可省略，使用程序波纹
   onError: error => console.warn('Water reflection unavailable', error),
 })
@@ -80,7 +84,11 @@ viewer.destroy() // 宿主最后销毁 Viewer
 | `reflectGlobe` | 默认 false，保留原示例仅反射模型与天空的表现；true 时也渲染 globe，成本更高 |
 | `reflectionResolutionScale` | 相对画布的反射边长比例，范围 (0, 1] |
 | `reflectionMaxSize` | 反射最长边限制，整数 32–4096 |
-| `reflectionMaxFps` | 反射更新频率上限，范围 (0, 120]；与水面波纹动画帧率分开 |
+| `reflectionMaxFps` | 相机静止时的反射更新频率上限，范围 (0, 120]；相机移动时立即更新，优先保证覆盖 |
+| `foam` | 默认 true；关闭后停止岸边采样，独立于反射开关 |
+| `foamWidth` | 默认 2 米，非负；控制近岸泡沫带宽度 |
+| `foamIntensity` | 默认 0.8，范围 0–1 |
+| `foamSpeed` | 默认 0.5，非负；视觉动画速度，不是水动力流速 |
 
 | 画质 | 边长比例 | 最长边上限 | 反射更新上限 |
 | --- | --- | --- | --- |
@@ -107,12 +115,28 @@ viewer.destroy() // 宿主最后销毁 Viewer
 - 直接复用 framebuffer 的颜色附件，取消逐帧 `Texture.fromFramebuffer` 分配与复制。
 - 独立 View 管理反射的相机和 framebuffer；异常时在 finally 中恢复主视图、globe、HDR、深度模式和 UniformState 方法。
 - 首帧反射主动提供大气状态，避免缓存模型早于主场景首帧到达时，环境贴图计算报错并永久关闭反射。
-- 反射所需的私有 Cesium 访问集中在 `reflection.ts`，没有修改全局 prototype。
+- 辅助场景渲染所需的私有 Cesium 访问集中在 `capture.ts`，没有修改全局 prototype。
 - 反射通道按 LDR 处理，主场景的 HDR 和对数深度配置保留。独立 View 的 globeDepth 通道沿用宿主 `scene.msaaSamples`，WebGL2 支持时由 Cesium 做 MSAA；组件不改写宿主的抗锯齿设置。复杂后处理和升级 Cesium 后仍需专项验收。
 - 当前运行验收基于 Cesium 1.132.0。私有反射通道不能承诺任意 Cesium 版本兼容；不支持反射时组件报告错误并退回基础水面。标准材质不依赖该反射通道。
 - 平面水面适合湖泊、水库和景观池；起伏洪水网格可复用基础材质，但不能把整个河谷当成同一张反射平面。水动力计算与本模块分离。
 
 ## Demo 加载流程
+
+### 反射覆盖与恢复
+
+镜像相机视域扩大到原来的 1.2 倍，为波纹扰动预留边缘。主相机位置或投影变化时立即重绘反射，不等待静止时的 FPS 限制；这会增加拖动时的渲染成本。反射仍是局部平面近似，不能保证任意极端视角或复杂模型的完全正确倒影。
+
+辅助 View 使用独立后处理集合，不借用主画面的后处理资源。资源请求错误按 1、2、4、8 秒间隔退避重试，最大间隔 8 秒；其他渲染错误连续三次后暂停反射。调用 `water.setOptions({ reflection: true })` 可立即手动重试，状态由 `reflectionAvailable`、`reflectionFailures` 和 `error` 诊断字段提供。
+
+### 岸边泡沫
+
+`WaterSurface` 从水域上方采集地形和模型深度，生成近岸遮罩；水面 shader 每帧读取遮罩，用噪声和波纹动画形成泡沫。采样和遮罩每秒最多更新两次，最长边随 low / balanced / high 分别为 256 / 512 / 1024，遮罩采用线性过滤以减轻网格边缘。水位、模型加载细节变化会反映到后续采样中；几何和固定尺寸纹理持续复用。
+
+通过 `water.setOptions({ foam: true, foamWidth: 2, foamIntensity: 0.8, foamSpeed: 0.5 })` 更新效果，不需要重建水面。`show = false` 也停止岸边更新。`getDiagnostics()` 包含 `foamEnabled`、`foamAvailable`、`shoreWidth`、`shoreHeight`、`shoreFrames`、`shoreTargetsCreated` 和 `shoreError`。独立使用 `createWaterMaterial()` 不会自动采集场景，因此仅打开 foam 参数不会生成岸边泡沫。
+
+该方法采集水面上下约 500 米内从上方可见的最高表面，是高度场近似。屋顶、桥梁和挑檐可能被当作岸边，不能精确表达上下重叠结构、洞穴或所有竖直侧面的接水线；大水域的窄岸线也受采样分辨率限制。这是可视化泡沫，尚未模拟真实破碎波或飞溅粒子，也不向洪水求解器反馈力学结果。
+
+Demo 提供“岸边浪花”、宽度滑块、“近岸视角”和反射失败时的“重试反射”。
 
 `/water` 创建 Viewer 后立即创建水面并定位相机，同时发起影像与 3D Tiles 加载。模型失败不会阻塞水面。模型加入后不自动打断用户相机，使用“聚焦模型”查看完整场景。
 
@@ -134,6 +158,9 @@ pnpm exec vue-tsc --noEmit -p tsconfig.water.json
 pnpm build
 ```
 
-10 项单元测试覆盖材质创建与更新、透明通道切换、连续高度调整保留资源、非法配置不部分生效、实例独立清理、首帧就绪、分辨率限制、异常恢复、缓存模型的首帧环境与限制反射频率时的相机投影更新。真实 WebGL 编译、模型反射与画质切换需要浏览器验收。
+13 项水面单元测试覆盖材质创建与更新、透明通道切换、连续高度调整保留资源、非法配置不部分生效、实例独立清理、首帧就绪、分辨率限制、异常状态恢复、深度纹理生命周期、缓存模型的首帧环境、移动视角立即更新，以及网络错误自动恢复和持续渲染错误的手动重试。连同洪水模块共 54 项测试。真实 WebGL 编译、模型反射与画质切换需要浏览器验收。
 
 尚未发布 npm 包；公共入口、宿主边界和生命周期已经明确，后续提包无需携带 Vue demo 或模型 URL。
+
+
+水波控制：材质的 `waveStrength` 默认 1，按比例调整法线斜率，0 为平整法线。WaterSurface 的 `waveSpeed` 默认 1，调整动画时间推进倍率；0 暂停，改变速度时连续积累相位，避免直接把运行总时长乘以新倍率引起跳变。两项都可通过 `setOptions` 更新，不重新创建几何或材质。

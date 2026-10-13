@@ -5,6 +5,8 @@ import { getBreachFace, validateDamBreachState, type DamBreachState } from '../c
 import type { InundationResult } from '../core/analysis'
 import { sampleWallOverfalls } from '../core/overfall'
 import { detailedWaterBody, waterShaderFunctions } from './water-shader'
+import { FloodFoam, resolveFloodVisualOptions, type FloodVisualOptions } from './foam'
+import { FlowParticles } from './flow-particles'
 
 const vertexShader = `
 in vec3 position3DHigh;
@@ -82,14 +84,34 @@ export class FloodRenderer {
   private readonly walls: Cesium.Entity[] = []
   private readonly wallSections: { row: number; column: number; bottom: number; crest: number; entity: Cesium.Entity; right?: Cesium.Entity; base?: Cesium.Entity }[] = []
   private breachState: DamBreachState | undefined
+  private readonly foam: FloodFoam
+  private readonly flowParticles: FlowParticles
+  private readonly points: Cesium.PointPrimitiveCollection
+  private readonly pointPool: { point: Cesium.PointPrimitive; position: Cesium.Cartesian3; color: Cesium.Color }[] = []
+  private lastVisualTime: number | undefined
+  private visualWater = false
+  private visualOptions = resolveFloodVisualOptions({})
   private readonly waterMaterial = new Cesium.Material({ fabric: {
-    type: 'FloodSurfaceClock', uniforms: { visualTime: 0 },
+    type: 'FloodSurfaceClock', uniforms: { visualTime: 0, flowEnabled: 1, foamOpacity: 0.75 },
     source: `float floodVisualTime() { return visualTime; }
+      float floodFlowEnabled() { return flowEnabled; }
+      float floodFoamOpacity() { return foamOpacity; }
       czm_material czm_getMaterial(czm_materialInput inputValue) { return czm_getDefaultMaterial(inputValue); }`,
   } })
 
-  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true) {
+  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}) {
+    this.foam = new FloodFoam(grid, barriers)
+    this.flowParticles = new FlowParticles(grid, barriers)
     this.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(...grid.origin))
+    // Keep Cesium's two-pass mode so translucent flecks share the water's OIT pass.
+    this.points = new Cesium.PointPrimitiveCollection({ modelMatrix: this.modelMatrix })
+    for (let i = 0; i < this.flowParticles.particles.length; i++) {
+      const position = new Cesium.Cartesian3()
+      const color = new Cesium.Color(0.9, 0.96, 0.94, 0)
+      this.pointPool.push({ point: this.points.add({ position, color, show: false, pixelSize: 1.8 + (i % 4) * 0.4, outlineWidth: 0 }), position, color })
+    }
+    viewer.scene.primitives.add(this.points)
+    this.setVisualOptions(visuals)
     if (showGround) {
       this.terrain = this.createMesh(undefined, false)
       viewer.scene.primitives.add(this.terrain)
@@ -125,8 +147,34 @@ export class FloodRenderer {
 
   animate(seconds: number): void {
     this.assertAlive()
+    if (!Number.isFinite(seconds) || seconds < 0) throw new Error('水面动画时间必须非负且有限')
     this.waterMaterial.uniforms.visualTime = seconds
+    const dt = this.lastVisualTime === undefined ? 0 : Math.max(0, seconds - this.lastVisualTime)
+    this.lastVisualTime = seconds
+    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam
+    if (!this.points.show) return
+    this.flowParticles.advance(dt)
+    this.flowParticles.particles.forEach((particle, i) => {
+      const item = this.pointPool[i]
+      item.point.show = particle.opacity > 0.01
+      if (!item.point.show) return
+      item.position.x = particle.x; item.position.y = particle.y; item.position.z = particle.z
+      item.color.alpha = particle.opacity * this.visualOptions.foamIntensity * 0.65
+      item.point.position = item.position
+      item.point.color = item.color
+    })
   }
+
+  setVisualOptions(options: FloodVisualOptions): void {
+    this.assertAlive()
+    const next = resolveFloodVisualOptions(options, this.visualOptions)
+    if (next.foam !== this.visualOptions.foam || next.flow !== this.visualOptions.flow) this.resetVisuals()
+    this.visualOptions = next
+    this.waterMaterial.uniforms.flowEnabled = next.flow ? 1 : 0
+    this.waterMaterial.uniforms.foamOpacity = next.foam ? next.foamIntensity : 0
+  }
+
+  resetVisuals(): void { this.assertAlive(); this.foam.reset(); this.flowParticles.reset(); this.lastVisualTime = undefined }
 
   private assertAlive(): void {
     if (this.destroyed) throw new Error('洪水图层已经销毁')
@@ -134,6 +182,10 @@ export class FloodRenderer {
 
   update(frame: FloodFrame, depthMode = false, detail = true): void {
     this.assertAlive()
+    if (this.visualOptions.foam) this.foam.update(frame, this.visualOptions.foamLifetime, this.breachState)
+    this.flowParticles.setFrame(frame, this.breachState)
+    this.visualWater = detail && !depthMode
+    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam
     const next = this.createMesh(frame, depthMode, detail)
     if (this.water) this.viewer.scene.primitives.remove(this.water)
     this.water = next
@@ -145,6 +197,8 @@ export class FloodRenderer {
 
   updateInundation(result: InundationResult): void {
     this.assertAlive()
+    this.visualWater = false
+    this.points.show = false
     this.clearOverfall()
     if (result.depth.length !== this.grid.columns * this.grid.rows || result.depth.some(h => !Number.isFinite(h) || h < 0)) throw new Error('淹没结果与网格不一致')
     const next = this.createMesh({ time: 0, depth: result.depth }, true, false, 0)
@@ -203,6 +257,8 @@ export class FloodRenderer {
   // Cell raster on the sampled ground. null cells are absent, not zero values.
   updateAnalysis(values: readonly (number | null)[], maximum?: number): void {
     this.assertAlive()
+    this.visualWater = false
+    this.points.show = false
     this.clearOverfall()
     const { columns, rows, cellSize, elevation, active } = this.grid
     if (values.length !== columns * rows || values.some(v => v !== null && (!Number.isFinite(v) || v < 0))) throw new Error('分析值必须与网格一致且非负有限')
@@ -301,7 +357,7 @@ export class FloodRenderer {
         const dzdy = (heights[Math.min(rows - 1, y + 1) * columns + x] - heights[Math.max(0, y - 1) * columns + x]) / (2 * cellSize)
         const length = Math.hypot(dzdx, dzdy, 1)
         normals.set([-dzdx / length, -dzdy / length, 1 / length], i * 3)
-        if (frame) color.set([frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, 1], i * 4)
+        if (frame) color.set([frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, this.foam.coverage[i]], i * 4)
         else {
           const t = Math.min(1, Math.max(0, (elevation[i] - 12) / 80))
           color.set([elevation[i], 0.35 + 0.3 * t, 0.43 + 0.15 * t, 0.29 + 0.14 * t], i * 4)
@@ -439,6 +495,7 @@ export class FloodRenderer {
     this.clearOverfall()
     this.terrain = undefined
     this.water = undefined
+    this.viewer.scene.primitives.remove(this.points)
     this.waterMaterial.destroy()
   }
 }

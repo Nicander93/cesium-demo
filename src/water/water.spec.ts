@@ -94,3 +94,39 @@ describe('water material and surface ownership', () => {
     expect(reflectionDimensions(1, 1, { resolutionScale: .35, maxSize: 512 })).toEqual({ width: 1, height: 1 })
   })
 })
+
+
+it('changes wave speed without jumping phase and can pause and resume', () => {
+  let now = 0
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+  const scene = createScene()
+  const water = new WaterSurface({ scene, positions, height: 44, reflection: false, waveSpeed: 1 })
+  const material = water.material
+  try {
+    now = 1000
+    scene.preRender.raiseEvent(scene)
+    expect(material.uniforms.time).toBe(1)
+    now = 1500
+    water.setOptions({ waveSpeed: 2, waveStrength: 1.5 })
+    expect(material.uniforms.time).toBe(1.5)
+    expect(material.uniforms.waveStrength).toBe(1.5)
+    now = 2000
+    scene.preRender.raiseEvent(scene)
+    expect(material.uniforms.time).toBe(2.5)
+    water.setOptions({ waveSpeed: 0 })
+    now = 4000
+    scene.preRender.raiseEvent(scene)
+    expect(material.uniforms.time).toBe(2.5)
+    water.setOptions({ waveSpeed: 1, waveStrength: 0 })
+    now = 5000
+    scene.preRender.raiseEvent(scene)
+    expect(material.uniforms.time).toBe(3.5)
+    expect(material.uniforms.waveStrength).toBe(0)
+    expect(() => water.setOptions({ waveSpeed: -1 })).toThrow()
+    expect(() => water.setOptions({ waveStrength: NaN })).toThrow()
+    expect(water.material).toBe(material)
+  } finally {
+    water.destroy()
+    clock.mockRestore()
+  }
+})
