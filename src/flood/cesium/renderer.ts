@@ -48,6 +48,12 @@ ${water && detail ? waterShaderFunctions : ''}
 void main() {
   vec3 n = normalize(v_normalEC);
   ${water ? detail ? `${detailedWaterBody.replace('if (h < 0.02) discard;', discard)}
+  float diagnostic = floodDiagnosticMode();
+  if (diagnostic > 0.5) {
+    float value = diagnostic < 1.5 ? length(v_state.gb) / 4.0 : diagnostic < 2.5 ? v_state.a / 0.42 : v_state.a;
+    rgb = mix(vec3(0.025, 0.18, 0.28), vec3(0.95, 0.65, 0.20), clamp(value, 0.0, 1.0));
+    alpha = 1.0;
+  }
   ${depthMode ? 'rgb = mix(vec3(0.22, 0.78, 0.9), vec3(0.75, 0.22, 0.12), clamp(h / 5.0, 0.0, 1.0));' : ''}
   out_FragColor = vec4(rgb, ${depthMode ? '1.0' : 'alpha'});
   ` : `
@@ -75,7 +81,11 @@ void main() {
 }`
 }
 
+export type FloodDiagnosticMode = 'water' | 'velocity' | 'foam-source' | 'foam'
+const diagnosticModes: FloodDiagnosticMode[] = ['water', 'velocity', 'foam-source', 'foam']
+
 export class FloodRenderer {
+  private diagnosticMode: FloodDiagnosticMode = 'water'
   private destroyed = false
   private terrain: Cesium.Primitive | undefined
   private water: Cesium.Primitive | undefined
@@ -92,10 +102,11 @@ export class FloodRenderer {
   private visualWater = false
   private visualOptions = resolveFloodVisualOptions({})
   private readonly waterMaterial = new Cesium.Material({ fabric: {
-    type: 'FloodSurfaceClock', uniforms: { visualTime: 0, flowEnabled: 1, foamOpacity: 0.75 },
+    type: 'FloodSurfaceClock', uniforms: { visualTime: 0, flowEnabled: 1, foamOpacity: 0.75, diagnosticMode: 0 },
     source: `float floodVisualTime() { return visualTime; }
       float floodFlowEnabled() { return flowEnabled; }
       float floodFoamOpacity() { return foamOpacity; }
+      float floodDiagnosticMode() { return diagnosticMode; }
       czm_material czm_getMaterial(czm_materialInput inputValue) { return czm_getDefaultMaterial(inputValue); }`,
   } })
 
@@ -174,6 +185,18 @@ export class FloodRenderer {
     this.waterMaterial.uniforms.foamOpacity = next.foam ? next.foamIntensity : 0
   }
 
+  /** Call update with the current frame after changing a diagnostic view. */
+  setDiagnosticMode(mode: FloodDiagnosticMode): void {
+    this.assertAlive()
+    if (!diagnosticModes.includes(mode)) throw new Error('未知水流诊断视图')
+    this.diagnosticMode = mode
+    this.waterMaterial.uniforms.diagnosticMode = diagnosticModes.indexOf(mode)
+  }
+
+  /** Final Cesium-assembled shader, useful for compilation diagnostics. */
+  getWaterShaderSource(): string | undefined { return this.water?.appearance?.getFragmentShaderSource() }
+  isDestroyed(): boolean { return this.destroyed }
+
   resetVisuals(): void { this.assertAlive(); this.foam.reset(); this.flowParticles.reset(); this.lastVisualTime = undefined }
 
   private assertAlive(): void {
@@ -184,7 +207,7 @@ export class FloodRenderer {
     this.assertAlive()
     if (this.visualOptions.foam) this.foam.update(frame, this.visualOptions.foamLifetime, this.breachState)
     this.flowParticles.setFrame(frame, this.breachState)
-    this.visualWater = detail && !depthMode
+    this.visualWater = detail && !depthMode && this.diagnosticMode === 'water'
     this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam
     const next = this.createMesh(frame, depthMode, detail)
     if (this.water) this.viewer.scene.primitives.remove(this.water)
@@ -357,7 +380,7 @@ export class FloodRenderer {
         const dzdy = (heights[Math.min(rows - 1, y + 1) * columns + x] - heights[Math.max(0, y - 1) * columns + x]) / (2 * cellSize)
         const length = Math.hypot(dzdx, dzdy, 1)
         normals.set([-dzdx / length, -dzdy / length, 1 / length], i * 3)
-        if (frame) color.set([frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, this.foam.coverage[i]], i * 4)
+        if (frame) color.set([frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, this.diagnosticMode === 'foam-source' ? this.foam.sources[i] : this.foam.coverage[i]], i * 4)
         else {
           const t = Math.min(1, Math.max(0, (elevation[i] - 12) / 80))
           color.set([elevation[i], 0.35 + 0.3 * t, 0.43 + 0.15 * t, 0.29 + 0.14 * t], i * 4)

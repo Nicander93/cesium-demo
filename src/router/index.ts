@@ -2,6 +2,13 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/water-flow-lab',
+    component: () => import('@/views/water-flow-lab/index.vue'),
+    meta: { title: '水流渲染对照', standalone: true, category: 'effect',
+      image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href,
+      description: '无网络合成工况、速度场与泡沫诊断' },
+  },
+  {
     path: '/city-three',
     component: () => import('@/views/city-rendering/three.vue'),
     meta: {

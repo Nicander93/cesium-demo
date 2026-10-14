@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local GPU acceptance artifacts for the water-flow experiment
+/test-results/water-flow-lab/

@@ -19,20 +19,38 @@ export function resolveFloodVisualOptions(options: FloodVisualOptions, current =
   return next
 }
 
+/** Existing shallow/Froude source rate, in coverage per simulation second. */
+export function computeFloodFoamSources(grid: FloodGrid, frame: FloodFrame, output = new Float32Array(frame.depth.length)): Float32Array {
+  output.fill(0)
+  if (!frame.velocityEast || !frame.velocityNorth) return output
+  for (let i = 0; i < output.length; i++) {
+    if (grid.active?.[i] === false || frame.depth[i] < 0.02) continue
+    const speed = Math.hypot(frame.velocityEast[i], frame.velocityNorth[i])
+    const froude = speed / Math.sqrt(9.81 * Math.max(frame.depth[i], 0.05))
+    const shallow = Math.max(0, 1 - frame.depth[i] / 0.8) * Math.min(1, speed / 1.5)
+    const rapid = Math.min(1, Math.max(0, froude - 0.6))
+    output[i] = shallow * 0.12 + rapid * 0.3
+  }
+  return output
+}
+
 // A bounded visual tracer, not another hydraulic solver. No input frame is mutated.
 export class FloodFoam {
   readonly coverage: Float32Array
+  readonly sources: Float32Array
   private readonly next: Float32Array
   private previousTime: number | undefined
 
   constructor(private readonly grid: FloodGrid, private readonly barriers?: FloodBarriers) {
     this.coverage = new Float32Array(grid.columns * grid.rows)
     this.next = new Float32Array(this.coverage.length)
+    this.sources = new Float32Array(this.coverage.length)
   }
 
-  reset(): void { this.coverage.fill(0); this.previousTime = undefined }
+  reset(): void { this.coverage.fill(0); this.sources.fill(0); this.previousTime = undefined }
 
   update(frame: FloodFrame, lifetime: number, breach?: DamBreachState): void {
+    computeFloodFoamSources(this.grid, frame, this.sources)
     const previous = this.previousTime
     this.previousTime = frame.time
     const east = frame.velocityEast
@@ -80,11 +98,7 @@ export class FloodFoam {
       }
       for (let i = 0; i < this.coverage.length; i++) {
         if (!wet(i)) { this.coverage[i] = 0; continue }
-        const speed = Math.hypot(east[i], north[i])
-        const froude = speed / Math.sqrt(9.81 * Math.max(frame.depth[i], 0.05))
-        const shallow = Math.max(0, 1 - frame.depth[i] / 0.8) * Math.min(1, speed / 1.5)
-        const rapid = Math.min(1, Math.max(0, froude - 0.6))
-        const source = (shallow * 0.12 + rapid * 0.3) * dt
+        const source = this.sources[i] * dt
         this.coverage[i] = Math.min(1, Math.max(0, this.next[i]) * decay + source)
       }
     }

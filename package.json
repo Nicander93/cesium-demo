@@ -14,7 +14,9 @@
     "typecheck:rendering": "vue-tsc -p tsconfig.rendering.json --noEmit",
     "generate:city-ground": "node scripts/generate-city-ground.mjs",
     "typecheck:city": "vue-tsc -p tsconfig.city.json --noEmit",
-    "validate:city-assets": "node scripts/validate-city-assets.mjs"
+    "validate:city-assets": "node scripts/validate-city-assets.mjs",
+    "typecheck:flow-lab": "vue-tsc -p tsconfig.flow-lab.json --noEmit",
+    "smoke:water-flow": "node scripts/smoke-water-flow.mjs"
   },
   "dependencies": {
     "@types/cesium": "^1.70.4",
