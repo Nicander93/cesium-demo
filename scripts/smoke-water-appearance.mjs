@@ -5,7 +5,10 @@ import { pathToFileURL } from 'node:url'
 const { chromium } = process.env.PLAYWRIGHT_MODULE_PATH
   ? await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE_PATH).href)
   : await import('playwright')
-const output = path.resolve('test-results/water-flow-lab/tunable-water')
+const output = path.resolve(
+  process.env.WATER_APPEARANCE_OUTPUT ??
+    'test-results/water-flow-lab/tunable-water',
+)
 await fs.mkdir(output, { recursive: true })
 const browser = await chromium.launch({
   headless: true,
@@ -121,6 +124,7 @@ try {
   const initial = await state()
   assert.equal(initial.error, '')
   assert.equal(initial.options.waveModel, 'multiscale')
+  assert.equal(initial.lightingTime, '2026-10-14T10:00:00Z')
   assert.equal(initial.options.reflectGlobe, true)
   const geometryCount = initial.diagnostics.geometryCreated
   for (const camera of ['near', 'overview', 'far']) {
@@ -191,6 +195,29 @@ try {
   const response = await compare(flat, waves)
   assert(response.meanRgbDifference > 0.5)
   checks.push({ check: 'wave controls change actual pixels', ...response })
+  await control('setOptions', { waveSpread: 0 })
+  await freezeAt()
+  const aligned = await settledImage(clip)
+  await control('setOptions', { waveSpread: 70 })
+  await freezeAt()
+  const dispersed = await settledImage(clip)
+  const spreadResponse = await compare(aligned, dispersed)
+  assert(spreadResponse.meanRgbDifference > 0.5)
+  const spreadControl = page.getByLabel(/方向分散度/)
+  assert.equal(
+    await spreadControl.evaluate((element) => element.tagName),
+    'INPUT',
+  )
+  await spreadControl.focus()
+  await spreadControl.press('Home')
+  await page.waitForFunction(
+    () => window.__realWaterLab.getState().options.waveSpread === 0,
+  )
+  checks.push({
+    check:
+      'direction spread changes pixels and supports zero through the native control',
+    ...spreadResponse,
+  })
   const length = page.getByLabel(/主波长/)
   assert.equal(await length.evaluate((element) => element.tagName), 'INPUT')
   await length.focus()

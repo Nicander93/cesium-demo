@@ -7,6 +7,7 @@ export type WaterPresetOptions = Required<
     | 'waveModel'
     | 'waveLength'
     | 'waveDirection'
+    | 'waveSpread'
     | 'waveIrregularity'
     | 'detailStrength'
     | 'roughness'
@@ -39,6 +40,7 @@ export function createWaterPreset(
     waveModel: 'multiscale',
     waveLength: windy ? 28 : 48,
     waveDirection: 55,
+    waveSpread: windy ? 55 : 35,
     waveIrregularity: windy ? 0.65 : 0.35,
     detailStrength: windy ? 0.7 : 0.35,
     roughness: windy ? 0.32 : 0.18,

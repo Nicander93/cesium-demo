@@ -44,6 +44,14 @@ describe('tunable reusable water', () => {
       updateWaterMaterial(material, { waterAlpha: 0.4, waveLength: 0 }),
     ).toThrow()
     expect(material.uniforms.waterAlpha).toBe(0.9)
+    expect(() =>
+      updateWaterMaterial(material, { waterAlpha: 0.4, waveSpread: -1 }),
+    ).toThrow()
+    expect(material.uniforms.waterAlpha).toBe(0.9)
+    expect(() => updateWaterMaterial(material, { waveSpread: 91 })).toThrow()
+    expect(() =>
+      updateWaterMaterial(material, { waveSpread: Infinity }),
+    ).toThrow()
     expect(() => updateWaterMaterial(material, { roughness: 2 })).toThrow()
     expect(() =>
       updateWaterMaterial(material, { waveIrregularity: 2 }),
@@ -64,6 +72,7 @@ describe('tunable reusable water', () => {
       waveModel: 'multiscale',
       waveLength: 72,
       waveDirection: 90,
+      waveSpread: 0,
       waveStrength: 0,
       detailStrength: 0,
       reflectionStrength: 0,
@@ -75,6 +84,10 @@ describe('tunable reusable water', () => {
     const options = water.getOptions()
     expect(options.waveLength).toBe(72)
     expect(options.waveDirection).toBeCloseTo(90)
+    expect(options.waveSpread).toBe(0)
+    water.setOptions({ waveSpread: 70 })
+    expect(water.getOptions().waveSpread).toBeCloseTo(70)
+    expect(water.material).toBe(material)
     expect(options.waveStrength).toBe(0)
     expect(options.reflectionStrength).toBe(0)
     expect(options.roughness).toBe(0.8)

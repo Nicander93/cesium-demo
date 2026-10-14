@@ -39,3 +39,6 @@ WaterMaterial 的可选 `edgeFadeWidth` 为归一化 UV 宽度 0–0.5，默认 
 ## 可调水面阶段
 
 页面新增三种显示模式、固定近景/俯瞰/远景、平静/有风预设和恢复按钮。参数直接调用 WaterSurface.setOptions()；Shader 和波纹算法均留在 src/water 模块。当前阶段结果见 [可调水面 API](../../water/APPEARANCE-API.md)，使用 smoke:water-appearance 复现。前述截图与计数属于此前阶段记录。
+
+
+方向分散波纹实验新增 waveSpread（0–90°）控制和十二分量法线。真实示例的太阳时间固定，便于不同提交比较；API、基线目录与实际结果见 [可调水面 API](../../water/APPEARANCE-API.md#方向分散波纹实验2026-10-14)。

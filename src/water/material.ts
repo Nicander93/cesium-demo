@@ -10,6 +10,8 @@ export interface WaterMaterialOptions {
   waveLength?: number
   /** Compass bearing of wave travel, degrees clockwise from north. */
   waveDirection?: number
+  /** Angular spread around the dominant travel bearing, degrees in [0, 90]. */
+  waveSpread?: number
   waveIrregularity?: number
   detailStrength?: number
   roughness?: number
@@ -41,6 +43,7 @@ uniform float waveStrength;
 uniform float waveModel;
 uniform float waveLength;
 uniform float waveDirection;
+uniform float waveSpread;
 uniform float waveIrregularity;
 uniform float detailStrength;
 uniform float roughness;
@@ -117,16 +120,25 @@ vec3 waterNormal(vec2 uv) {
 
 vec3 metricWaterNormal(vec2 p) {
   vec2 slope = vec2(0.0);
+  // Three incommensurate components per scale reduce repeated parallel bands.
+  // Weights preserve approximately the previous slope energy instead of boosting contrast.
   for (int i = 0; i < 4; i++) {
     float f = float(i);
-    float wavelength = waveLength * pow(0.48, f);
-    float angle = waveDirection + f * 1.13;
-    vec2 direction = vec2(sin(angle), cos(angle));
-    float k = 6.2831853 / wavelength;
-    float phaseWarp = (foamNoise(p / (wavelength * 1.5) + vec2(f * 13.7, f * 7.1)) - 0.5) * waveIrregularity * 7.5;
-    float phase = dot(p, direction) * k - time * sqrt(9.81 * k) + f * 2.13 + phaseWarp;
-    float resolved = 1.0 - smoothstep(0.6, 2.2, fwidth(phase));
-    slope += direction * cos(phase) * (0.10 / pow(1.35, f)) * resolved;
+    float baseLength = waveLength * pow(0.48, f);
+    float seed = fract(sin(f * 12.9898 + 78.233) * 43758.5453);
+    float phaseWarp = (foamNoise(p / (baseLength * 1.5) + vec2(f * 13.7, f * 7.1)) - 0.5) * waveIrregularity * 7.5;
+    for (int j = 0; j < 3; j++) {
+      float component = float(j);
+      float ratio = j == 0 ? 1.0 : (j == 1 ? 0.81 + seed * 0.08 : 1.12 + seed * 0.17);
+      float spread = j == 0 ? 0.0 : (j == 1 ? 0.45 + seed * 0.55 : -(0.45 + fract(seed * 7.13) * 0.55));
+      float angle = waveDirection + waveSpread * spread;
+      vec2 direction = vec2(sin(angle), cos(angle));
+      float k = 6.2831853 / (baseLength * ratio);
+      float phase = dot(p, direction) * k - time * sqrt(9.81 * k) + f * 2.13 + component * 2.3999632 + phaseWarp;
+      float resolved = 1.0 - smoothstep(0.6, 2.2, fwidth(phase));
+      float weight = j == 0 ? 0.65 : 0.54;
+      slope += direction * cos(phase) * (0.10 / pow(1.35, f)) * weight * resolved;
+    }
   }
   float detailLength = max(0.3, waveLength * 0.08);
   vec3 fine = waterNormal(p * (103.0 / detailLength));
@@ -138,11 +150,13 @@ vec3 metricWaterNormal(vec2 p) {
 
 czm_material czm_getMaterial(czm_materialInput materialInput) {
   czm_material material = czm_getDefaultMaterial(materialInput);
-  vec3 normal = waterNormal((materialInput.st * 2.0 - 1.0) * size);
-  normal = normalize(vec3(normal.x * waveStrength, normal.y, normal.z * waveStrength));
+  vec3 normal;
   if (waveModel > 0.5 && metricWavesReady > 0.5) {
     vec2 localPosition = (waveFromEye * vec4(-materialInput.positionToEyeEC, 1.0)).xy;
     normal = metricWaterNormal(localPosition);
+  } else {
+    normal = waterNormal((materialInput.st * 2.0 - 1.0) * size);
+    normal = normalize(vec3(normal.x * waveStrength, normal.y, normal.z * waveStrength));
   }
   // Keep fragment math near the camera; ECEF reconstruction quantizes close-up reflections.
   vec3 toEye = mat3(worldToLocal) * czm_inverseViewRotation * materialInput.positionToEyeEC;
@@ -213,6 +227,7 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         waveModel: options.waveModel === 'multiscale' ? 1 : 0,
         waveLength: options.waveLength ?? 48,
         waveDirection: Cesium.Math.toRadians(options.waveDirection ?? 55),
+        waveSpread: Cesium.Math.toRadians(options.waveSpread ?? 35),
         waveIrregularity: options.waveIrregularity ?? 0.35,
         detailStrength: options.detailStrength ?? 0.35,
         roughness: options.roughness ?? 0.22,
@@ -257,6 +272,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
   if (options.waveModel !== undefined) material.uniforms.waveModel = options.waveModel === 'multiscale' ? 1 : 0
+  if (options.waveSpread !== undefined) material.uniforms.waveSpread = Cesium.Math.toRadians(options.waveSpread)
   if (options.waveDirection !== undefined) material.uniforms.waveDirection = Cesium.Math.toRadians(options.waveDirection)
   if (options.environmentColor !== undefined) material.uniforms.environmentColor = Cesium.Color.clone(options.environmentColor)
   if (options.normalMapUrl !== undefined) { material.uniforms.normalTexture = options.normalMapUrl; material.uniforms.useNormalTexture = 1 }
@@ -269,6 +285,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
 function validateWaterMaterial(options: WaterMaterialOptions): void {
   if (options.waveModel !== undefined && options.waveModel !== 'legacy' && options.waveModel !== 'multiscale') throw new RangeError('Unknown wave model')
   if (options.waveLength !== undefined && (!Number.isFinite(options.waveLength) || options.waveLength <= 0)) throw new RangeError('waveLength must be positive metres')
+  if (options.waveSpread !== undefined && (!Number.isFinite(options.waveSpread) || options.waveSpread < 0 || options.waveSpread > 90)) throw new RangeError('waveSpread must be degrees in [0, 90]')
   if (options.waveDirection !== undefined && !Number.isFinite(options.waveDirection)) throw new RangeError('waveDirection must be finite degrees')
   for (const key of ['detailStrength','specularIntensity'] as const) if (options[key] !== undefined && (!Number.isFinite(options[key]) || options[key] < 0 || options[key] > 4)) throw new RangeError(key+' must be in [0, 4]')
   for (const key of ['roughness','reflectionStrength','waveIrregularity'] as const) if (options[key] !== undefined && (!Number.isFinite(options[key]) || options[key] < 0 || options[key] > 1)) throw new RangeError(key+' must be in [0, 1]')

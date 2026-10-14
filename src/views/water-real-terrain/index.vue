@@ -213,6 +213,9 @@ const lab = {
     terrainProvider: !!provider,
     positions: ring?.length,
     tilesLoaded: viewer?.scene.globe.tilesLoaded,
+    lightingTime: viewer
+      ? Cesium.JulianDate.toIso8601(viewer.clock.currentTime)
+      : undefined,
     cameraPosition: viewer
       ? Cesium.Cartesian3.clone(viewer.camera.positionWC)
       : undefined,
@@ -296,6 +299,10 @@ onMounted(() => {
       msaaSamples: 4,
       shouldAnimate: false,
     })
+    // Keep the host-owned experiment lighting fixed between shader comparisons.
+    viewer.clock.currentTime = Cesium.JulianDate.fromIso8601(
+      '2026-10-14T10:00:00Z',
+    )
     viewer.scene.postProcessStages.fxaa.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#455a52')
@@ -375,8 +382,10 @@ onBeforeUnmount(() => {
             :value="config.waterColor.toCssHexString()"
             @input="changeColor"
         /></label>
-        <label for="water-waterAlpha">不透明度 <output>{{ config.waterAlpha.toFixed(2) }}</output
-          ><input id="water-waterAlpha"
+        <label for="water-waterAlpha"
+          >不透明度 <output>{{ config.waterAlpha.toFixed(2) }}</output
+          ><input
+            id="water-waterAlpha"
             v-model.number="config.waterAlpha"
             type="range"
             min="0.2"
@@ -387,8 +396,10 @@ onBeforeUnmount(() => {
       </fieldset>
       <fieldset>
         <legend>波纹与动画</legend>
-        <label for="water-waveLength">主波长 <output>{{ config.waveLength }} m</output
-          ><input id="water-waveLength"
+        <label for="water-waveLength"
+          >主波长 <output>{{ config.waveLength }} m</output
+          ><input
+            id="water-waveLength"
             v-model.number="config.waveLength"
             type="range"
             min="4"
@@ -396,8 +407,10 @@ onBeforeUnmount(() => {
             step="2"
             @input="applyOptions"
         /></label>
-        <label for="water-waveStrength">整体强度 <output>{{ config.waveStrength.toFixed(2) }}</output
-          ><input id="water-waveStrength"
+        <label for="water-waveStrength"
+          >整体强度 <output>{{ config.waveStrength.toFixed(2) }}</output
+          ><input
+            id="water-waveStrength"
             v-model.number="config.waveStrength"
             type="range"
             min="0"
@@ -405,8 +418,10 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-detailStrength">细节强度 <output>{{ config.detailStrength.toFixed(2) }}</output
-          ><input id="water-detailStrength"
+        <label for="water-detailStrength"
+          >细节强度 <output>{{ config.detailStrength.toFixed(2) }}</output
+          ><input
+            id="water-detailStrength"
             v-model.number="config.detailStrength"
             type="range"
             min="0"
@@ -414,8 +429,10 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-waveIrregularity">波纹不规则度 <output>{{ config.waveIrregularity.toFixed(2) }}</output
-          ><input id="water-waveIrregularity"
+        <label for="water-waveIrregularity"
+          >波纹不规则度 <output>{{ config.waveIrregularity.toFixed(2) }}</output
+          ><input
+            id="water-waveIrregularity"
             v-model.number="config.waveIrregularity"
             type="range"
             min="0"
@@ -423,8 +440,21 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-waveDirection">风浪方向 <output>{{ config.waveDirection }}°</output
-          ><input id="water-waveDirection"
+        <label for="water-waveSpread"
+          >方向分散度 <output>{{ config.waveSpread }}°</output
+          ><input
+            id="water-waveSpread"
+            v-model.number="config.waveSpread"
+            type="range"
+            min="0"
+            max="90"
+            step="5"
+            @input="applyOptions"
+        /></label>
+        <label for="water-waveDirection"
+          >风浪方向 <output>{{ config.waveDirection }}°</output
+          ><input
+            id="water-waveDirection"
             v-model.number="config.waveDirection"
             type="range"
             min="0"
@@ -432,8 +462,10 @@ onBeforeUnmount(() => {
             step="5"
             @input="applyOptions"
         /></label>
-        <label for="water-waveSpeed">动画速度 <output>{{ config.waveSpeed.toFixed(2) }}×</output
-          ><input id="water-waveSpeed"
+        <label for="water-waveSpeed"
+          >动画速度 <output>{{ config.waveSpeed.toFixed(2) }}×</output
+          ><input
+            id="water-waveSpeed"
             v-model.number="config.waveSpeed"
             type="range"
             min="0"
@@ -444,7 +476,9 @@ onBeforeUnmount(() => {
       </fieldset>
       <fieldset>
         <legend>反射与高光</legend>
-        <label for="water-reflectionStrength"><input id="water-reflectionStrength"
+        <label for="water-reflectionStrength"
+          ><input
+            id="water-reflectionStrength"
             v-model="config.reflection"
             type="checkbox"
             @change="applyOptions"
@@ -461,8 +495,10 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-reflectivity">基础反射率 <output>{{ config.reflectivity.toFixed(2) }}</output
-          ><input id="water-reflectivity"
+        <label for="water-reflectivity"
+          >基础反射率 <output>{{ config.reflectivity.toFixed(2) }}</output
+          ><input
+            id="water-reflectivity"
             v-model.number="config.reflectivity"
             type="range"
             min="0"
@@ -470,8 +506,10 @@ onBeforeUnmount(() => {
             step="0.01"
             @input="applyOptions"
         /></label>
-        <label for="water-roughness">粗糙度 <output>{{ config.roughness.toFixed(2) }}</output
-          ><input id="water-roughness"
+        <label for="water-roughness"
+          >粗糙度 <output>{{ config.roughness.toFixed(2) }}</output
+          ><input
+            id="water-roughness"
             v-model.number="config.roughness"
             type="range"
             min="0"
@@ -479,8 +517,10 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-specularIntensity">高光强度 <output>{{ config.specularIntensity.toFixed(2) }}</output
-          ><input id="water-specularIntensity"
+        <label for="water-specularIntensity"
+          >高光强度 <output>{{ config.specularIntensity.toFixed(2) }}</output
+          ><input
+            id="water-specularIntensity"
             v-model.number="config.specularIntensity"
             type="range"
             min="0"
@@ -488,8 +528,10 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-distortionScale">倒影扰动 <output>{{ config.distortionScale.toFixed(1) }}</output
-          ><input id="water-distortionScale"
+        <label for="water-distortionScale"
+          >倒影扰动 <output>{{ config.distortionScale.toFixed(1) }}</output
+          ><input
+            id="water-distortionScale"
             v-model.number="config.distortionScale"
             type="range"
             min="0"
