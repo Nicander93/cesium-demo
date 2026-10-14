@@ -54,6 +54,14 @@ export class SceneCapture {
     const originalShadow = scene.shadowMap
     const originalPostProcess = scene.postProcessStages
     const globeShow = scene.globe?.show
+    // Reuse the main view's loaded terrain tiles. A second quadtree frame would
+    // replace its selection/load queues and run host height callbacks from the mirrored camera.
+    const reuseTerrain = reflectGlobe && !this.directDepth && !!scene.globe
+    const terrainDebug = reuseTerrain ? scene.globe._surface?._debug : undefined
+    if (reuseTerrain && typeof terrainDebug?.suspendLodUpdate !== 'boolean') {
+      throw new Error('Terrain reflection requires the supported Cesium 1.132 quadtree adapter')
+    }
+    const originalSuspendLod = terrainDebug?.suspendLodUpdate
     const logDepth = scene._logDepthBuffer
     const hdr = scene._hdr
     const farToNearRatio = scene.farToNearRatio
@@ -85,6 +93,7 @@ export class SceneCapture {
       scene.shadowMap = undefined
       scene.postProcessStages = this.postProcess
       if (scene.globe) scene.globe.show = reflectGlobe
+      if (terrainDebug) terrainDebug.suspendLodUpdate = true
       scene._logDepthBuffer = false
       scene._hdr = false
       if (this.directDepth) scene.farToNearRatio = 1e9
@@ -105,7 +114,7 @@ export class SceneCapture {
       passState.blendingEnabled = undefined
       passState.scissorTest = undefined
       context.beginFrame()
-      if (scene.globe) { scene.globe.beginFrame(frameState); beganGlobe = true }
+      if (scene.globe && !reuseTerrain) { scene.globe.beginFrame(frameState); beganGlobe = true }
       scene.updateEnvironment()
       scene.updateAndExecuteCommands(passState, frameState.backgroundColor)
       scene.resolveFramebuffers(passState)
@@ -119,6 +128,7 @@ export class SceneCapture {
         scene.shadowMap = originalShadow
         scene.postProcessStages = originalPostProcess
         if (scene.globe) scene.globe.show = globeShow
+        if (terrainDebug) terrainDebug.suspendLodUpdate = originalSuspendLod
         scene._logDepthBuffer = logDepth
         scene._hdr = hdr
         scene.farToNearRatio = farToNearRatio

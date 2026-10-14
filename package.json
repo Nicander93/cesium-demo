@@ -18,7 +18,8 @@
     "typecheck:flow-lab": "vue-tsc -p tsconfig.flow-lab.json --noEmit",
     "smoke:water-flow": "node scripts/smoke-water-flow.mjs",
     "smoke:water-distance": "node scripts/smoke-water-distance.mjs",
-    "smoke:real-water": "node scripts/smoke-real-water.mjs"
+    "smoke:real-water": "node scripts/smoke-real-water.mjs",
+    "smoke:water-appearance": "node scripts/smoke-water-appearance.mjs"
   },
   "dependencies": {
     "@types/cesium": "^1.70.4",

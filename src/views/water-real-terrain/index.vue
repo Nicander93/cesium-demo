@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, reactive, ref, nextTick } from 'vue'
 import * as Cesium from 'cesium'
-import { WaterSurface } from '../../water'
+import {
+  WaterSurface,
+  createWaterPreset,
+  type WaterPresetName,
+  type WaterPresetOptions,
+} from '../../water'
 import {
   swissTerrainUrl,
   swissImageryUrl,
@@ -15,8 +20,14 @@ const terrainStatus = ref('等待加载'),
   imageryStatus = ref('等待加载')
 const height = ref<number>(),
   heightNote = ref(''),
-  reflection = ref(false),
   error = ref('')
+const mode = ref<'imagery' | 'current' | 'enhanced'>('enhanced')
+const presetName = ref<WaterPresetName>('calm-lake')
+const config = reactive(createWaterPreset())
+const diagnostics = ref<ReturnType<WaterSurface['getDiagnostics']>>()
+const reflectionNotice = ref('')
+const fps = ref(0)
+const cameraView = ref<'near' | 'overview' | 'far'>('overview')
 let viewer: Cesium.Viewer | undefined,
   water: WaterSurface | undefined,
   request = 0
@@ -24,16 +35,23 @@ let ring: WaterCoordinate[] | undefined,
   provider: Cesium.TerrainProvider | undefined
 let removeRenderError: (() => void) | undefined,
   removeImageryError: (() => void) | undefined
-function focus(near = false): void {
+let removePostRender: (() => void) | undefined
+function focus(view: 'near' | 'overview' | 'far' | boolean = 'overview'): void {
+  const kind = typeof view === 'boolean' ? (view ? 'near' : 'overview') : view
+  cameraView.value = kind
   if (!viewer) return
   const target = Cesium.Cartesian3.fromDegrees(
-    7.891,
-    46.695,
+    kind === 'near' ? 7.895 : 7.891,
+    kind === 'near' ? 46.694 : 46.695,
     height.value ?? 615,
   )
   viewer.camera.lookAt(
     target,
-    new Cesium.HeadingPitchRange(2.7, near ? -0.35 : -0.75, near ? 1300 : 3100),
+    new Cesium.HeadingPitchRange(
+      kind === 'near' ? 4.7 : 2.7,
+      kind === 'near' ? -0.9 : -0.75,
+      kind === 'near' ? 1400 : kind === 'far' ? 6000 : 3100,
+    ),
   )
   viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
 }
@@ -41,8 +59,52 @@ function setWaterHeight(): void {
   if (height.value === undefined || !Number.isFinite(height.value)) return
   if (water) water.height = height.value
 }
-function setReflection(): void {
-  water?.setOptions({ reflection: reflection.value })
+function applyMode(): void {
+  if (!water) return
+  water.show = mode.value !== 'imagery'
+  reflectionNotice.value = ''
+  if (mode.value === 'enhanced') water.setOptions({ ...config })
+  else
+    water.setOptions({
+      waveModel: 'legacy',
+      reflection: false,
+      waveStrength: 0.6,
+      waveSpeed: 1,
+      rippleSize: 150,
+      waterAlpha: 0.85,
+      waterColor: Cesium.Color.fromCssColorString('#0b6a76'),
+      reflectivity: 0.3,
+      reflectionStrength: 1,
+      specularIntensity: 1,
+      sunShiny: 100,
+      distortionScale: 3.7,
+    })
+  diagnostics.value = water.getDiagnostics()
+}
+function applyOptions(): void {
+  mode.value = 'enhanced'
+  // Native v-model handlers commit during the same event; read the completed reactive update.
+  void nextTick(() => {
+    if (water && !water.isDestroyed()) applyMode()
+  })
+}
+function restorePreset(): void {
+  Object.assign(config, createWaterPreset(presetName.value))
+  applyOptions()
+}
+async function changeQuality(): Promise<void> {
+  await nextTick()
+  config.reflectionMaxSize =
+    config.quality === 'low' ? 512 : config.quality === 'high' ? 1536 : 1024
+  config.reflectionMaxFps =
+    config.quality === 'low' ? 10 : config.quality === 'high' ? 30 : 15
+  applyOptions()
+}
+function changeColor(event: Event): void {
+  if (event.target instanceof HTMLInputElement) {
+    config.waterColor = Cesium.Color.fromCssColorString(event.target.value)
+    applyOptions()
+  }
 }
 async function createWater(id: number): Promise<void> {
   if (!viewer || !provider || !ring) return
@@ -63,20 +125,14 @@ async function createWater(id: number): Promise<void> {
       scene: viewer.scene,
       positions: ring.map((p) => Cesium.Cartographic.fromDegrees(...p)),
       height: height.value,
-      quality: 'balanced',
-      reflection: reflection.value,
-      foam: false,
-      waterAlpha: 0.85,
-      edgeFadeWidth: 0.08,
-      waveStrength: 0.6,
-      rippleSize: 150,
+      ...config,
       normalMapUrl:
         import.meta.env.BASE_URL + 'cesium/Assets/Textures/waterNormals.jpg',
-      waterColor: Cesium.Color.fromCssColorString('#0b6a76'),
       onError: (value) => {
-        error.value = String(value)
+        reflectionNotice.value = String(value)
       },
     })
+    applyMode()
     const ready = await water.ready
     if (id !== request || !viewer) return
     if (ready) waterStatus.value = '官方水域面已显示 · 无流速数据，静态湖面'
@@ -157,10 +213,63 @@ const lab = {
     terrainProvider: !!provider,
     positions: ring?.length,
     tilesLoaded: viewer?.scene.globe.tilesLoaded,
+    cameraPosition: viewer
+      ? Cesium.Cartesian3.clone(viewer.camera.positionWC)
+      : undefined,
     diagnostics: water?.getDiagnostics(),
+    options: water?.getOptions(),
+    mode: mode.value,
+    cameraView: cameraView.value,
+    shaderSource: water?.getWaterShaderSource(),
+    visualTime: water?.material.uniforms.time,
+    fps: fps.value,
   }),
+  getWaterBounds: () => {
+    if (!viewer || !ring || height.value === undefined) return undefined
+    const points = ring
+      .map((p) =>
+        viewer?.scene.cartesianToCanvasCoordinates(
+          Cesium.Cartesian3.fromDegrees(p[0], p[1], height.value),
+        ),
+      )
+      .filter((p): p is Cesium.Cartesian2 => !!p)
+    if (!points.length) return undefined
+    const x = Math.max(355, Math.floor(Math.min(...points.map((p) => p.x)))),
+      y = Math.max(0, Math.floor(Math.min(...points.map((p) => p.y))))
+    const right = Math.min(
+      viewer.canvas.clientWidth,
+      Math.ceil(Math.max(...points.map((p) => p.x))),
+    )
+    const bottom = Math.min(
+      viewer.canvas.clientHeight,
+      Math.ceil(Math.max(...points.map((p) => p.y))),
+    )
+    return right > x && bottom > y
+      ? { x, y, width: right - x, height: bottom - y }
+      : undefined
+  },
   focus,
   load,
+  setMode: (value: 'imagery' | 'current' | 'enhanced') => {
+    mode.value = value
+    applyMode()
+  },
+  setPreset: (name: WaterPresetName) => {
+    presetName.value = name
+    restorePreset()
+  },
+  setOptions: (options: Partial<WaterPresetOptions>) => {
+    if (!water) return
+    water.setOptions({ ...config, ...options })
+    Object.assign(config, options)
+    mode.value = 'enhanced'
+    water.show = true
+  },
+  setTime: (seconds: number) => water?.setVisualTime(seconds),
+  freeze: () => {
+    config.waveSpeed = 0
+    if (water) water.setOptions({ waveSpeed: 0 })
+  },
 }
 declare global {
   interface Window {
@@ -185,6 +294,7 @@ onMounted(() => {
       selectionIndicator: false,
       useBrowserRecommendedResolution: false,
       msaaSamples: 4,
+      shouldAnimate: false,
     })
     viewer.scene.postProcessStages.fxaa.enabled = true
     viewer.scene.globe.depthTestAgainstTerrain = true
@@ -195,6 +305,20 @@ onMounted(() => {
         error.value = String(value)
       },
     )
+    let frames = 0,
+      frameCount = 0,
+      statsAt = performance.now()
+    removePostRender = viewer.scene.postRender.addEventListener(() => {
+      frameCount++
+      const now = performance.now()
+      if (now - statsAt >= 1000) {
+        fps.value = Math.round((frameCount * 1000) / (now - statsAt))
+        frameCount = 0
+        statsAt = now
+      }
+      if (++frames % 15 === 0 && water)
+        diagnostics.value = water.getDiagnostics()
+    })
     focus()
     if (import.meta.env.DEV) window.__realWaterLab = lab
     void load()
@@ -206,6 +330,7 @@ onBeforeUnmount(() => {
   request++
   removeRenderError?.()
   removeImageryError?.()
+  removePostRender?.()
   water?.destroy()
   viewer?.destroy()
   viewer = undefined
@@ -218,43 +343,209 @@ onBeforeUnmount(() => {
     <aside class="real-water__panel">
       <RouterLink to="/water-flow-lab">← 合成水流对照</RouterLink>
       <h1>真实地形 · 布里恩茨湖岸</h1>
-      <p>
-        水域来自瑞士官方湖泊数据，不使用 DEM
-        最低点推断河道。无水动力速度数据，显示静态湖面。直线截断是局部展示范围，边缘渐隐，不代表真实岸线。
-      </p>
-      <dl>
-        <dt>地形</dt>
-        <dd>{{ terrainStatus }}</dd>
-        <dt>水域 / 水位</dt>
-        <dd>{{ waterStatus }}</dd>
-        <dt>影像</dt>
-        <dd>{{ imageryStatus }}</dd>
-      </dl>
-      <label v-if="height !== undefined"
-        >展示水位（地形服务场景高程，米）<input
-          v-model.number="height"
-          type="number"
-          step="0.1"
-          @change="setWaterHeight"
-      /></label>
-      <p>{{ heightNote }}</p>
+      <p>真实地形与官方湖岸 · 无实测流速，波纹表示风浪。</p>
       <label
-        ><input v-model="reflection" type="checkbox" @change="setReflection" />
-        场景反射（实验）</label
+        >对照显示
+        <select v-model="mode" @change="applyMode">
+          <option value="imagery">仅影像</option>
+          <option value="current">当前水面（旧）</option>
+          <option value="enhanced">可调多尺度水面</option>
+        </select>
+      </label>
+      <div class="real-water__actions">
+        <button @click="focus('near')">近景</button
+        ><button @click="focus('overview')">俯瞰</button
+        ><button @click="focus('far')">远景</button>
+      </div>
+      <label
+        >默认预设<select v-model="presetName" @change="restorePreset">
+          <option value="calm-lake">平静湖面</option>
+          <option value="windy-lake">有风湖面</option>
+        </select></label
       >
       <div class="real-water__actions">
-        <button @click="focus(false)">俯瞰</button
-        ><button @click="focus(true)">近岸</button
-        ><button @click="load">重新加载</button>
+        <button @click="restorePreset">恢复预设</button
+        ><button @click="load">重新加载数据</button>
       </div>
-      <p>
-        地形 © swisstopo · 水域 © FOEN/BAFU · 影像 © swisstopo
-        SWISSIMAGE。外部服务失败时保留独立状态；缺水域或展示高程时停止水面生成。
-      </p>
-      <p>
-        DEM
-        不提供湖底水深；源垂直基准未核定，当前展示高度不是实时水位、已转换椭球高或工程配准成果。查看水位调整和边界叠合后，再接入实际河流/洪水数据。
-      </p>
+      <fieldset>
+        <legend>颜色与透光</legend>
+        <label
+          >水色<input
+            type="color"
+            :value="config.waterColor.toCssHexString()"
+            @input="changeColor"
+        /></label>
+        <label for="water-waterAlpha">不透明度 <output>{{ config.waterAlpha.toFixed(2) }}</output
+          ><input id="water-waterAlpha"
+            v-model.number="config.waterAlpha"
+            type="range"
+            min="0.2"
+            max="1"
+            step="0.01"
+            @input="applyOptions"
+        /></label>
+      </fieldset>
+      <fieldset>
+        <legend>波纹与动画</legend>
+        <label for="water-waveLength">主波长 <output>{{ config.waveLength }} m</output
+          ><input id="water-waveLength"
+            v-model.number="config.waveLength"
+            type="range"
+            min="4"
+            max="160"
+            step="2"
+            @input="applyOptions"
+        /></label>
+        <label for="water-waveStrength">整体强度 <output>{{ config.waveStrength.toFixed(2) }}</output
+          ><input id="water-waveStrength"
+            v-model.number="config.waveStrength"
+            type="range"
+            min="0"
+            max="2"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+        <label for="water-detailStrength">细节强度 <output>{{ config.detailStrength.toFixed(2) }}</output
+          ><input id="water-detailStrength"
+            v-model.number="config.detailStrength"
+            type="range"
+            min="0"
+            max="2"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+        <label for="water-waveIrregularity">波纹不规则度 <output>{{ config.waveIrregularity.toFixed(2) }}</output
+          ><input id="water-waveIrregularity"
+            v-model.number="config.waveIrregularity"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+        <label for="water-waveDirection">风浪方向 <output>{{ config.waveDirection }}°</output
+          ><input id="water-waveDirection"
+            v-model.number="config.waveDirection"
+            type="range"
+            min="0"
+            max="360"
+            step="5"
+            @input="applyOptions"
+        /></label>
+        <label for="water-waveSpeed">动画速度 <output>{{ config.waveSpeed.toFixed(2) }}×</output
+          ><input id="water-waveSpeed"
+            v-model.number="config.waveSpeed"
+            type="range"
+            min="0"
+            max="2"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+      </fieldset>
+      <fieldset>
+        <legend>反射与高光</legend>
+        <label for="water-reflectionStrength"><input id="water-reflectionStrength"
+            v-model="config.reflection"
+            type="checkbox"
+            @change="applyOptions"
+          />
+          场景反射（包括地形）</label
+        >
+        <label
+          >反射强度 <output>{{ config.reflectionStrength.toFixed(2) }}</output
+          ><input
+            v-model.number="config.reflectionStrength"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+        <label for="water-reflectivity">基础反射率 <output>{{ config.reflectivity.toFixed(2) }}</output
+          ><input id="water-reflectivity"
+            v-model.number="config.reflectivity"
+            type="range"
+            min="0"
+            max="0.5"
+            step="0.01"
+            @input="applyOptions"
+        /></label>
+        <label for="water-roughness">粗糙度 <output>{{ config.roughness.toFixed(2) }}</output
+          ><input id="water-roughness"
+            v-model.number="config.roughness"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+        <label for="water-specularIntensity">高光强度 <output>{{ config.specularIntensity.toFixed(2) }}</output
+          ><input id="water-specularIntensity"
+            v-model.number="config.specularIntensity"
+            type="range"
+            min="0"
+            max="2"
+            step="0.05"
+            @input="applyOptions"
+        /></label>
+        <label for="water-distortionScale">倒影扰动 <output>{{ config.distortionScale.toFixed(1) }}</output
+          ><input id="water-distortionScale"
+            v-model.number="config.distortionScale"
+            type="range"
+            min="0"
+            max="8"
+            step="0.2"
+            @input="applyOptions"
+        /></label>
+        <label
+          >反射质量<select v-model="config.quality" @change="changeQuality">
+            <option value="low">流畅</option>
+            <option value="balanced">均衡</option>
+            <option value="high">精细</option>
+          </select></label
+        >
+        <p>
+          {{
+            diagnostics?.reflectionAvailable
+              ? '场景反射已生效'
+              : config.reflection && mode === 'enhanced'
+                ? '反射准备中或已降级；请查看加载状态'
+                : '场景反射已关闭'
+          }}
+        </p>
+      </fieldset>
+      <details>
+        <summary>数据与渲染状态</summary>
+        <dl>
+          <dt>地形</dt>
+          <dd>{{ terrainStatus }}</dd>
+          <dt>水域</dt>
+          <dd>{{ waterStatus }}</dd>
+          <dt>影像</dt>
+          <dd>{{ imageryStatus }}</dd>
+        </dl>
+        <label v-if="height !== undefined"
+          >展示水位（服务场景高程，米）<input
+            v-model.number="height"
+            type="number"
+            step="0.1"
+            @change="setWaterHeight"
+        /></label>
+        <p>{{ heightNote }}</p>
+        <p>
+          反射 {{ diagnostics?.reflectionWidth ?? 0 }} ×
+          {{ diagnostics?.reflectionHeight ?? 0 }} · 更新
+          {{ diagnostics?.reflectionFrames ?? 0 }} 次 · 几何
+          {{ diagnostics?.geometryCreated ?? 0 }} 份 · 主画面 {{ fps }} FPS
+        </p>
+        <p v-if="reflectionNotice || diagnostics?.error">
+          {{ diagnostics?.error || reflectionNotice }}
+        </p>
+        <p>
+          地形/影像 © swisstopo · 水域 ©
+          FOEN/BAFU。局部裁剪边渐隐；源垂直基准未核定，此处不是实测水位或工程配准。
+        </p>
+      </details>
       <p v-if="error" role="alert">{{ error }}</p>
     </aside>
   </div>
@@ -304,6 +595,37 @@ onBeforeUnmount(() => {
   display: block;
   font-size: 13px;
   margin-top: 12px;
+}
+.real-water__panel select {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  color: #e1eded;
+  background: #28464b;
+  border: 1px solid #587d80;
+}
+.real-water__panel fieldset {
+  margin-top: 16px;
+  padding: 10px;
+  border: 1px solid #52716f;
+}
+.real-water__panel legend {
+  padding: 0 6px;
+  font-size: 14px;
+}
+.real-water__panel input[type='range'] {
+  width: 100%;
+  display: block;
+  margin-top: 6px;
+}
+.real-water__panel output {
+  float: right;
+  font-variant-numeric: tabular-nums;
+}
+.real-water__panel input[type='color'] {
+  width: 45px;
+  margin-left: 10px;
+  height: 25px;
 }
 .real-water__panel input[type='number'] {
   width: 100%;

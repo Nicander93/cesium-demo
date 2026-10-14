@@ -40,7 +40,7 @@ function fixture() {
     camera, _view: view, _defaultView: view, context, shadowMap: {}, _hdr: true, _logDepthBuffer: true,
     _environmentState: { originalFramebuffer: 'host' },
     _frameState: { camera, passes: { render: true, postProcess: true }, commandList: [], shadowMaps: [], tilesetPassState: {}, cullingVolume: {} },
-    globe: { show: true, beginFrame: vi.fn(), endFrame: vi.fn() }, fog: { update: vi.fn() },
+    globe: { _surface: { _debug: { suspendLodUpdate: false } }, show: true, beginFrame: vi.fn(), endFrame: vi.fn() }, fog: { update: vi.fn() },
     postProcessStages: { host: true }, farToNearRatio: 1000,
     atmosphere: new Cesium.Atmosphere(), backgroundColor: Cesium.Color.BLACK, updateFrameState: vi.fn(), updateEnvironment: vi.fn(),
     updateAndExecuteCommands: vi.fn(), resolveFramebuffers: vi.fn(),
@@ -55,6 +55,19 @@ const point = new Cesium.Cartesian3()
 const normal = new Cesium.Cartesian3(0, 0, 1)
 
 describe('reflection pass isolation', () => {
+  it('reuses host terrain selection without auxiliary load/height updates and restores the LOD flag on failure', () => {
+    const f = fixture()
+    f.scene.updateAndExecuteCommands.mockImplementation(() => {
+      expect(f.scene.globe._surface._debug.suspendLodUpdate).toBe(true)
+      throw new Error('Terrain draw failed')
+    })
+    expect(() => f.pass.update(point, normal, { ...options, reflectGlobe: true }, 0)).toThrow('Terrain draw failed')
+    expect(f.scene.globe.beginFrame).not.toHaveBeenCalled()
+    expect(f.scene.globe.endFrame).not.toHaveBeenCalled()
+    expect(f.scene.globe._surface._debug.suspendLodUpdate).toBe(false)
+    expect(f.scene._view).toBe(f.view)
+    f.pass.destroy()
+  })
   it('renders a cached tileset on the first frame before the host has supplied atmosphere', () => {
     const f = fixture()
     f.scene.updateAndExecuteCommands.mockImplementation(() => {

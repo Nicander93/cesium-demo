@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium'
-import { createWaterMaterial, updateWaterMaterial, type WaterMaterialOptions } from './material'
+import { createWaterMaterial, updateWaterMaterial, updateWaterMaterialView, type WaterMaterialOptions } from './material'
 import { PlanarReflection, registerWaterPrimitive, type ReflectionOptions } from './reflection'
 import { ShoreDepth } from './shore'
 
@@ -123,6 +123,32 @@ export class WaterSurface {
     this.scene.requestRender()
   }
 
+  /** Seek only the visual wave clock, without changing water height or host time. */
+  setVisualTime(seconds: number): void {
+    this.assertAlive()
+    if (!Number.isFinite(seconds) || seconds < 0) throw new RangeError('visual time must be finite and nonnegative')
+    this.waveTime = seconds
+    this.lastWaveUpdate = performance.now()
+    this.material.uniforms.time = seconds
+    this.scene.requestRender()
+  }
+
+  /** A detached snapshot of the current rendering configuration; no Viewer or GPU objects. */
+  getOptions(): WaterSurfaceUpdateOptions {
+    this.assertAlive()
+    const u = this.material.uniforms
+    return { height: this.currentHeight, waveSpeed: this.currentWaveSpeed, quality: this.quality,
+      reflection: this.reflectionEnabled, reflectGlobe: this.reflectionOptions.reflectGlobe,
+      reflectionResolutionScale: this.reflectionOptions.resolutionScale, reflectionMaxSize: this.reflectionOptions.maxSize, reflectionMaxFps: this.reflectionOptions.maxFps,
+      waveModel: u.waveModel > 0.5 ? 'multiscale' : 'legacy', waveLength: u.waveLength, waveDirection: Cesium.Math.toDegrees(u.waveDirection), waveIrregularity: u.waveIrregularity,
+      detailStrength: u.detailStrength, roughness: u.roughness, specularIntensity: u.specularIntensity, reflectionStrength: u.reflectionStrength,
+      rippleSize: u.size, waveStrength: u.waveStrength, waterColor: Cesium.Color.clone(u.waterColor), waterAlpha: u.waterAlpha,
+      environmentColor: Cesium.Color.clone(u.environmentColor), lightDirection: Cesium.Cartesian3.clone(u.lightDirection), edgeFadeWidth: u.edgeFadeWidth, reflectivity: u.rf0, sunShiny: u.sunShiny, distortionScale: u.distortionScale,
+      foam: u.foamEnabled > 0.5, foamWidth: u.foamWidth, foamIntensity: u.foamIntensity, foamSpeed: u.foamSpeed,
+      ...(typeof u.normalTexture === 'string' && u.useNormalTexture > 0.5 ? { normalMapUrl: u.normalTexture } : {}),
+    }
+  }
+
   get height(): number { return this.currentHeight }
   set height(value: number) {
     this.assertAlive()
@@ -159,6 +185,8 @@ export class WaterSurface {
     }
   }
 
+  getWaterShaderSource(): string { this.assertAlive(); return this.primitive.appearance.getFragmentShaderSource() }
+
   isDestroyed(): boolean { return this.destroyed }
 
   destroy(): void {
@@ -180,6 +208,7 @@ export class WaterSurface {
     if (this.destroyed || !this.primitive.show) return
     const now = performance.now()
     this.advanceWaveTime(now)
+    if (this.scene.camera) updateWaterMaterialView(this.material, this.scene.camera, this.point)
     if (this.scene.mode !== Cesium.SceneMode.SCENE3D) { this.material.uniforms.reflectionReady = this.material.uniforms.shoreReady = 0; return }
     if (this.material.uniforms.foamEnabled > 0) {
       try {
