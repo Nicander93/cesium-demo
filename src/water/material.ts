@@ -7,6 +7,8 @@ export interface WaterMaterialOptions {
   waveStrength?: number
   waterColor?: Cesium.Color
   waterAlpha?: number
+  /** Optional fade width in normalized geometry UVs, 0–0.5; useful for local display crops. */
+  edgeFadeWidth?: number
   reflectivity?: number
   sunShiny?: number
   distortionScale?: number
@@ -26,6 +28,7 @@ uniform float size;
 uniform float waveStrength;
 uniform vec4 waterColor;
 uniform float waterAlpha;
+uniform float edgeFadeWidth;
 uniform float rf0;
 uniform vec3 lightDirection;
 uniform float sunShiny;
@@ -122,6 +125,10 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   float foam = shoreFoam(-materialInput.positionToEyeEC);
   material.diffuse = mix(material.diffuse, vec3(0.88, 0.95, 0.93), foam);
   material.alpha = mix(material.alpha, 1.0, foam);
+  if (edgeFadeWidth > 0.0) {
+    vec2 edge = min(materialInput.st, 1.0 - materialInput.st);
+    material.alpha *= smoothstep(0.0, edgeFadeWidth, min(edge.x, edge.y));
+  }
   return material;
 }`
 
@@ -139,6 +146,7 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         waveStrength: options.waveStrength ?? 1,
         waterColor: Cesium.Color.clone(options.waterColor ?? Cesium.Color.fromCssColorString('#001e0f')),
         waterAlpha: options.waterAlpha ?? 0.9,
+        edgeFadeWidth: options.edgeFadeWidth ?? 0,
         rf0: options.reflectivity ?? 0.3,
         lightDirection: Cesium.Cartesian3.clone(options.lightDirection ?? new Cesium.Cartesian3(0, 1, 0)),
         sunShiny: options.sunShiny ?? 100,
@@ -160,14 +168,14 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         foamSpeed: options.foamSpeed ?? 0.5,
       },
     },
-    translucent: (material: Cesium.Material) => material.uniforms.waterAlpha < 1,
+    translucent: (material: Cesium.Material) => material.uniforms.waterAlpha < 1 || material.uniforms.edgeFadeWidth > 0,
   })
 }
 
 export function updateWaterMaterial(material: Cesium.Material, options: WaterMaterialOptions & { time?: number }): void {
   validateWaterMaterial(options)
   if (options.time !== undefined && !Number.isFinite(options.time)) throw new RangeError('time must be finite')
-  const names = { waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
+  const names = { waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
@@ -179,6 +187,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
 }
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
+  if (options.edgeFadeWidth !== undefined && (!Number.isFinite(options.edgeFadeWidth) || options.edgeFadeWidth < 0 || options.edgeFadeWidth > 0.5)) throw new RangeError('edgeFadeWidth must be in [0, 0.5]')
   for (const key of ['waveStrength', 'rippleSize', 'sunShiny', 'distortionScale', 'foamWidth', 'foamSpeed'] as const) {
     const value = options[key]
     if (value !== undefined && (!Number.isFinite(value) || value < 0 || (key === 'sunShiny' && value === 0))) throw new RangeError(`${key} is invalid`)

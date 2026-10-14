@@ -16,7 +16,9 @@
     "typecheck:city": "vue-tsc -p tsconfig.city.json --noEmit",
     "validate:city-assets": "node scripts/validate-city-assets.mjs",
     "typecheck:flow-lab": "vue-tsc -p tsconfig.flow-lab.json --noEmit",
-    "smoke:water-flow": "node scripts/smoke-water-flow.mjs"
+    "smoke:water-flow": "node scripts/smoke-water-flow.mjs",
+    "smoke:water-distance": "node scripts/smoke-water-distance.mjs",
+    "smoke:real-water": "node scripts/smoke-real-water.mjs"
   },
   "dependencies": {
     "@types/cesium": "^1.70.4",

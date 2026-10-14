@@ -130,3 +130,13 @@ it('changes wave speed without jumping phase and can pause and resume', () => {
     clock.mockRestore()
   }
 })
+
+it('fades a local crop without forcing opaque rendering and rejects invalid fade widths', () => {
+  const material = createWaterMaterial({ waterAlpha: 1 })
+  expect(material.isTranslucent()).toBe(false)
+  updateWaterMaterial(material, { edgeFadeWidth: 0.08 })
+  expect(material.isTranslucent()).toBe(true)
+  expect(() => updateWaterMaterial(material, { edgeFadeWidth: 0.6 })).toThrow()
+  expect(material.uniforms.edgeFadeWidth).toBe(0.08)
+  material.destroy()
+})

@@ -7,6 +7,7 @@ import { sampleWallOverfalls } from '../core/overfall'
 import { detailedWaterBody, waterShaderFunctions } from './water-shader'
 import { FloodFoam, resolveFloodVisualOptions, type FloodVisualOptions } from './foam'
 import { FlowParticles } from './flow-particles'
+import { createFloodSurfaceState } from './surface-state'
 
 const vertexShader = `
 in vec3 position3DHigh;
@@ -35,7 +36,9 @@ void main() {
 }`
 
 function fragmentShader(water: boolean, depthMode: boolean, detail: boolean, minimumDepth = 0.02): string {
-  const discard = `if (h ${minimumDepth === 0 ? '<=' : '<'} ${minimumDepth.toFixed(6)}) discard;`
+  const discard = `float shoreCoverage = smoothstep(${minimumDepth.toFixed(6)} - max(fwidth(h), 0.001), ${minimumDepth.toFixed(6)} + max(fwidth(h), 0.001), h);
+    if (shoreCoverage <= 0.001) discard;
+    h = max(h, 0.0);`
   return `
 in vec3 v_normalEC;
 in vec3 v_positionEC;
@@ -55,7 +58,7 @@ void main() {
     alpha = 1.0;
   }
   ${depthMode ? 'rgb = mix(vec3(0.22, 0.78, 0.9), vec3(0.75, 0.22, 0.12), clamp(h / 5.0, 0.0, 1.0));' : ''}
-  out_FragColor = vec4(rgb, ${depthMode ? '1.0' : 'alpha'});
+  out_FragColor = vec4(rgb, ${depthMode ? '1.0' : 'alpha * shoreCoverage'});
   ` : `
   float h = v_state.r;
   ${discard}
@@ -372,7 +375,9 @@ export class FloodRenderer {
     const normals = new Float32Array(count * 3)
     const st = new Float32Array(count * 2)
     const color = new Float32Array(count * 4)
-    const heights = elevation.map((z, i) => z + (frame ? frame.depth[i] + 0.035 : 0))
+    // Wall discontinuities keep their existing geometry path; do not extend through barriers.
+    const surface = frame ? createFloodSurfaceState(this.grid, frame, !this.barriers) : undefined
+    const heights = surface?.heights ?? elevation
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < columns; x++) {
         const i = y * columns + x
@@ -382,7 +387,7 @@ export class FloodRenderer {
         const dzdy = (heights[Math.min(rows - 1, y + 1) * columns + x] - heights[Math.max(0, y - 1) * columns + x]) / (2 * cellSize)
         const length = Math.hypot(dzdx, dzdy, 1)
         normals.set([-dzdx / length, -dzdy / length, 1 / length], i * 3)
-        if (frame) color.set([frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, this.diagnosticMode === 'foam-source' ? this.foam.sources[i] : this.foam.coverage[i]], i * 4)
+        if (frame) color.set([surface?.depths[i] ?? frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, this.diagnosticMode === 'foam-source' ? this.foam.sources[i] : this.foam.coverage[i]], i * 4)
         else {
           const t = Math.min(1, Math.max(0, (elevation[i] - 12) / 80))
           color.set([elevation[i], 0.35 + 0.3 * t, 0.43 + 0.15 * t, 0.29 + 0.14 * t], i * 4)

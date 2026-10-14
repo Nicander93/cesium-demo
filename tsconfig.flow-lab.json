@@ -6,6 +6,8 @@
     "src/views/flood-valley/**/*.vue",
     "src/views/water-flow-lab/**/*.vue",
     "src/types/Cesium.d.ts",
-    "src/vite-env.d.ts"
+    "src/vite-env.d.ts",
+    "src/water/**/*.ts",
+    "src/views/water-real-terrain/**/*.vue"
   ]
 }

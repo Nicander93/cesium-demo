@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
+  { path: '/water-real-terrain', component: () => import('@/views/water-real-terrain/index.vue'),
+    meta: { title: '真实地形与湖岸', standalone: true, category: 'effect', description: '官方水域面、独立地形和影像状态',
+      image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href } },
   {
     path: '/water-flow-lab',
     component: () => import('@/views/water-flow-lab/index.vue'),

@@ -36,11 +36,11 @@ function paint(): void {
   viewer?.scene.requestRender()
 }
 
-function setCamera(kind: 'overview' | 'near' = 'overview'): void {
+function setCamera(kind: 'overview' | 'near' | 'far' = 'overview'): void {
   if (!viewer) return
   const matrix = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(...fixture.grid.origin))
   const target = Cesium.Matrix4.multiplyByPoint(matrix, new Cesium.Cartesian3(40, 64, 1), new Cesium.Cartesian3())
-  viewer.camera.lookAt(target, new Cesium.HeadingPitchRange(0.18, kind === 'near' ? -0.42 : -1.05, kind === 'near' ? 80 : 185))
+  viewer.camera.lookAt(target, new Cesium.HeadingPitchRange(0.18, kind === 'near' ? -0.42 : -1.05, kind === 'near' ? 80 : kind === 'far' ? 370 : 185))
   viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
 }
 
@@ -131,7 +131,9 @@ function createViewer(): void {
       animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false,
       sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false,
       infoBox: false, selectionIndicator: false, shouldAnimate: false,
+      useBrowserRecommendedResolution: false, msaaSamples: 4,
     })
+    viewer.scene.postProcessStages.fxaa.enabled = true
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#15242a')
     viewer.scene.globe.depthTestAgainstTerrain = true
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false
@@ -185,6 +187,7 @@ onBeforeUnmount(() => {
     <aside class="flow-lab__panel">
       <RouterLink to="/">← 示例首页</RouterLink>
       <h1>水流渲染对照</h1>
+      <RouterLink to="/water-real-terrain">查看真实地形与湖岸 →</RouterLink>
       <p>合成数据 · 无需 Ion、影像或 DEM</p>
       <label>固定工况
         <select v-model="fixtureId" @change="changeFixture">
@@ -227,7 +230,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.flow-lab { height: 100vh; position: relative; color: #dce8e8; background: #15242a; }
+.flow-lab { position: fixed; inset: 0; overflow: hidden; color: #dce8e8; background: #15242a; }
 .flow-lab__canvas { height: 100%; }
 .flow-lab__panel { position: absolute; top: 16px; left: 16px; width: 300px; max-height: calc(100vh - 32px); overflow: auto; padding: 20px; background: rgba(13, 26, 31, .96); border: 1px solid #3c555c; border-radius: 6px; }
 .flow-lab__panel h1 { font-size: 22px; margin: 16px 0 8px; }

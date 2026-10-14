@@ -86,7 +86,10 @@ export const detailedWaterBody = `
   vec3 deep = vec3(0.035, 0.16, 0.19);
   vec3 body = deep + (shallow - deep) * absorption;
   vec3 rgb = mix(body, reflected, fresnel);
-  float specular = pow(max(dot(n, normalize(view + light)), 0.0), 80.0);
+  // Approximate specular antialiasing: broaden and reduce unresolved highlights.
+  float normalVariance = dot(dFdx(n), dFdx(n)) + dot(dFdy(n), dFdy(n));
+  float gloss = 80.0 / (1.0 + 640.0 * normalVariance);
+  float specular = pow(max(dot(n, normalize(view + light)), 0.0), gloss) * gloss / 80.0;
   rgb += vec3(1.0, 0.94, 0.78) * specular * 0.65;
   float noiseA = waterNoise(pA * 0.045) * 0.65 + waterNoise(pA * 0.12) * 0.35;
   float noiseB = waterNoise(pB * 0.045) * 0.65 + waterNoise(pB * 0.12) * 0.35;
