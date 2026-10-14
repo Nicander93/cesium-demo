@@ -1,5 +1,7 @@
 # 水流渲染对照：P0 基线
 
+此文保留 P0 初始基线记录。当前页面新增可选 P1 流场算法，见 [P1 实验决策与结果](P1-EXPERIMENT.md)。
+
 入口：`/cesium-demo/water-flow-lab`，首页“特效”分类也能进入。
 
 该实验先让现有结果可比较、可诊断、可重复验收，再开展 P1 自然流动实验。此页展示现有基础/细节两种水面，不代表新算法已经达到目标画质。
@@ -39,7 +41,7 @@ node scripts/smoke-water-flow.mjs
 
 ## 验收材料和限制
 
-`test-results/water-flow-lab/` 保存四种工况的基础/细节截图、速度/生成源/覆盖截图、冻结对照、最终组装 GLSL、动态 WebM 和 GPU 报告。该目录被 Git 忽略，不能当作 PR 中已经上传的证据。
+`test-results/water-flow-lab/` 保存 P0 记录；当前脚本默认输出到 `p1-flow/` 子目录（可用 `WATER_FLOW_RUN_ID` 指定其他实验目录）。保存四种工况的基础/细节截图、速度/生成源/覆盖截图、冻结对照、最终组装 GLSL、动态 WebM 和 GPU 报告。该目录被 Git 忽略，不能当作 PR 中已经上传的证据。
 
 2026-10-14 本机单测 73 项通过；专项类型检查和生产构建通过，构建保留现有大于 500 kB 的 chunk 提示。真实浏览器报告以 `gpu-smoke.json` 为准，包含浏览器版本、实际 WebGL renderer、分辨率、错误和动态时间。
 

@@ -7,7 +7,7 @@ const { chromium } = process.env.PLAYWRIGHT_MODULE_PATH
   ? await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE_PATH).href)
   : await import('playwright')
 const baseUrl = process.env.WATER_FLOW_BASE_URL ?? 'http://127.0.0.1:5198/cesium-demo/'
-const output = path.resolve('test-results/water-flow-lab')
+const output = path.resolve('test-results/water-flow-lab', process.env.WATER_FLOW_RUN_ID ?? 'p1-flow')
 await fs.mkdir(output, { recursive: true })
 const browser = await chromium.launch({ headless: true,
   ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}),
@@ -41,7 +41,30 @@ async function ready() {
     return value && value.renderedFrames >= 4 && value.shaderSource && !value.error
   }, null, { timeout: 30000 })
 }
+async function compareImages(first, second) {
+  return page.evaluate(async ([first, second]) => {
+    async function decode(data) {
+      const img = new Image()
+      img.src = 'data:image/png;base64,' + data
+      await img.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width; canvas.height = img.height
+      const context = canvas.getContext('2d')
+      context.drawImage(img, 0, 0)
+      return context.getImageData(0, 0, img.width, img.height).data
+    }
+    const a = await decode(first), b = await decode(second)
+    let total = 0, changed = 0
+    for (let i = 0; i < a.length; i += 4) {
+      const difference = (Math.abs(a[i]-b[i]) + Math.abs(a[i+1]-b[i+1]) + Math.abs(a[i+2]-b[i+2])) / 3
+      total += difference
+      if (difference > 25) changed++
+    }
+    return { meanRgbDifference: total / (a.length / 4), changedOver25: changed / (a.length / 4) }
+  }, [first.toString('base64'), second.toString('base64')])
+}
 let report, videoPath
+const temporalChecks = []
 try {
   await page.goto(new URL('water-flow-lab', baseUrl).href)
   await ready()
@@ -66,7 +89,7 @@ try {
     await control('setFixture', fixture)
     await control('setCamera', 'near')
     await control('seek', 15)
-    for (const algorithm of ['basic', 'current']) {
+    for (const algorithm of ['basic', 'current', 'flow']) {
       await control('setAlgorithm', algorithm)
       await page.waitForTimeout(250)
       await page.screenshot({ path: path.join(output, fixture + '-' + algorithm + '.png') })
@@ -77,14 +100,42 @@ try {
       assert.match(value.shaderSource, /floodVisualTime/)
       checks.push({ fixture, algorithm, primitiveCount: value.primitiveCount, time: value.time })
     }
-    for (const diagnostic of ['velocity', 'foam-source', 'foam']) {
+    for (const sourceAlgorithm of ['current', 'flow']) {
+      await control('setAlgorithm', sourceAlgorithm)
+      for (const diagnostic of ['velocity', 'foam-source', 'foam']) {
       await control('setDiagnostic', diagnostic)
       await page.waitForTimeout(250)
-      await page.screenshot({ path: path.join(output, fixture + '-' + diagnostic + '.png') })
+      await page.screenshot({ path: path.join(output, fixture + '-' + sourceAlgorithm + '-' + diagnostic + '.png') })
       assert.equal((await state()).error, '')
+    }
     }
     await control('setDiagnostic', 'water')
   }
+  await control('setFixture', 'rapid')
+  await control('setCamera', 'near')
+  await control('setAlgorithm', 'flow')
+  await control('setParticles', false)
+  const clip = { x: 360, y: 180, width: 980, height: 650 }
+  for (const boundary of [0.95, 1.9, 9.5, 15.2]) {
+    const images = []
+    for (const time of [boundary - 0.001, boundary + 0.001]) {
+      await control('seek', time)
+      await page.waitForTimeout(150)
+      images.push(await page.screenshot({ path: path.join(output, 'phase-' + time.toFixed(3) + '.png'), clip }))
+    }
+    const comparison = await compareImages(...images)
+    temporalChecks.push({ boundary, ...comparison })
+    assert(comparison.meanRgbDifference < 3, 'No full-frame flash at phase resets')
+    assert(comparison.changedOver25 < 0.01, 'Phase reset must not produce broad high-contrast changes')
+  }
+  await control('seek', 15)
+  const movingA = await page.screenshot({ clip })
+  await control('seek', 15.25)
+  await page.waitForTimeout(150)
+  const movingB = await page.screenshot({ clip })
+  const motion = await compareImages(movingA, movingB)
+  assert(motion.meanRgbDifference > 0.05, 'Flow detail must actually animate on the GPU')
+  temporalChecks.push({ check: 'actual water-detail motion without particles', ...motion })
   await control('setVelocity', false)
   await control('seek', 15)
   assert.equal((await state()).withVelocity, false)
@@ -148,9 +199,9 @@ try {
   assert.deepEqual(requestFailures, [])
   assert.deepEqual(externalRequests, [])
   report = { passed: true, browser: browser.version(), cesium: dynamicEnd.cesiumVersion, gpu,
-    assetStatuses, checks, assembledUniformCount: uniformNames.length, dynamicSeconds: dynamicEnd.time - dynamicStart,
+    assetStatuses, checks, temporalChecks, assembledUniformCount: uniformNames.length, dynamicSeconds: dynamicEnd.time - dynamicStart,
     errors, failedRequests, externalRequests, optionalRequests, video: null,
-    limits: ['Existing basic/current comparison; no new flow algorithm', 'No real terrain or 3D Tiles acceptance', 'No GPU timings or final visual-quality acceptance'] }
+    limits: ['Opt-in advected-normal and local-foam experiment; final visual acceptance pending', 'No real terrain or 3D Tiles acceptance', 'No GPU timings or final visual-quality acceptance'] }
 } catch (error) {
   report = { passed: false, error: String(error), errors, failedRequests, externalRequests, checks }
   await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {})

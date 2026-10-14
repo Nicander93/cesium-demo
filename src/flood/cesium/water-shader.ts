@@ -9,6 +9,22 @@ float waterNoise(vec2 p) {
   float footprint = max(length(dFdx(p)), length(dFdy(p)));
   return mix(value, 0.5, smoothstep(0.35, 1.2, footprint));
 }
+// Analytic gradient of smooth value noise in fixed ENU coordinates. No velocity-basis rotation.
+vec2 flowNoiseGradient(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+  vec4 h = fract(sin(vec4(dot(i, vec2(127.1,311.7)), dot(i+vec2(1,0), vec2(127.1,311.7)),
+    dot(i+vec2(0,1), vec2(127.1,311.7)), dot(i+1.0, vec2(127.1,311.7)))) * 43758.5453);
+  vec2 gradient = vec2(mix(h.y-h.x, h.w-h.z, u.y) * du.x,
+    (mix(h.z,h.w,u.x)-mix(h.x,h.y,u.x)) * du.y);
+  float footprint = max(length(dFdx(p)), length(dFdy(p)));
+  return gradient * (1.0 - smoothstep(0.35, 1.2, footprint));
+}
+vec2 advectedSlope(vec2 p) {
+  return flowNoiseGradient(p * 0.42) * 0.62
+    + flowNoiseGradient(p * 0.97 + vec2(19.3, 7.7)) * 0.27
+    + flowNoiseGradient(p * 1.83 + vec2(3.1, 51.2)) * 0.11;
+}
 vec2 rippleSlope(vec2 p, float time) {
   vec2 slope = vec2(0.0);
   for (int i = 0; i < 6; i++) {
@@ -36,9 +52,11 @@ export const detailedWaterBody = `
   vec2 velocity = v_state.gb * floodFlowEnabled();
   float speed = length(velocity);
   // Two advection phases avoid unlimited stretching in a varying flow field.
-  float phaseA = mod(time, 4.7);
-  float phaseB = mod(time + 2.35, 4.7);
-  float blend = abs(phaseA - 2.35) / 2.35;
+  float period = floodSurfaceStyle() > 0.5 ? 1.9 : 4.7;
+  float halfPeriod = period * 0.5;
+  float phaseA = mod(time, period);
+  float phaseB = mod(time + halfPeriod, period);
+  float blend = abs(phaseA - halfPeriod) / halfPeriod;
   // Bound visual stretching; particles still follow the unmodified supplied velocity.
   vec2 drift = velocity * min(1.0, 6.0 / max(speed, 0.001));
   vec2 pA = v_st - drift * phaseA;
@@ -46,6 +64,13 @@ export const detailedWaterBody = `
   // Spatial wave coordinates stay fixed. Rotating a world position by a varying
   // velocity basis produces angular contours at triangle boundaries.
   vec2 slope = rippleSlope(v_st, time * 0.65);
+  float flowStyle = floodSurfaceStyle();
+  if (flowStyle > 0.5) {
+    // Each phase resets only when its weight is zero. The experiment limits drift to 1.9 seconds to reduce local shear stretching.
+    vec2 flowing = mix(advectedSlope(pA), advectedSlope(pB), blend);
+    float roughness = mix(0.1, 0.65, smoothstep(0.15, 3.5, speed));
+    slope = slope * 0.8 + flowing * roughness * smoothstep(0.02, 0.25, speed);
+  }
   float shoreDamping = smoothstep(0.02, 0.6, h);
   vec3 east = normalize(v_eastEC);
   vec3 north = normalize(v_northEC);
@@ -71,6 +96,11 @@ export const detailedWaterBody = `
   float coverage = clamp(v_state.a, 0.0, 1.0);
   float breakup = smoothstep(0.64, 0.83, foamNoise);
   float foam = clamp(coverage * breakup * floodFoamOpacity() * 0.07, 0.0, 0.06);
+  if (flowStyle > 0.5) {
+    // Transported coverage determines where whitewater exists; noise only breaks up that coverage.
+    float fragments = smoothstep(0.48, 0.72, mix(waterNoise(pA * 0.72), waterNoise(pB * 0.72), blend));
+    foam = clamp(coverage * fragments * floodFoamOpacity() * 1.2, 0.0, 0.85);
+  }
   rgb = mix(rgb, vec3(0.82, 0.88, 0.83), foam);
   float alpha = mix(0.4, 0.98, smoothstep(0.02, 1.8, h));
   alpha = max(alpha, foam * 0.95);

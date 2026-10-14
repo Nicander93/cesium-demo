@@ -102,11 +102,12 @@ export class FloodRenderer {
   private visualWater = false
   private visualOptions = resolveFloodVisualOptions({})
   private readonly waterMaterial = new Cesium.Material({ fabric: {
-    type: 'FloodSurfaceClock', uniforms: { visualTime: 0, flowEnabled: 1, foamOpacity: 0.75, diagnosticMode: 0 },
+    type: 'FloodSurfaceClock', uniforms: { visualTime: 0, flowEnabled: 1, foamOpacity: 0.75, diagnosticMode: 0, surfaceStyle: 0 },
     source: `float floodVisualTime() { return visualTime; }
       float floodFlowEnabled() { return flowEnabled; }
       float floodFoamOpacity() { return foamOpacity; }
       float floodDiagnosticMode() { return diagnosticMode; }
+      float floodSurfaceStyle() { return surfaceStyle; }
       czm_material czm_getMaterial(czm_materialInput inputValue) { return czm_getDefaultMaterial(inputValue); }`,
   } })
 
@@ -162,7 +163,7 @@ export class FloodRenderer {
     this.waterMaterial.uniforms.visualTime = seconds
     const dt = this.lastVisualTime === undefined ? 0 : Math.max(0, seconds - this.lastVisualTime)
     this.lastVisualTime = seconds
-    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam
+    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam && this.visualOptions.particles
     if (!this.points.show) return
     this.flowParticles.advance(dt)
     this.flowParticles.particles.forEach((particle, i) => {
@@ -179,8 +180,9 @@ export class FloodRenderer {
   setVisualOptions(options: FloodVisualOptions): void {
     this.assertAlive()
     const next = resolveFloodVisualOptions(options, this.visualOptions)
-    if (next.foam !== this.visualOptions.foam || next.flow !== this.visualOptions.flow) this.resetVisuals()
+    if (next.foam !== this.visualOptions.foam || next.flow !== this.visualOptions.flow || next.surfaceStyle !== this.visualOptions.surfaceStyle) this.resetVisuals()
     this.visualOptions = next
+    this.waterMaterial.uniforms.surfaceStyle = next.surfaceStyle === 'flow' ? 1 : 0
     this.waterMaterial.uniforms.flowEnabled = next.flow ? 1 : 0
     this.waterMaterial.uniforms.foamOpacity = next.foam ? next.foamIntensity : 0
   }
@@ -205,10 +207,10 @@ export class FloodRenderer {
 
   update(frame: FloodFrame, depthMode = false, detail = true): void {
     this.assertAlive()
-    if (this.visualOptions.foam) this.foam.update(frame, this.visualOptions.foamLifetime, this.breachState)
+    if (this.visualOptions.foam) this.foam.update(frame, this.visualOptions.foamLifetime, this.breachState, this.visualOptions.surfaceStyle)
     this.flowParticles.setFrame(frame, this.breachState)
     this.visualWater = detail && !depthMode && this.diagnosticMode === 'water'
-    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam
+    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam && this.visualOptions.particles
     const next = this.createMesh(frame, depthMode, detail)
     if (this.water) this.viewer.scene.primitives.remove(this.water)
     this.water = next

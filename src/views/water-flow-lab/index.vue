@@ -9,7 +9,8 @@ const fixtureChoices = flowFixtureIds.map(id => ({ id, name: createFlowFixture(i
 const container = ref<HTMLElement>()
 const fixtureId = ref<FlowFixtureId>('slow')
 const diagnostic = ref<FloodDiagnosticMode>('water')
-const algorithm = ref<'current' | 'basic'>('current')
+const algorithm = ref<'current' | 'basic' | 'flow'>('flow')
+const particles = ref(false)
 const withVelocity = ref(true)
 const playing = ref(true)
 const visualTime = ref(0)
@@ -26,9 +27,10 @@ let arrows: Cesium.Entity[] = []
 
 function paint(): void {
   if (!layer) return
+  layer.setVisualOptions({ surfaceStyle: algorithm.value === 'flow' ? 'flow' : 'baseline', particles: particles.value, foamLifetime: algorithm.value === 'flow' ? 6 : 18 })
   layer.setDiagnosticMode(diagnostic.value)
   layer.update(createFixtureFrame(fixture, visualTime.value, withVelocity.value), false,
-    diagnostic.value !== 'water' || algorithm.value === 'current')
+    diagnostic.value !== 'water' || algorithm.value !== 'basic')
   layer.animate(visualTime.value)
   arrows.forEach(arrow => { arrow.show = diagnostic.value === 'velocity' && withVelocity.value })
   viewer?.scene.requestRender()
@@ -89,6 +91,8 @@ function seek(time: number): void {
   paint()
 }
 
+function changeAlgorithm(): void { seek(visualTime.value) }
+
 function tick(now: number): void {
   const dt = lastTick ? Math.min(0.1, (now - lastTick) / 1000) : 0
   lastTick = now
@@ -135,7 +139,7 @@ function createViewer(): void {
     if (viewer.scene.sun) viewer.scene.sun.show = false
     if (viewer.scene.moon) viewer.scene.moon.show = false
     const matrix = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(...fixture.grid.origin))
-    const direction = Cesium.Matrix4.multiplyByPointAsVector(matrix, new Cesium.Cartesian3(-0.5, 0.3, -0.8), new Cesium.Cartesian3())
+    const direction = Cesium.Matrix4.multiplyByPointAsVector(matrix, new Cesium.Cartesian3(-0.25, -0.9, -0.55), new Cesium.Cartesian3())
     viewer.scene.light = new Cesium.DirectionalLight({ direction, intensity: 1.5 })
     removePostRender = viewer.scene.postRender.addEventListener(() => { renderedFrames.value++ })
     removeRenderError = viewer.scene.renderError.addEventListener((_scene, value) => handleError(value))
@@ -149,14 +153,15 @@ function createViewer(): void {
 // Development-only access to the same controls for real browser acceptance.
 const lab = {
   getState: () => ({ fixture: fixtureId.value, diagnostic: diagnostic.value, algorithm: algorithm.value,
-    playing: playing.value, withVelocity: withVelocity.value, time: visualTime.value,
+    playing: playing.value, particles: particles.value, withVelocity: withVelocity.value, time: visualTime.value,
     renderedFrames: renderedFrames.value, gpu: gpu.value, error: error.value,
     shaderSource: layer?.getWaterShaderSource(), cesiumVersion: cesiumVersion,
     viewerAlive: !!viewer && !viewer.isDestroyed(), layerAlive: !!layer && !layer.isDestroyed(),
     primitiveCount: viewer?.scene.primitives.length, entityCount: viewer?.entities.values.length }),
   setFixture: (id: FlowFixtureId) => { fixtureId.value = id; changeFixture() },
   setDiagnostic: (mode: FloodDiagnosticMode) => { diagnostic.value = mode; paint() },
-  setAlgorithm: (value: 'current' | 'basic') => { algorithm.value = value; paint() },
+  setAlgorithm: (value: 'current' | 'basic' | 'flow') => { algorithm.value = value; changeAlgorithm() },
+  setParticles: (enabled: boolean) => { particles.value = enabled; paint() },
   setVelocity: (enabled: boolean) => { withVelocity.value = enabled; layer?.resetVisuals(); paint() },
   setPlaying: (enabled: boolean) => { playing.value = enabled },
   seek, setCamera, recreate: createViewer, dispose: disposeViewer,
@@ -192,12 +197,13 @@ onBeforeUnmount(() => {
           <option value="foam-source">泡沫生成源</option><option value="foam">泡沫覆盖</option>
         </select>
       </label>
-      <label>现有算法对照
-        <select v-model="algorithm" @change="paint">
-          <option value="current">当前细节水面</option><option value="basic">基础水面</option>
+      <label>水流算法对照
+        <select v-model="algorithm" @change="changeAlgorithm">
+          <option value="flow">流场法线与局部泡沫（实验）</option><option value="current">旧细节水面</option><option value="basic">基础水面</option>
         </select>
       </label>
       <label class="flow-lab__check"><input v-model="withVelocity" type="checkbox" @change="layer?.resetVisuals(); paint()" />提供速度场</label>
+      <label class="flow-lab__check"><input v-model="particles" type="checkbox" @change="paint" />显示流动粒子（独立对照）</label>
       <div class="flow-lab__actions">
         <button @click="playing = !playing">{{ playing ? '暂停' : '播放' }}</button>
         <button @click="playing = false; seek(0)">归零</button>
@@ -211,9 +217,9 @@ onBeforeUnmount(() => {
       <p v-if="!withVelocity">缺少速度输入：关闭流向与输运，只显示基础波纹。</p>
       <p>{{ fixture.description }}</p>
       <p v-if="diagnostic === 'velocity'">速度色带 0–4 m/s；箭头仅表示方向。</p>
-      <p v-if="diagnostic === 'foam-source'">蓝→黄：0–0.42 覆盖率/秒。当前来源为浅水与 Froude 数。</p>
+      <p v-if="diagnostic === 'foam-source'">蓝→黄：0–0.42 覆盖率/秒。{{ algorithm === 'flow' ? '实验来源：速度梯度、压缩与顺流水面落差。' : '旧来源：浅水与 Froude 数。' }}</p>
       <p v-if="diagnostic === 'foam'">蓝→黄：覆盖率 0–1。与泡沫生成源分别诊断。</p>
-      <p>反射为天空近似；尚无新算法画质结论。两种对照共享水深、速度、相机和时间。</p>
+      <p>反射为天空近似；实验画质仍需评审。所有对照共享水深、速度、相机和时间。</p>
       <details><summary>渲染状态</summary><p>Cesium {{ cesiumVersion }} · {{ renderedFrames }} 帧</p><p>{{ gpu }}</p></details>
       <p v-if="error" role="alert" class="flow-lab__error">{{ error }}</p>
     </aside>
