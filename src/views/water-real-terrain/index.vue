@@ -10,7 +10,7 @@ import {
 import {
   swissTerrainUrl,
   swissImageryUrl,
-  parseBrienzBoundary,
+  parseBrienzWater,
   sampleLakeDisplayHeight,
   type WaterCoordinate,
 } from '../../water/terrain-water'
@@ -23,14 +23,15 @@ const height = ref<number>(),
   error = ref('')
 const mode = ref<'imagery' | 'current' | 'enhanced'>('enhanced')
 const presetName = ref<WaterPresetName>('calm-lake')
-const config = reactive(createWaterPreset())
+const config = reactive({ ...createWaterPreset(), shoreFadeDistance: 8, foamWidth: 8, foamIntensity: 0.35, foamSpeed: 0.3 })
 const diagnostics = ref<ReturnType<WaterSurface['getDiagnostics']>>()
 const reflectionNotice = ref('')
 const fps = ref(0)
-const cameraView = ref<'near' | 'overview' | 'far'>('overview')
+const cameraView = ref<'near' | 'overview' | 'far' | 'shore'>('overview')
 let viewer: Cesium.Viewer | undefined,
   water: WaterSurface | undefined,
   request = 0
+let shoreline: WaterCoordinate[] | undefined
 let ring: WaterCoordinate[] | undefined,
   provider: Cesium.TerrainProvider | undefined
 let removeRenderError: (() => void) | undefined,
@@ -55,6 +56,12 @@ function focus(view: 'near' | 'overview' | 'far' | boolean = 'overview'): void {
   )
   viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
 }
+function focusShore(): void {
+  if (!viewer) return
+  cameraView.value = 'shore'
+  viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(7.8962,46.6959,height.value ?? 615),new Cesium.HeadingPitchRange(4.7,-0.7,650))
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+}
 function setWaterHeight(): void {
   if (height.value === undefined || !Number.isFinite(height.value)) return
   if (water) water.height = height.value
@@ -67,6 +74,8 @@ function applyMode(): void {
   else
     water.setOptions({
       waveModel: 'legacy',
+      shoreFadeDistance: 0,
+      foam: false,
       reflection: false,
       waveStrength: 0.6,
       waveSpeed: 1,
@@ -89,7 +98,7 @@ function applyOptions(): void {
   })
 }
 function restorePreset(): void {
-  Object.assign(config, createWaterPreset(presetName.value))
+  Object.assign(config, createWaterPreset(presetName.value), { shoreFadeDistance: 8, foamWidth: 8, foamIntensity: 0.35, foamSpeed: 0.3 })
   applyOptions()
 }
 async function changeQuality(): Promise<void> {
@@ -125,6 +134,7 @@ async function createWater(id: number): Promise<void> {
       scene: viewer.scene,
       positions: ring.map((p) => Cesium.Cartographic.fromDegrees(...p)),
       height: height.value,
+      ...(shoreline ? { shoreline: shoreline.map(p => Cesium.Cartographic.fromDegrees(...p)) } : {}),
       ...config,
       normalMapUrl:
         import.meta.env.BASE_URL + 'cesium/Assets/Textures/waterNormals.jpg',
@@ -147,6 +157,7 @@ async function load(): Promise<void> {
   water?.destroy()
   water = undefined
   ring = undefined
+  shoreline = undefined
   provider = undefined
   terrainStatus.value = '加载公开地形服务'
   waterStatus.value = '加载本地官方水域面'
@@ -189,9 +200,10 @@ async function load(): Promise<void> {
   )
     .then(async (response) => {
       if (!response.ok) throw new Error('水域文件 HTTP ' + response.status)
-      const value = parseBrienzBoundary(await response.json())
+      const value = parseBrienzWater(await response.json())
       if (id === request) {
-        ring = value
+        ring = value.ring
+        shoreline = value.shoreline
         waterStatus.value = '官方水域面已载入，等待 DEM 展示高程'
       }
     })
@@ -252,6 +264,7 @@ const lab = {
       : undefined
   },
   focus,
+  focusShore,
   load,
   setMode: (value: 'imagery' | 'current' | 'enhanced') => {
     mode.value = value
@@ -261,7 +274,7 @@ const lab = {
     presetName.value = name
     restorePreset()
   },
-  setOptions: (options: Partial<WaterPresetOptions>) => {
+  setOptions: (options: Partial<WaterPresetOptions> & { shoreFadeDistance?: number; foamWidth?: number; foamIntensity?: number; foamSpeed?: number }) => {
     if (!water) return
     water.setOptions({ ...config, ...options })
     Object.assign(config, options)
@@ -362,7 +375,7 @@ onBeforeUnmount(() => {
       <div class="real-water__actions">
         <button @click="focus('near')">近景</button
         ><button @click="focus('overview')">俯瞰</button
-        ><button @click="focus('far')">远景</button>
+        ><button @click="focus('far')">远景</button><button @click="focusShore">湖岸</button>
       </div>
       <label
         >默认预设<select v-model="presetName" @change="restorePreset">
@@ -473,6 +486,21 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
+      </fieldset>
+      <fieldset>
+        <legend>真实岸线过渡</legend>
+        <label for="shore-fade">接水线渐变 <output>{{ config.shoreFadeDistance }} m</output>
+          <input id="shore-fade" v-model.number="config.shoreFadeDistance" type="range" min="0" max="24" step="1" @input="applyOptions" />
+        </label>
+        <label><input v-model="config.foam" type="checkbox" @change="applyOptions" /> 局部岸边泡沫</label>
+        <label for="shore-foam-width">泡沫带宽 <output>{{ config.foamWidth }} m</output>
+          <input id="shore-foam-width" v-model.number="config.foamWidth" type="range" min="0" max="24" step="1" @input="applyOptions" />
+        </label>
+        <label for="shore-foam-intensity">泡沫强度 <output>{{ config.foamIntensity.toFixed(2) }}</output>
+          <input id="shore-foam-intensity" v-model.number="config.foamIntensity" type="range" min="0" max="1" step="0.05" @input="applyOptions" />
+        </label>
+        <p>按官方岸线的水平距离渐变；不代表湖底水深。静态岸线不随展示水位迁移；泡沫为可选的视觉近似。</p>
+        <p>岸线遮罩 {{ diagnostics?.shorelineMaskWidth ?? 0 }} × {{ diagnostics?.shorelineMaskHeight ?? 0 }} · 约 {{ (diagnostics?.shorelineTexelSize ?? 0).toFixed(2) }} m/像素；人为裁剪边不生成岸线泡沫。</p>
       </fieldset>
       <fieldset>
         <legend>反射与高光</legend>

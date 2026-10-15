@@ -38,6 +38,17 @@ beforeAll(() => {
 })
 afterAll(() => vi.unstubAllGlobals())
 describe('tunable reusable water', () => {
+  it('validates shore fade atomically and supports disabling it without geometry replacement', () => {
+    const {scene,water}=fixture(), primitive=scene.primitives.get(0)
+    expect(()=>water.setOptions({waterAlpha:0.2,shoreFadeDistance:65})).toThrow()
+    expect(water.getOptions().waterAlpha).toBe(0.9)
+    water.setOptions({shoreFadeDistance:12})
+    expect(water.getOptions().shoreFadeDistance).toBe(12)
+    water.setOptions({shoreFadeDistance:0})
+    expect(water.getOptions().shoreFadeDistance).toBe(0)
+    expect(scene.primitives.get(0)).toBe(primitive)
+    water.destroy()
+  })
   it('keeps the old output by default and switches the composite output without resource replacement', () => {
     const { scene, water } = fixture(), geometry = scene.primitives.get(0), material = water.material
     expect(water.getOptions().shadingMode).toBe('legacy-phong')

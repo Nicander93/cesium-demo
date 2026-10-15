@@ -176,3 +176,7 @@ pnpm build
 ## 光照输出实验
 
 新增可选 `shadingMode`：默认 `legacy-phong` 保留原始效果，`water-composite` 直接输出已合成水面颜色。可通过 `setOptions()` 切换。公式来源、固定相机对照、数值验证与未验证范围见 [实验记录](./OPTICS-EXPERIMENT.md)。该开关尚不代表完整物理水体着色或最终视觉验收。
+
+## 静态真实岸线融合
+
+`WaterSurface` 可接收裁剪前的完整 `shoreline: Cartographic[]`，并通过 `shoreFadeDistance`（0–64 米）调节接水线透明度。未提供岸线时保留原有行为。原理、API、静态边界限制与验证见 [岸线记录](./SHORELINE.md)。

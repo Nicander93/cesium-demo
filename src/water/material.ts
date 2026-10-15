@@ -29,6 +29,8 @@ export interface WaterMaterialOptions {
   sunShiny?: number
   distortionScale?: number
   lightDirection?: Cesium.Cartesian3
+  /** Mapped-shore horizontal fade in metres, [0,64]; requires WaterSurface shoreline input. */
+  shoreFadeDistance?: number
   foam?: boolean
   foamWidth?: number
   foamIntensity?: number
@@ -73,6 +75,20 @@ uniform mat4 shoreFromEye;
 uniform mat4 shoreHeightFromClip;
 uniform vec2 shoreSize;
 uniform float shoreReady;
+uniform sampler2D shorelineTexture;
+uniform vec4 shorelineBounds;
+uniform float shorelineReady;
+uniform float shoreFadeDistance;
+
+float mappedShoreDistance(vec3 positionEC) {
+  vec2 p = (waveFromEye * vec4(positionEC, 1.0)).xy;
+  vec2 uv = (p - shorelineBounds.xy) / shorelineBounds.zw;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 64.0;
+  // Canvas row zero contains the ENU south row; Fabric uploads canvases with flipY.
+  uv.y = 1.0 - uv.y;
+  vec2 code = texture(shorelineTexture, uv).rg;
+  return ((code.r * 65280.0 + code.g * 255.0) / 65535.0 * 2.0 - 1.0) * 64.0;
+}
 uniform float foamEnabled;
 uniform float foamWidth;
 uniform float foamIntensity;
@@ -97,6 +113,15 @@ float shoreHeight(vec2 uv) {
 float shoreLand(vec2 uv) { return smoothstep(-0.15, 0.15, shoreHeight(uv)); }
 
 float shoreFoam(vec3 positionEC) {
+  if (foamEnabled < 0.5) return 0.0;
+  if (shorelineReady > 0.5) {
+    if (foamWidth <= 0.0) return 0.0;
+    float distance = mappedShoreDistance(positionEC);
+    float band = 1.0 - smoothstep(0.0, foamWidth, max(distance, 0.0));
+    vec2 local = (waveFromEye * vec4(positionEC, 1.0)).xy;
+    float noise = foamNoise(local * 0.8 + vec2(time * foamSpeed * 0.3, -time * foamSpeed * 0.2));
+    return clamp(band * foamIntensity * smoothstep(0.4, 0.8, noise), 0.0, 1.0);
+  }
   if (foamEnabled < 0.5 || shoreReady < 0.5 || foamWidth <= 0.0) return 0.0;
   vec4 clip = shoreFromEye * vec4(positionEC, 1.0);
   vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
@@ -212,6 +237,9 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
     vec2 edge = min(materialInput.st, 1.0 - materialInput.st);
     material.alpha *= smoothstep(0.0, edgeFadeWidth, min(edge.x, edge.y));
   }
+  if (shorelineReady > 0.5 && shoreFadeDistance > 0.0) {
+    material.alpha *= smoothstep(0.0, shoreFadeDistance, mappedShoreDistance(-materialInput.positionToEyeEC));
+  }
   if (waterCompositeOutput > 0.5) {
     // The water color above already contains lighting/reflection. Use emission as
     // Cesium's prelit-color carrier, not as an extra self-illumination contribution.
@@ -265,20 +293,24 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         shoreHeightFromClip: Cesium.Matrix4.toArray(Cesium.Matrix4.IDENTITY),
         shoreSize: new Cesium.Cartesian2(1, 1),
         shoreReady: 0,
+        shorelineTexture: Cesium.Material.DefaultImageId,
+        shorelineBounds: new Cesium.Cartesian4(0, 0, 1, 1),
+        shorelineReady: 0,
+        shoreFadeDistance: options.shoreFadeDistance ?? 0,
         foamEnabled: options.foam === false ? 0 : 1,
         foamWidth: options.foamWidth ?? 2,
         foamIntensity: options.foamIntensity ?? 0.8,
         foamSpeed: options.foamSpeed ?? 0.5,
       },
     },
-    translucent: (material: Cesium.Material) => material.uniforms.waterAlpha < 1 || material.uniforms.edgeFadeWidth > 0,
+    translucent: (material: Cesium.Material) => material.uniforms.waterAlpha < 1 || material.uniforms.edgeFadeWidth > 0 || material.uniforms.shoreFadeDistance > 0,
   })
 }
 
 export function updateWaterMaterial(material: Cesium.Material, options: WaterMaterialOptions & { time?: number }): void {
   validateWaterMaterial(options)
   if (options.time !== undefined && !Number.isFinite(options.time)) throw new RangeError('time must be finite')
-  const names = { waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
+  const names = { shoreFadeDistance: 'shoreFadeDistance', waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
@@ -295,6 +327,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
 }
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
+  if (options.shoreFadeDistance !== undefined && (!Number.isFinite(options.shoreFadeDistance) || options.shoreFadeDistance < 0 || options.shoreFadeDistance > 64)) throw new RangeError('shoreFadeDistance must be metres in [0,64]')
   if (options.shadingMode !== undefined && options.shadingMode !== 'legacy-phong' && options.shadingMode !== 'water-composite') throw new RangeError('Unknown water shading mode')
   if (options.waveModel !== undefined && options.waveModel !== 'legacy' && options.waveModel !== 'multiscale') throw new RangeError('Unknown wave model')
   if (options.waveLength !== undefined && (!Number.isFinite(options.waveLength) || options.waveLength <= 0)) throw new RangeError('waveLength must be positive metres')

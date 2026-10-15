@@ -2,9 +2,12 @@ import * as Cesium from 'cesium'
 import { createWaterMaterial, updateWaterMaterial, updateWaterMaterialView, type WaterMaterialOptions } from './material'
 import { PlanarReflection, registerWaterPrimitive, type ReflectionOptions } from './reflection'
 import { ShoreDepth } from './shore'
+import { createShorelineMask } from './shoreline'
 
 export type WaterQuality = 'low' | 'balanced' | 'high'
 export interface WaterSurfaceOptions extends Omit<WaterMaterialOptions, 'origin'> {
+  /** Full mapped natural boundary, before display cropping; static, no bathymetry implied. */
+  shoreline?: readonly Cesium.Cartographic[]
   scene: Cesium.Scene
   positions: readonly Cesium.Cartographic[]
   height: number
@@ -33,6 +36,7 @@ export class WaterSurface {
   private scene: Cesium.Scene
   private primitive: Cesium.Primitive
   private reflectionPass: PlanarReflection | undefined
+  private shorelineMask: ReturnType<typeof createShorelineMask> | undefined
   private shoreDepth: ShoreDepth | undefined
   private positions: readonly Cesium.Cartographic[]
   private shoreError: string | null = null
@@ -59,6 +63,7 @@ export class WaterSurface {
   private resolveReady!: (ready: boolean) => void
 
   constructor(options: WaterSurfaceOptions) {
+    if (options.shoreline && options.foamWidth !== undefined && options.foamWidth > 64) throw new RangeError('Mapped shoreline foamWidth must not exceed 64 metres')
     validateHeight(options.height)
     validateWaveSpeed(options.waveSpeed)
     this.currentWaveSpeed = options.waveSpeed ?? 1
@@ -77,7 +82,13 @@ export class WaterSurface {
     this.point = Cesium.Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, options.height)
     this.originalPoint = Cesium.Cartesian3.clone(this.point)
     this.normal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(this.point)
+    if (options.shoreline) this.shorelineMask = createShorelineMask(options.shoreline, this.positions, this.point, options.height)
     this.material = createWaterMaterial(options)
+    if (this.shorelineMask) {
+      this.material.uniforms.shorelineTexture = this.shorelineMask.canvas
+      this.material.uniforms.shorelineBounds = this.shorelineMask.bounds
+      this.material.uniforms.shorelineReady = 1
+    }
     this.updateLocalFrame()
     this.primitive = new Cesium.Primitive({
       geometryInstances: new Cesium.GeometryInstance({ geometry: Cesium.CoplanarPolygonGeometry.fromPositions({ positions, stRotation: Cesium.Math.toRadians(options.flowDegrees ?? 0), vertexFormat: Cesium.MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat }) }),
@@ -99,6 +110,7 @@ export class WaterSurface {
 
   setOptions(options: WaterSurfaceUpdateOptions): void {
     this.assertAlive()
+    if (this.shorelineMask && options.foamWidth !== undefined && options.foamWidth > 64) throw new RangeError('Mapped shoreline foamWidth must not exceed 64 metres')
     validateWaveSpeed(options.waveSpeed)
     if (options.height !== undefined) validateHeight(options.height)
     const quality = options.quality ?? this.quality
@@ -143,7 +155,7 @@ export class WaterSurface {
       shadingMode: u.waterCompositeOutput > 0.5 ? 'water-composite' : 'legacy-phong', waveModel: u.waveModel > 0.5 ? 'multiscale' : 'legacy', waveLength: u.waveLength, waveDirection: Cesium.Math.toDegrees(u.waveDirection), waveSpread: Cesium.Math.toDegrees(u.waveSpread), waveIrregularity: u.waveIrregularity,
       detailStrength: u.detailStrength, roughness: u.roughness, specularIntensity: u.specularIntensity, reflectionStrength: u.reflectionStrength,
       rippleSize: u.size, waveStrength: u.waveStrength, waterColor: Cesium.Color.clone(u.waterColor), waterAlpha: u.waterAlpha,
-      environmentColor: Cesium.Color.clone(u.environmentColor), lightDirection: Cesium.Cartesian3.clone(u.lightDirection), edgeFadeWidth: u.edgeFadeWidth, reflectivity: u.rf0, sunShiny: u.sunShiny, distortionScale: u.distortionScale,
+      environmentColor: Cesium.Color.clone(u.environmentColor), lightDirection: Cesium.Cartesian3.clone(u.lightDirection), edgeFadeWidth: u.edgeFadeWidth, shoreFadeDistance: u.shoreFadeDistance, reflectivity: u.rf0, sunShiny: u.sunShiny, distortionScale: u.distortionScale,
       foam: u.foamEnabled > 0.5, foamWidth: u.foamWidth, foamIntensity: u.foamIntensity, foamSpeed: u.foamSpeed,
       ...(typeof u.normalTexture === 'string' && u.useNormalTexture > 0.5 ? { normalMapUrl: u.normalTexture } : {}),
     }
@@ -180,7 +192,9 @@ export class WaterSurface {
     return { readyMs: this.readyMs, quality: this.quality, reflectionEnabled: this.reflectionEnabled, reflectionAvailable: this.material.uniforms.reflectionReady > 0, reflectionFailures: this.reflectionFailures, destroyed: this.destroyed, error: this.error, geometryCreated: 1,
       ...this.reflectionPass?.getDiagnostics() ?? { reflectionFrames: 0, reflectionTargetsCreated: 0, reflectionWidth: 0, reflectionHeight: 0, lastReflectionMs: 0 },
       foamEnabled: this.material.uniforms.foamEnabled > 0,
-      foamAvailable: this.material.uniforms.shoreReady > 0,
+      foamAvailable: this.material.uniforms.shoreReady > 0 || this.material.uniforms.shorelineReady > 0,
+      shorelineAvailable: this.material.uniforms.shorelineReady > 0,
+      shorelineMaskWidth: this.shorelineMask?.width ?? 0, shorelineMaskHeight: this.shorelineMask?.height ?? 0, shorelineTexelSize: this.shorelineMask?.texelSize ?? 0,
       ...this.shoreDepth?.getDiagnostics() ?? { shoreFrames: 0, shoreTargetsCreated: 0, shoreWidth: 0, shoreHeight: 0, shoreError: this.shoreError },
     }
   }
@@ -199,7 +213,10 @@ export class WaterSurface {
     else if (!this.primitive.isDestroyed()) this.primitive.destroy()
     this.reflectionPass?.destroy()
     this.shoreDepth?.destroy()
+    this.material.uniforms.shorelineReady = 0
     this.material.destroy()
+    if (this.shorelineMask) this.shorelineMask.canvas.width = this.shorelineMask.canvas.height = 1
+    this.shorelineMask = undefined
     this.resolveReady(false)
     if (!this.scene.isDestroyed()) this.scene.requestRender()
   }
@@ -209,8 +226,9 @@ export class WaterSurface {
     const now = performance.now()
     this.advanceWaveTime(now)
     if (this.scene.camera) updateWaterMaterialView(this.material, this.scene.camera, this.point)
-    if (this.scene.mode !== Cesium.SceneMode.SCENE3D) { this.material.uniforms.reflectionReady = this.material.uniforms.shoreReady = 0; return }
-    if (this.material.uniforms.foamEnabled > 0) {
+    if (this.scene.mode !== Cesium.SceneMode.SCENE3D) { this.material.uniforms.reflectionReady = this.material.uniforms.shoreReady = this.material.uniforms.shorelineReady = 0; return }
+    this.material.uniforms.shorelineReady = this.shorelineMask ? 1 : 0
+    if (this.material.uniforms.foamEnabled > 0 && !this.shorelineMask) {
       try {
         this.shoreDepth ??= new ShoreDepth(this.scene, this.material, this.positions)
         this.shoreDepth.update(this.point, this.currentHeight, this.quality === 'high' ? 1024 : this.quality === 'balanced' ? 512 : 256, now)

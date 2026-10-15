@@ -61,7 +61,7 @@ export function isInsideWater(
   return inside
 }
 
-export function parseBrienzBoundary(input: unknown): WaterCoordinate[] {
+export function parseBrienzWater(input: unknown): { ring: WaterCoordinate[]; shoreline: WaterCoordinate[] } {
   if (!input || typeof input !== 'object')
     throw new Error('水域数据不是 GeoJSON Feature')
   const geometry = (
@@ -90,7 +90,11 @@ export function parseBrienzBoundary(input: unknown): WaterCoordinate[] {
       throw new Error('当前裁剪区域有水域孔洞，不能用无洞水面覆盖')
   const clipped = clipWaterRing(ring, brienzBounds)
   if (clipped.length < 3) throw new Error('水域不覆盖当前真实场景')
-  return clipped
+  return { ring: clipped, shoreline: ring }
+}
+
+export function parseBrienzBoundary(input: unknown): WaterCoordinate[] {
+  return parseBrienzWater(input).ring
 }
 
 /** Sample the terrain service's mapped lake surface; no bathymetry or observed water level is implied. */

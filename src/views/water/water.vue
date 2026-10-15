@@ -117,6 +117,7 @@ onMounted(() => {
     removeFixture = addOpticsFixture(viewer, waterHeight.value)
   }
   water = new WaterSurface({
+    ...(calibration && new URLSearchParams(window.location.search).get('shoreline') === 'probe' ? { shoreline: analyticShoreline(), shoreFadeDistance: 16 } : {}),
     scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value, shadingMode: shadingMode.value,
     rippleSize: 50, waterAlpha: waterAlpha.value, reflectivity: 0.3, sunShiny: 100, distortionScale: 3.7,
     reflection: reflection.value,
@@ -210,6 +211,10 @@ function calibrationCenter(): Cesium.Cartesian3 {
   const location = Cesium.Cartographic.fromCartesian(sphere.center)
   return Cesium.Cartesian3.fromRadians(location.longitude,location.latitude,waterHeight.value)
 }
+function analyticShoreline(): Cesium.Cartographic[] {
+  const frame = Cesium.Transforms.eastNorthUpToFixedFrame(calibrationCenter())
+  return [[-400,-20],[20,-20],[20,400],[-400,400]].map(([x,y]) => Cesium.Cartographic.fromCartesian(Cesium.Matrix4.multiplyByPoint(frame,new Cesium.Cartesian3(x,y,0),new Cesium.Cartesian3())))
+}
 function focusCalibration(view: 'near' | 'overview' | 'far'): void {
   if (!viewer) return
   calibrationView = view
@@ -248,6 +253,23 @@ const opticsLab = {
     environmentColor: new Cesium.Color(0.3,0.46,0.6), lightDirection: new Cesium.Cartesian3(0,1,0),
     specularIntensity: 1, reflectionStrength: 1, reflectivity: 0.3,
     normalMapUrl: importBase + 'img/waterNormals.jpg' }),
+  showWater: (show: boolean) => { if(water) water.show = show },
+  shoreProbe: (local: [number, number]) => {
+    if (!viewer || !water || !calibration) throw new Error('Calibration not ready')
+    const center = calibrationCenter(), frame = Cesium.Transforms.eastNorthUpToFixedFrame(center)
+    const position = Cesium.Matrix4.multiplyByPoint(frame,new Cesium.Cartesian3(local[0],local[1],0),new Cesium.Cartesian3())
+    const point = viewer.scene.cartesianToCanvasCoordinates(position)
+    if(!point) throw new Error('Probe outside view')
+    const x=Math.round(point.x),y=Math.round(point.y),ray=viewer.camera.getPickRay(new Cesium.Cartesian2(x+0.5,y+0.5))
+    if(!ray) throw new Error('Probe ray unavailable')
+    const plane=Cesium.Plane.fromPointNormal(center,Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(center))
+    const hit=Cesium.IntersectionTests.rayPlane(ray,plane)
+    if(!hit) throw new Error('Probe misses plane')
+    const p=Cesium.Matrix4.multiplyByPoint(Cesium.Matrix4.inverse(frame,new Cesium.Matrix4()),hit,new Cesium.Cartesian3())
+    const distance=Math.min(p.x+400,20-p.x,p.y+20,400-p.y),width=water.getOptions().shoreFadeDistance ?? 0
+    const t=width>0 ? Cesium.Math.clamp(distance/width,0,1) : 1
+    return {x,y,distance,fade:t*t*(3-2*t),waterPicked:viewer.scene.pick(new Cesium.Cartesian2(x,y))?.primitive?.appearance?.material===water.material}
+  },
   probe: () => {
     if (!viewer || !water) throw new Error('Scene not ready')
     const point = viewer.scene.cartesianToCanvasCoordinates(calibrationCenter())

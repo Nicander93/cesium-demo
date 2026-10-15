@@ -3,6 +3,7 @@ import {
   clipWaterRing,
   isInsideWater,
   parseBrienzBoundary,
+  parseBrienzWater,
   brienzBounds,
 } from './terrain-water'
 import fs from 'node:fs'
@@ -27,6 +28,10 @@ describe('explicit geographic water boundary', () => {
       fs.readFileSync('public/water/brienz-water.geojson', 'utf8'),
     )
     const ring = parseBrienzBoundary(data)
+    const mapped=parseBrienzWater(data)
+    expect(mapped.ring).toEqual(ring)
+    expect(mapped.shoreline.length).toBeGreaterThan(ring.length)
+    expect(mapped.shoreline.some(p=>p[0]<brienzBounds[0]||p[0]>brienzBounds[2]||p[1]<brienzBounds[1]||p[1]>brienzBounds[3])).toBe(true)
     expect(ring.length).toBeGreaterThan(3)
     expect(
       ring.every(
