@@ -1,6 +1,8 @@
 import * as Cesium from 'cesium'
 
 export interface WaterMaterialOptions {
+  /** Opt-in output experiment. Legacy keeps Cesium's additional Phong lighting. */
+  shadingMode?: 'legacy-phong' | 'water-composite'
   origin?: Cesium.Cartesian3
   normalMapUrl?: string
   rippleSize?: number
@@ -41,6 +43,7 @@ uniform float time;
 uniform float size;
 uniform float waveStrength;
 uniform float waveModel;
+uniform float waterCompositeOutput;
 uniform float waveLength;
 uniform float waveDirection;
 uniform float waveSpread;
@@ -209,6 +212,13 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
     vec2 edge = min(materialInput.st, 1.0 - materialInput.st);
     material.alpha *= smoothstep(0.0, edgeFadeWidth, min(edge.x, edge.y));
   }
+  if (waterCompositeOutput > 0.5) {
+    // The water color above already contains lighting/reflection. Use emission as
+    // Cesium's prelit-color carrier, not as an extra self-illumination contribution.
+    material.emission = material.diffuse;
+    material.diffuse = vec3(0.0);
+    material.specular = 0.0;
+  }
   return material;
 }`
 
@@ -224,6 +234,7 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         time: 0,
         size: options.rippleSize ?? 50,
         waveStrength: options.waveStrength ?? 1,
+        waterCompositeOutput: options.shadingMode === 'water-composite' ? 1 : 0,
         waveModel: options.waveModel === 'multiscale' ? 1 : 0,
         waveLength: options.waveLength ?? 48,
         waveDirection: Cesium.Math.toRadians(options.waveDirection ?? 55),
@@ -271,6 +282,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
+  if (options.shadingMode !== undefined) material.uniforms.waterCompositeOutput = options.shadingMode === 'water-composite' ? 1 : 0
   if (options.waveModel !== undefined) material.uniforms.waveModel = options.waveModel === 'multiscale' ? 1 : 0
   if (options.waveSpread !== undefined) material.uniforms.waveSpread = Cesium.Math.toRadians(options.waveSpread)
   if (options.waveDirection !== undefined) material.uniforms.waveDirection = Cesium.Math.toRadians(options.waveDirection)
@@ -283,6 +295,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
 }
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
+  if (options.shadingMode !== undefined && options.shadingMode !== 'legacy-phong' && options.shadingMode !== 'water-composite') throw new RangeError('Unknown water shading mode')
   if (options.waveModel !== undefined && options.waveModel !== 'legacy' && options.waveModel !== 'multiscale') throw new RangeError('Unknown wave model')
   if (options.waveLength !== undefined && (!Number.isFinite(options.waveLength) || options.waveLength <= 0)) throw new RangeError('waveLength must be positive metres')
   if (options.waveSpread !== undefined && (!Number.isFinite(options.waveSpread) || options.waveSpread < 0 || options.waveSpread > 90)) throw new RangeError('waveSpread must be degrees in [0, 90]')

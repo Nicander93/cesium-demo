@@ -38,6 +38,19 @@ beforeAll(() => {
 })
 afterAll(() => vi.unstubAllGlobals())
 describe('tunable reusable water', () => {
+  it('keeps the old output by default and switches the composite output without resource replacement', () => {
+    const { scene, water } = fixture(), geometry = scene.primitives.get(0), material = water.material
+    expect(water.getOptions().shadingMode).toBe('legacy-phong')
+    water.setOptions({ shadingMode: 'water-composite' })
+    expect(water.getOptions().shadingMode).toBe('water-composite')
+    expect(water.material).toBe(material)
+    expect(scene.primitives.get(0)).toBe(geometry)
+    expect(() => water.setOptions({ waterAlpha: 0.4, shadingMode: 'unsupported' as 'water-composite' })).toThrow()
+    expect(water.getOptions().waterAlpha).toBe(0.9)
+    water.setOptions({ shadingMode: 'legacy-phong' })
+    expect(water.getOptions().shadingMode).toBe('legacy-phong')
+    water.destroy()
+  })
   it('validates all new controls before partially updating the material', () => {
     const material = createWaterMaterial({ waterAlpha: 0.9 })
     expect(() =>

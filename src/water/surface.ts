@@ -140,7 +140,7 @@ export class WaterSurface {
     return { height: this.currentHeight, waveSpeed: this.currentWaveSpeed, quality: this.quality,
       reflection: this.reflectionEnabled, reflectGlobe: this.reflectionOptions.reflectGlobe,
       reflectionResolutionScale: this.reflectionOptions.resolutionScale, reflectionMaxSize: this.reflectionOptions.maxSize, reflectionMaxFps: this.reflectionOptions.maxFps,
-      waveModel: u.waveModel > 0.5 ? 'multiscale' : 'legacy', waveLength: u.waveLength, waveDirection: Cesium.Math.toDegrees(u.waveDirection), waveSpread: Cesium.Math.toDegrees(u.waveSpread), waveIrregularity: u.waveIrregularity,
+      shadingMode: u.waterCompositeOutput > 0.5 ? 'water-composite' : 'legacy-phong', waveModel: u.waveModel > 0.5 ? 'multiscale' : 'legacy', waveLength: u.waveLength, waveDirection: Cesium.Math.toDegrees(u.waveDirection), waveSpread: Cesium.Math.toDegrees(u.waveSpread), waveIrregularity: u.waveIrregularity,
       detailStrength: u.detailStrength, roughness: u.roughness, specularIntensity: u.specularIntensity, reflectionStrength: u.reflectionStrength,
       rippleSize: u.size, waveStrength: u.waveStrength, waterColor: Cesium.Color.clone(u.waterColor), waterAlpha: u.waterAlpha,
       environmentColor: Cesium.Color.clone(u.environmentColor), lightDirection: Cesium.Cartesian3.clone(u.lightDirection), edgeFadeWidth: u.edgeFadeWidth, reflectivity: u.rf0, sunShiny: u.sunShiny, distortionScale: u.distortionScale,

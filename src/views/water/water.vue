@@ -1,6 +1,14 @@
 <template>
   <div ref="container" class="water-demo__map" />
   <section class="water-controls" aria-label="水面设置">
+    <div class="water-controls__row"><label for="water-shading">颜色输出</label>
+      <select id="water-shading" v-model="shadingMode" @change="updateShading">
+        <option value="legacy-phong">原始输出（含 Phong）</option><option value="water-composite">最终颜色输出（实验）</option>
+      </select>
+    </div>
+    <p class="water-controls__status">同一水面、同一波纹与反射参数，仅对照光照输出路径。</p>
+    <div v-if="calibration" class="water-controls__actions"><button @click="focusCalibration('near')">近景</button><button @click="focusCalibration('overview')">俯视</button><button @click="focusCalibration('far')">远景</button></div>
+    <a class="water-controls__status" :href="calibration ? importBase + 'water' : importBase + 'water?scene=calibration'">{{ calibration ? '查看原始模型场景' : '查看固定参照场景' }}</a>
     <label class="water-controls__row" for="water-height">水面高度
       <input id="water-height" v-model.number="waterHeight" type="number" min="0" max="1000" step="1" @change="updateHeight" /> 米
     </label>
@@ -47,14 +55,20 @@
 <script setup lang="ts">
 import * as Cesium from 'cesium'
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { WaterSurface, type WaterQuality } from '../../water'
+import { WaterSurface, type WaterQuality, type WaterSurfaceUpdateOptions } from '../../water'
+import { addOpticsFixture } from './optics-fixture'
 
 const container = ref<HTMLElement>()
+const importBase = import.meta.env.BASE_URL
+const calibration = new URLSearchParams(window.location.search).get('scene') === 'calibration'
+const shadingMode = ref<NonNullable<WaterSurfaceUpdateOptions['shadingMode']>>('legacy-phong')
+let calibrationView: 'near' | 'overview' | 'far' = 'near'
+let removeFixture: (() => void) | undefined
 const waterHeight = ref(44)
-const quality = ref<WaterQuality>('high')
+const quality = ref<WaterQuality>(calibration ? 'balanced' : 'high')
 const waterAlpha = ref(1)
 const reflection = ref(new URLSearchParams(window.location.search).get('reflection') !== 'off')
-const foam = ref(true)
+const foam = ref(!calibration)
 const foamWidth = ref(2)
 const status = ref('正在初始化水面…')
 const error = ref('')
@@ -88,8 +102,22 @@ onMounted(() => {
     useBrowserRecommendedResolution: false,
   })
   viewer.scene.globe.depthTestAgainstTerrain = false
+  if (calibration) {
+    viewer.scene.globe.show = false
+    viewer.scene.highDynamicRange = false
+    viewer.scene.fog.enabled = false
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
+    if (viewer.scene.sun) viewer.scene.sun.show = false
+    if (viewer.scene.moon) viewer.scene.moon.show = false
+    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#9cb8ca')
+    viewer.scene.light = new Cesium.DirectionalLight({ direction: new Cesium.Cartesian3(-0.5,-0.3,-0.8), intensity: 1 })
+    viewer.clock.shouldAnimate = false
+    viewer.clock.currentTime = Cesium.JulianDate.fromIso8601('2026-10-15T10:00:00Z')
+    removeFixture = addOpticsFixture(viewer, waterHeight.value)
+  }
   water = new WaterSurface({
-    scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value,
+    scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value, shadingMode: shadingMode.value,
     rippleSize: 50, waterAlpha: waterAlpha.value, reflectivity: 0.3, sunShiny: 100, distortionScale: 3.7,
     reflection: reflection.value,
     foam: foam.value, foamWidth: foamWidth.value,
@@ -111,10 +139,16 @@ onMounted(() => {
     }
   })
   diagnosticsTimer = setInterval(() => { diagnostics.value = water?.getDiagnostics() }, 1000)
-  void water.ready.then(ready => { if (ready && !disposed && modelReadyMs.value === null) status.value = '水面已显示，场景模型加载中…' })
-  // Imagery and the context model are independent of water initialization.
-  void loadImagery()
-  void loadModel(started)
+  void water.ready.then(ready => { if (ready && !disposed && modelReadyMs.value === null) status.value = calibration ? '固定参照场景已就绪；本轮仅验证光照输出。' : '水面已显示，场景模型加载中…' })
+  if (calibration) {
+    focusCalibration('near')
+    status.value = '固定参照场景：离线几何、固定光照；仅验证输出路径，不是水体光学最终验收。'
+  } else {
+    // Imagery and the context model are independent of water initialization.
+    void loadImagery()
+    void loadModel(started)
+  }
+  if (import.meta.env.DEV) window.__waterOptics = opticsLab
 })
 
 async function loadImagery(): Promise<void> {
@@ -171,6 +205,67 @@ function focusShore(): void {
   updateCameraInfo()
 }
 
+function calibrationCenter(): Cesium.Cartesian3 {
+  const sphere = Cesium.BoundingSphere.fromPoints(positions.map(p => Cesium.Cartesian3.fromRadians(p.longitude,p.latitude,waterHeight.value)))
+  const location = Cesium.Cartographic.fromCartesian(sphere.center)
+  return Cesium.Cartesian3.fromRadians(location.longitude,location.latitude,waterHeight.value)
+}
+function focusCalibration(view: 'near' | 'overview' | 'far'): void {
+  if (!viewer) return
+  calibrationView = view
+  viewer.camera.lookAt(calibrationCenter(),new Cesium.HeadingPitchRange(-0.4,view === 'overview' ? -0.65 : -0.28,view === 'near' ? 160 : view === 'far' ? 1000 : 450))
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+  updateCameraInfo()
+}
+function updateShading(): void { water?.setOptions({ shadingMode: shadingMode.value }) }
+
+const opticsLab = {
+  getState: () => ({ ready: !!water && !water.isDestroyed(), calibration, view: calibrationView,
+    options: water?.getOptions(), diagnostics: water?.getDiagnostics(), error: error.value, fps: fps.value,
+    modelLoaded: !!tileset.value, tilesLoaded: tileset.value?.tilesLoaded ?? false, status: status.value,
+    visualTime: water?.material.uniforms.time, shaderSource: water?.getWaterShaderSource(), hdr: viewer?.scene.highDynamicRange,
+    cameraPosition: viewer ? Cesium.Cartesian3.clone(viewer.camera.positionWC) : undefined }),
+  setOptions: (options: WaterSurfaceUpdateOptions) => {
+    water?.setOptions(options)
+    if (options.shadingMode !== undefined) shadingMode.value = options.shadingMode
+    if (options.reflection !== undefined) reflection.value = options.reflection
+    if (options.foam !== undefined) foam.value = options.foam
+    if (options.waterAlpha !== undefined) waterAlpha.value = options.waterAlpha
+  },
+  freeze: () => { water?.setOptions({ waveSpeed: 0 }); water?.setVisualTime(15) },
+  play: () => water?.setOptions({ waveSpeed: 1 }),
+  focus: focusCalibration,
+  prepareProbe: () => {
+    if (!calibration || !water) throw new Error('Color probes require the fixed reference scene')
+    water.setOptions({ reflection: false, foam: false, waveStrength: 0, waveSpeed: 0, waveModel: 'legacy',
+      waterColor: Cesium.Color.BLACK, waterAlpha: 1, environmentColor: new Cesium.Color(0.2,0.4,0.6),
+      lightDirection: new Cesium.Cartesian3(0,1,0), specularIntensity: 0, reflectionStrength: 0 })
+    // Analytic flat normal isolates the output equation from asynchronous image loading.
+    water.material.uniforms.useNormalTexture = 0
+  },
+  restore: () => opticsLab.setOptions({ reflection: true, foam: false, waveStrength: 1, waveSpeed: 0,
+    waterColor: Cesium.Color.fromCssColorString('#001e0f'), waterAlpha: 1,
+    environmentColor: new Cesium.Color(0.3,0.46,0.6), lightDirection: new Cesium.Cartesian3(0,1,0),
+    specularIntensity: 1, reflectionStrength: 1, reflectivity: 0.3,
+    normalMapUrl: importBase + 'img/waterNormals.jpg' }),
+  probe: () => {
+    if (!viewer || !water) throw new Error('Scene not ready')
+    const point = viewer.scene.cartesianToCanvasCoordinates(calibrationCenter())
+    if (!point) throw new Error('Water center not visible')
+    const x = Math.round(point.x), y = Math.round(point.y)
+    const ray = viewer.camera.getPickRay(new Cesium.Cartesian2(x+0.5,y+0.5))
+    if (!ray) throw new Error('No camera ray')
+    const normal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(calibrationCenter())
+    const cosine = Cesium.Math.clamp(-Cesium.Cartesian3.dot(ray.direction,normal),0,1)
+    const options = water.getOptions(), f0 = options.reflectivity ?? 0.3
+    const reflectance = (f0 + (1-f0)*Math.pow(1-cosine,5)) * (options.reflectionStrength ?? 1)
+    const expected = [0.2,0.4,0.6].map(component => ((1-reflectance)*0.15+reflectance*(0.1+0.9*component))*255)
+    const picked = viewer.scene.pick(new Cesium.Cartesian2(x,y))
+    return { x,y,cosine,reflectance,expected,waterPicked: picked?.primitive?.appearance?.material === water.material }
+  },
+}
+declare global { interface Window { __waterOptics?: typeof opticsLab } }
+
 function updateHeight(): void {
   if (typeof waterHeight.value !== 'number' || !Number.isFinite(waterHeight.value) || waterHeight.value < 0 || waterHeight.value > 1000) {
     waterHeight.value = water?.height ?? 44
@@ -193,6 +288,8 @@ function formatMs(value: number | null): string { return value === null ? '等�
 
 onBeforeUnmount(() => {
   disposed = true
+  delete window.__waterOptics
+  removeFixture?.()
   if (diagnosticsTimer) clearInterval(diagnosticsTimer)
   removeCameraListener?.()
   removeFrameListener?.()
@@ -209,6 +306,8 @@ onBeforeUnmount(() => {
 .water-demo__map { position: absolute; inset: 0; }
 .water-controls { position: absolute; top: 18px; right: 18px; width: 250px; padding: 14px; color: #eef5f4; background: rgb(15 28 30 / 88%); border: 1px solid rgb(255 255 255 / 18%); border-radius: 8px; font-size: 13px; }
 .water-controls__row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.water-controls__row label { flex-shrink: 0; }
+.water-controls select { min-width: 0; }
 .water-controls input[type=number] { width: 74px; }
 .water-controls input[type=range] { min-width: 0; width: 80px; padding: 0; }
 .water-controls output { font-variant-numeric: tabular-nums; }

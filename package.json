@@ -19,7 +19,8 @@
     "smoke:water-flow": "node scripts/smoke-water-flow.mjs",
     "smoke:water-distance": "node scripts/smoke-water-distance.mjs",
     "smoke:real-water": "node scripts/smoke-real-water.mjs",
-    "smoke:water-appearance": "node scripts/smoke-water-appearance.mjs"
+    "smoke:water-appearance": "node scripts/smoke-water-appearance.mjs",
+    "smoke:water-optics": "node scripts/smoke-water-optics.mjs"
   },
   "dependencies": {
     "@types/cesium": "^1.70.4",

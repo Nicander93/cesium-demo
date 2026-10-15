@@ -172,3 +172,7 @@ pnpm build
 
 
 水面质量优先的研究结论、UE 参考和下一项对照实验，见 [水面质量评审](./QUALITY-REVIEW.md)。编译与像素差测试不能替代视觉质量验收。
+
+## 光照输出实验
+
+新增可选 `shadingMode`：默认 `legacy-phong` 保留原始效果，`water-composite` 直接输出已合成水面颜色。可通过 `setOptions()` 切换。公式来源、固定相机对照、数值验证与未验证范围见 [实验记录](./OPTICS-EXPERIMENT.md)。该开关尚不代表完整物理水体着色或最终视觉验收。
