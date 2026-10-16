@@ -2,6 +2,7 @@ import * as Cesium from 'cesium'
 import { createWaterMaterial, updateWaterMaterial, updateWaterMaterialView, type WaterMaterialOptions } from './material'
 import { PlanarReflection, registerWaterPrimitive, type ReflectionOptions } from './reflection'
 import { ShoreDepth } from './shore'
+import { WaterEnvironment } from './environment'
 import { createShorelineMask } from './shoreline'
 
 export type WaterQuality = 'low' | 'balanced' | 'high'
@@ -19,9 +20,11 @@ export interface WaterSurfaceOptions extends Omit<WaterMaterialOptions, 'origin'
   reflectionMaxSize?: number
   reflectionMaxFps?: number
   reflectGlobe?: boolean
+  /** Generate atmospheric IBL in microfacet mode; defaults to true. */
+  skyEnvironment?: boolean
   onError?: (error: unknown) => void
 }
-export type WaterSurfaceUpdateOptions = Omit<WaterMaterialOptions, 'origin'> & Partial<Pick<WaterSurfaceOptions, 'waveSpeed' | 'height' | 'quality' | 'reflection' | 'reflectionResolutionScale' | 'reflectionMaxSize' | 'reflectionMaxFps' | 'reflectGlobe'>>
+export type WaterSurfaceUpdateOptions = Omit<WaterMaterialOptions, 'origin'> & Partial<Pick<WaterSurfaceOptions, 'waveSpeed' | 'height' | 'quality' | 'reflection' | 'reflectionResolutionScale' | 'reflectionMaxSize' | 'reflectionMaxFps' | 'reflectGlobe' | 'skyEnvironment'>>
 
 const qualityOptions: Record<WaterQuality, ReflectionOptions> = {
   low: { resolutionScale: 0.35, maxSize: 512, maxFps: 15, reflectGlobe: false },
@@ -37,6 +40,9 @@ export class WaterSurface {
   private primitive: Cesium.Primitive
   private reflectionPass: PlanarReflection | undefined
   private shorelineMask: ReturnType<typeof createShorelineMask> | undefined
+  private environmentPass: WaterEnvironment | undefined
+  private environmentError: string | null = null
+  private skyEnvironment = true
   private shoreDepth: ShoreDepth | undefined
   private positions: readonly Cesium.Cartographic[]
   private shoreError: string | null = null
@@ -73,6 +79,7 @@ export class WaterSurface {
     this.reflectionOptions = resolveReflectionOptions(options, this.quality)
     this.reflectionEnabled = options.reflection ?? true
     this.scene = options.scene
+    this.skyEnvironment = options.skyEnvironment ?? true
     this.positions = options.positions.map(position => Cesium.Cartographic.clone(position))
     this.onError = options.onError
     this.currentHeight = options.height
@@ -121,6 +128,7 @@ export class WaterSurface {
       this.currentWaveSpeed = options.waveSpeed
     }
     this.quality = quality
+    if(options.skyEnvironment !== undefined) this.skyEnvironment = options.skyEnvironment
     this.reflectionOptions = reflectionOptions
     if (options.reflection !== undefined) {
       this.reflectionEnabled = options.reflection
@@ -149,7 +157,7 @@ export class WaterSurface {
   getOptions(): WaterSurfaceUpdateOptions {
     this.assertAlive()
     const u = this.material.uniforms
-    return { height: this.currentHeight, waveSpeed: this.currentWaveSpeed, quality: this.quality,
+    return { lightingModel: u.microfacetEnabled > 0.5 ? 'microfacet' : 'legacy', indexOfRefraction: u.indexOfRefraction, environmentIntensity: u.environmentIntensity, skyEnvironment: this.skyEnvironment, height: this.currentHeight, waveSpeed: this.currentWaveSpeed, quality: this.quality,
       reflection: this.reflectionEnabled, reflectGlobe: this.reflectionOptions.reflectGlobe,
       reflectionResolutionScale: this.reflectionOptions.resolutionScale, reflectionMaxSize: this.reflectionOptions.maxSize, reflectionMaxFps: this.reflectionOptions.maxFps,
       shadingMode: u.waterCompositeOutput > 0.5 ? 'water-composite' : 'legacy-phong', waveModel: u.waveModel > 0.5 ? 'multiscale' : 'legacy', waveLength: u.waveLength, waveDirection: Cesium.Math.toDegrees(u.waveDirection), waveSpread: Cesium.Math.toDegrees(u.waveSpread), waveIrregularity: u.waveIrregularity,
@@ -189,7 +197,7 @@ export class WaterSurface {
   set show(value: boolean) { this.assertAlive(); this.primitive.show = value; this.reflectionPass?.invalidate(); this.scene.requestRender() }
 
   getDiagnostics() {
-    return { readyMs: this.readyMs, quality: this.quality, reflectionEnabled: this.reflectionEnabled, reflectionAvailable: this.material.uniforms.reflectionReady > 0, reflectionFailures: this.reflectionFailures, destroyed: this.destroyed, error: this.error, geometryCreated: 1,
+    return { ...this.environmentPass?.getDiagnostics() ?? { environmentAvailable: false, brdfAvailable: false, environmentUpdates: 0, environmentGenerations: 0, environmentError: this.environmentError }, readyMs: this.readyMs, quality: this.quality, reflectionEnabled: this.reflectionEnabled, reflectionAvailable: this.material.uniforms.reflectionReady > 0, reflectionFailures: this.reflectionFailures, destroyed: this.destroyed, error: this.error, geometryCreated: 1,
       ...this.reflectionPass?.getDiagnostics() ?? { reflectionFrames: 0, reflectionTargetsCreated: 0, reflectionWidth: 0, reflectionHeight: 0, lastReflectionMs: 0 },
       foamEnabled: this.material.uniforms.foamEnabled > 0,
       foamAvailable: this.material.uniforms.shoreReady > 0 || this.material.uniforms.shorelineReady > 0,
@@ -214,6 +222,7 @@ export class WaterSurface {
     this.reflectionPass?.destroy()
     this.shoreDepth?.destroy()
     this.material.uniforms.shorelineReady = 0
+    if(this.environmentPass && !this.environmentPass.isDestroyed()) { if(!this.scene.isDestroyed()) this.scene.primitives.remove(this.environmentPass); else this.environmentPass.destroy() }
     this.material.destroy()
     if (this.shorelineMask) this.shorelineMask.canvas.width = this.shorelineMask.canvas.height = 1
     this.shorelineMask = undefined
@@ -222,9 +231,18 @@ export class WaterSurface {
   }
 
   private handlePreRender = (): void => {
-    if (this.destroyed || !this.primitive.show) return
+    if (this.destroyed) return
+    if (!this.primitive.show) { if(this.environmentPass) this.environmentPass.enabled=false; return }
     const now = performance.now()
     this.advanceWaveTime(now)
+    if (this.material.uniforms.microfacetEnabled > 0.5 && !this.environmentError) {
+      try {
+        if(!this.environmentPass) { const pass = new WaterEnvironment(this.scene,this.material,this.point); this.scene.primitives.add(pass); this.environmentPass = pass }
+        this.environmentPass.enabled = true
+        this.environmentPass.atmosphere = this.skyEnvironment
+        this.environmentPass.setPosition(this.point)
+      } catch(error) { this.environmentError = String(error) }
+    } else if(this.environmentPass) this.environmentPass.enabled = false
     if (this.scene.camera) updateWaterMaterialView(this.material, this.scene.camera, this.point)
     if (this.scene.mode !== Cesium.SceneMode.SCENE3D) { this.material.uniforms.reflectionReady = this.material.uniforms.shoreReady = this.material.uniforms.shorelineReady = 0; return }
     this.material.uniforms.shorelineReady = this.shorelineMask ? 1 : 0

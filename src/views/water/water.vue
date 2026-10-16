@@ -1,12 +1,13 @@
 <template>
   <div ref="container" class="water-demo__map" />
   <section class="water-controls" aria-label="水面设置">
-    <div class="water-controls__row"><label for="water-shading">颜色输出</label>
+    <div v-if="lightingModel === 'legacy'" class="water-controls__row"><label for="water-shading">颜色输出</label>
       <select id="water-shading" v-model="shadingMode" @change="updateShading">
         <option value="legacy-phong">原始输出（含 Phong）</option><option value="water-composite">最终颜色输出（实验）</option>
       </select>
     </div>
-    <p class="water-controls__status">同一水面、同一波纹与反射参数，仅对照光照输出路径。</p>
+    <div class="water-controls__row"><label for="calibration-lighting">光照模型</label><select id="calibration-lighting" v-model="lightingModel" @change="water?.setOptions({lightingModel})"><option value="legacy">原有光照</option><option value="microfacet">GGX 与环境光（实验）</option></select></div>
+    <p class="water-controls__status">同一水面、波纹与反射参数，可分别对照颜色输出和光照模型。</p>
     <div v-if="calibration" class="water-controls__actions"><button @click="focusCalibration('near')">近景</button><button @click="focusCalibration('overview')">俯视</button><button @click="focusCalibration('far')">远景</button></div>
     <a class="water-controls__status" :href="calibration ? importBase + 'water' : importBase + 'water?scene=calibration'">{{ calibration ? '查看原始模型场景' : '查看固定参照场景' }}</a>
     <label class="water-controls__row" for="water-height">水面高度
@@ -61,6 +62,7 @@ import { addOpticsFixture } from './optics-fixture'
 const container = ref<HTMLElement>()
 const importBase = import.meta.env.BASE_URL
 const calibration = new URLSearchParams(window.location.search).get('scene') === 'calibration'
+const lightingModel=ref<'legacy'|'microfacet'>('legacy')
 const shadingMode = ref<NonNullable<WaterSurfaceUpdateOptions['shadingMode']>>('legacy-phong')
 let calibrationView: 'near' | 'overview' | 'far' = 'near'
 let removeFixture: (() => void) | undefined
@@ -79,6 +81,7 @@ const fps = ref(0)
 const tileset = shallowRef<Cesium.Cesium3DTileset>()
 let viewer: Cesium.Viewer | undefined
 let water: WaterSurface | undefined
+let companion: WaterSurface | undefined
 let disposed = false
 let removeCameraListener: (() => void) | undefined
 let removeFrameListener: (() => void) | undefined
@@ -102,6 +105,7 @@ onMounted(() => {
     useBrowserRecommendedResolution: false,
   })
   viewer.scene.globe.depthTestAgainstTerrain = false
+  viewer.scene.atmosphere.dynamicLighting = Cesium.DynamicAtmosphereLightingType.SCENE_LIGHT
   if (calibration) {
     viewer.scene.globe.show = false
     viewer.scene.highDynamicRange = false
@@ -118,7 +122,7 @@ onMounted(() => {
   }
   water = new WaterSurface({
     ...(calibration && new URLSearchParams(window.location.search).get('shoreline') === 'probe' ? { shoreline: analyticShoreline(), shoreFadeDistance: 16 } : {}),
-    scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value, shadingMode: shadingMode.value,
+    scene: viewer.scene, positions, height: waterHeight.value, quality: quality.value, shadingMode: shadingMode.value, lightingModel: lightingModel.value,
     rippleSize: 50, waterAlpha: waterAlpha.value, reflectivity: 0.3, sunShiny: 100, distortionScale: 3.7,
     reflection: reflection.value,
     foam: foam.value, foamWidth: foamWidth.value,
@@ -225,13 +229,44 @@ function focusCalibration(view: 'near' | 'overview' | 'far'): void {
 function updateShading(): void { water?.setOptions({ shadingMode: shadingMode.value }) }
 
 const opticsLab = {
-  getState: () => ({ ready: !!water && !water.isDestroyed(), calibration, view: calibrationView,
+  orbit: (pose: {heading:number;pitch:number;range:number}) => {
+    if(!viewer) return
+    viewer.camera.lookAt(calibrationCenter(),new Cesium.HeadingPitchRange(pose.heading,pose.pitch,pose.range))
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+  },
+  setHdr: (enabled:boolean) => { if(viewer) viewer.scene.highDynamicRange=enabled },
+  setDebug: (value:number) => { if(water) water.material.uniforms.lightingDebug=value },
+  setLight: (light:{direction:[number,number,number];intensity:number}) => {
+    if(!viewer) return
+    const local=new Cesium.Cartesian3(light.direction[0],-light.direction[2],light.direction[1])
+    const world=Cesium.Matrix3.multiplyByVector(Cesium.Matrix4.getMatrix3(Cesium.Transforms.eastNorthUpToFixedFrame(calibrationCenter()),new Cesium.Matrix3()),local,new Cesium.Cartesian3())
+    Cesium.Cartesian3.normalize(world,world)
+    viewer.scene.light=new Cesium.DirectionalLight({direction:Cesium.Cartesian3.negate(world,world),intensity:light.intensity})
+    viewer.scene.atmosphere.dynamicLighting=Cesium.DynamicAtmosphereLightingType.SCENE_LIGHT
+  },
+  lightingProbe: () => {
+    if(!viewer || !(viewer.scene.light instanceof Cesium.DirectionalLight)) throw new Error('Directional calibration light required')
+    const point=viewer.scene.cartesianToCanvasCoordinates(calibrationCenter())
+    if(!point) throw new Error('Probe outside view')
+    const x=Math.round(point.x),y=Math.round(point.y),ray=viewer.camera.getPickRay(new Cesium.Cartesian2(x+0.5,y+0.5))
+    if(!ray) throw new Error('No probe ray')
+    const rotation=Cesium.Matrix4.getMatrix3(Cesium.Matrix4.inverse(Cesium.Transforms.eastNorthUpToFixedFrame(calibrationCenter()),new Cesium.Matrix4()),new Cesium.Matrix3())
+    const local=(world:Cesium.Cartesian3) => {const p=Cesium.Matrix3.multiplyByVector(rotation,world,new Cesium.Cartesian3());return [p.x,p.z,-p.y]}
+    return {x,y,waterPicked:viewer.scene.pick(new Cesium.Cartesian2(x,y))?.primitive?.appearance?.material===water?.material,V:local(Cesium.Cartesian3.negate(ray.direction,new Cesium.Cartesian3())),L:local(Cesium.Cartesian3.negate(viewer.scene.light.direction,new Cesium.Cartesian3())),intensity:viewer.scene.light.intensity}
+  },
+  createCompanion: () => {
+    if(!viewer || companion) return
+    companion = new WaterSurface({scene:viewer.scene,positions:positions.map(p=>new Cesium.Cartographic(p.longitude+0.01,p.latitude)),height:waterHeight.value,lightingModel:'microfacet',foam:false,reflection:false})
+  },
+  destroyCompanion: () => { companion?.destroy();companion=undefined },
+  getState: () => ({ companion:companion?.getDiagnostics(), ready: !!water && !water.isDestroyed(), calibration, view: calibrationView,
     options: water?.getOptions(), diagnostics: water?.getDiagnostics(), error: error.value, fps: fps.value,
     modelLoaded: !!tileset.value, tilesLoaded: tileset.value?.tilesLoaded ?? false, status: status.value,
     visualTime: water?.material.uniforms.time, shaderSource: water?.getWaterShaderSource(), hdr: viewer?.scene.highDynamicRange,
     cameraPosition: viewer ? Cesium.Cartesian3.clone(viewer.camera.positionWC) : undefined }),
   setOptions: (options: WaterSurfaceUpdateOptions) => {
     water?.setOptions(options)
+    if (options.lightingModel !== undefined) lightingModel.value = options.lightingModel
     if (options.shadingMode !== undefined) shadingMode.value = options.shadingMode
     if (options.reflection !== undefined) reflection.value = options.reflection
     if (options.foam !== undefined) foam.value = options.foam
@@ -316,6 +351,8 @@ onBeforeUnmount(() => {
   removeCameraListener?.()
   removeFrameListener?.()
   removeModelProgress?.()
+  companion?.destroy()
+  companion=undefined
   water?.destroy()
   water = undefined
   tileset.value = undefined

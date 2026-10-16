@@ -38,6 +38,33 @@ beforeAll(() => {
 })
 afterAll(() => vi.unstubAllGlobals())
 describe('tunable reusable water', () => {
+  it('does not destroy borrowed environment textures with a standalone material', () => {
+    const material = createWaterMaterial()
+    const borrowedCube = { destroy: vi.fn() }, borrowedLut = { destroy: vi.fn() }, ownedNormal = { destroy: vi.fn() }
+    Object.assign((material as unknown as { _textures: Record<string, unknown> })._textures, {
+      waterEnvironmentMap: borrowedCube, waterBrdfLut: borrowedLut, normalTexture: ownedNormal,
+    })
+    material.destroy()
+    expect(borrowedCube.destroy).not.toHaveBeenCalled()
+    expect(borrowedLut.destroy).not.toHaveBeenCalled()
+    expect(ownedNormal.destroy).toHaveBeenCalledOnce()
+    expect(material.isDestroyed()).toBe(true)
+  })
+  it('keeps legacy lighting and validates microfacet controls before mutation', () => {
+    const {scene,water}=fixture(),primitive=scene.primitives.get(0)
+    expect(water.getOptions().lightingModel).toBe('legacy')
+    expect(()=>water.setOptions({waterAlpha:0.2,indexOfRefraction:0.9})).toThrow()
+    expect(()=>water.setOptions({lightingModel:'unsupported' as 'microfacet'})).toThrow()
+    expect(()=>water.setOptions({environmentIntensity:NaN})).toThrow()
+    expect(water.getOptions().waterAlpha).toBe(0.9)
+    water.setOptions({lightingModel:'microfacet',indexOfRefraction:1.333,environmentIntensity:0,skyEnvironment:false})
+    expect(water.getOptions().lightingModel).toBe('microfacet')
+    expect(water.getOptions().environmentIntensity).toBe(0)
+    expect(water.getOptions().skyEnvironment).toBe(false)
+    expect(scene.primitives.get(0)).toBe(primitive)
+    water.setOptions({lightingModel:'legacy'})
+    water.destroy()
+  })
   it('validates shore fade atomically and supports disabling it without geometry replacement', () => {
     const {scene,water}=fixture(), primitive=scene.primitives.get(0)
     expect(()=>water.setOptions({waterAlpha:0.2,shoreFadeDistance:65})).toThrow()

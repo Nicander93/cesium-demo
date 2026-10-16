@@ -5,7 +5,7 @@ import {
   WaterSurface,
   createWaterPreset,
   type WaterPresetName,
-  type WaterPresetOptions,
+  type WaterSurfaceUpdateOptions,
 } from '../../water'
 import {
   swissTerrainUrl,
@@ -23,7 +23,7 @@ const height = ref<number>(),
   error = ref('')
 const mode = ref<'imagery' | 'current' | 'enhanced'>('enhanced')
 const presetName = ref<WaterPresetName>('calm-lake')
-const config = reactive({ ...createWaterPreset(), shoreFadeDistance: 8, foamWidth: 8, foamIntensity: 0.35, foamSpeed: 0.3 })
+const config = reactive({ ...createWaterPreset(), lightingModel: (new URLSearchParams(window.location.search).get('lighting') === 'microfacet' ? 'microfacet' : 'legacy') as 'legacy' | 'microfacet', skyEnvironment: true, indexOfRefraction: 1.333, environmentIntensity: 1, shoreFadeDistance: 8, foamWidth: 8, foamIntensity: 0.35, foamSpeed: 0.3 })
 const diagnostics = ref<ReturnType<WaterSurface['getDiagnostics']>>()
 const reflectionNotice = ref('')
 const fps = ref(0)
@@ -74,6 +74,7 @@ function applyMode(): void {
   else
     water.setOptions({
       waveModel: 'legacy',
+      lightingModel: 'legacy',
       shoreFadeDistance: 0,
       foam: false,
       reflection: false,
@@ -265,6 +266,12 @@ const lab = {
   },
   focus,
   focusShore,
+  orbit: (pose: { heading: number; pitch: number; range: number }) => {
+    if(!viewer) return
+    viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(7.895,46.694,height.value ?? 615),new Cesium.HeadingPitchRange(pose.heading,pose.pitch,pose.range))
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+  },
+  setDebug: (value:number) => { if(water) water.material.uniforms.lightingDebug=value },
   load,
   setMode: (value: 'imagery' | 'current' | 'enhanced') => {
     mode.value = value
@@ -274,7 +281,7 @@ const lab = {
     presetName.value = name
     restorePreset()
   },
-  setOptions: (options: Partial<WaterPresetOptions> & { shoreFadeDistance?: number; foamWidth?: number; foamIntensity?: number; foamSpeed?: number }) => {
+  setOptions: (options: WaterSurfaceUpdateOptions) => {
     if (!water) return
     water.setOptions({ ...config, ...options })
     Object.assign(config, options)
@@ -320,6 +327,7 @@ onMounted(() => {
     viewer.scene.globe.depthTestAgainstTerrain = true
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#455a52')
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false
+    viewer.scene.atmosphere.dynamicLighting = Cesium.DynamicAtmosphereLightingType.SCENE_LIGHT
     removeRenderError = viewer.scene.renderError.addEventListener(
       (_scene, value) => {
         error.value = String(value)
@@ -387,6 +395,16 @@ onBeforeUnmount(() => {
         <button @click="restorePreset">恢复预设</button
         ><button @click="load">重新加载数据</button>
       </div>
+      <fieldset>
+        <legend>光照模型对照</legend>
+        <label for="lighting-model">光照模型</label><select id="lighting-model" v-model="config.lightingModel" @change="applyOptions"><option value="legacy">原有光照</option><option value="microfacet">GGX 与环境光（实验）</option></select>
+        <template v-if="config.lightingModel === 'microfacet'">
+          <label><input v-model="config.skyEnvironment" type="checkbox" @change="applyOptions" /> 大气环境反射</label>
+          <label for="water-ior">折射率 <output>{{ config.indexOfRefraction.toFixed(3) }}</output><input id="water-ior" v-model.number="config.indexOfRefraction" type="range" min="1" max="1.6" step="0.001" @input="applyOptions" /></label>
+          <label for="water-environment-intensity">环境光强度 <output>{{ config.environmentIntensity.toFixed(2) }}</output><input id="water-environment-intensity" v-model.number="config.environmentIntensity" type="range" min="0" max="4" step="0.05" @input="applyOptions" /></label>
+          <p>{{ diagnostics?.environmentAvailable ? '大气环境图已就绪' : diagnostics?.environmentError || (config.skyEnvironment ? '环境图准备中' : '使用常量环境近似') }}；新模式按折射率推导反射率。</p>
+        </template>
+      </fieldset>
       <fieldset>
         <legend>颜色与透光</legend>
         <label
@@ -523,7 +541,7 @@ onBeforeUnmount(() => {
             step="0.05"
             @input="applyOptions"
         /></label>
-        <label for="water-reflectivity"
+        <label v-if="config.lightingModel === 'legacy'" for="water-reflectivity"
           >基础反射率 <output>{{ config.reflectivity.toFixed(2) }}</output
           ><input
             id="water-reflectivity"

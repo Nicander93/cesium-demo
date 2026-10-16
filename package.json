@@ -21,7 +21,8 @@
     "smoke:real-water": "node scripts/smoke-real-water.mjs",
     "smoke:water-appearance": "node scripts/smoke-water-appearance.mjs",
     "smoke:water-optics": "node scripts/smoke-water-optics.mjs",
-    "smoke:water-shoreline": "node scripts/smoke-water-shoreline.mjs"
+    "smoke:water-shoreline": "node scripts/smoke-water-shoreline.mjs",
+    "smoke:water-lighting": "node scripts/smoke-water-lighting.mjs"
   },
   "dependencies": {
     "@types/cesium": "^1.70.4",

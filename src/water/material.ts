@@ -1,6 +1,14 @@
 import * as Cesium from 'cesium'
+import { microfacetLighting } from './lighting'
+import { protectWaterEnvironmentOwnership } from './environment'
 
 export interface WaterMaterialOptions {
+  /** Experimental GGX surface lighting; legacy keeps existing appearance. */
+  lightingModel?: 'legacy' | 'microfacet'
+  /** Air-to-water dielectric IOR, default 1.333, range [1, 2.5]. Microfacet only. */
+  indexOfRefraction?: number
+  /** Artistic scale of indirect reflection and the tinted body proxy, default 1, [0, 4]. */
+  environmentIntensity?: number
   /** Opt-in output experiment. Legacy keeps Cesium's additional Phong lighting. */
   shadingMode?: 'legacy-phong' | 'water-composite'
   origin?: Cesium.Cartesian3
@@ -176,6 +184,8 @@ vec3 metricWaterNormal(vec2 p) {
   return normalize(vec3(-slope.x * waveStrength, 1.0, slope.y * waveStrength));
 }
 
+${microfacetLighting}
+
 czm_material czm_getMaterial(czm_materialInput materialInput) {
   czm_material material = czm_getDefaultMaterial(materialInput);
   vec3 normal;
@@ -229,9 +239,22 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   float fresnel = mix(rf0, 1.0, pow(1.0 - max(dot(eyeDirection, normal), 0.0), 5.0)) * reflectionStrength;
   vec3 scatter = max(dot(normal, eyeDirection), 0.0) * waterColor.rgb;
   material.diffuse = mix(vec3(diffuse * 0.3) + scatter, vec3(0.1) + reflected * 0.9 + reflected * specular, fresnel);
+  if (microfacetEnabled > 0.5) {
+    vec3 hostLight = mat3(worldToLocal) * czm_inverseViewRotation * czm_lightDirectionEC;
+    hostLight = normalize(vec3(hostLight.x,hostLight.z,-hostLight.y));
+    if (localFrameReady < 0.5) {
+      // Match the fallback eye basis for a host-owned material without an ENU origin.
+      vec3 nEC = normalize(materialInput.normalEC);
+      vec3 axis = abs(nEC.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+      vec3 tangent = normalize(cross(axis, nEC));
+      vec3 bitangent = cross(nEC, tangent);
+      hostLight = normalize(vec3(dot(czm_lightDirectionEC,tangent),dot(czm_lightDirectionEC,nEC),-dot(czm_lightDirectionEC,bitangent)));
+    }
+    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds);
+  }
   material.alpha = waterAlpha;
   float foam = shoreFoam(-materialInput.positionToEyeEC);
-  material.diffuse = mix(material.diffuse, vec3(0.88, 0.95, 0.93), foam);
+  material.diffuse = mix(material.diffuse, (microfacetEnabled > 0.5 ? waterLinear(vec3(0.88,0.95,0.93)) : vec3(0.88,0.95,0.93)), foam);
   material.alpha = mix(material.alpha, 1.0, foam);
   if (edgeFadeWidth > 0.0) {
     vec2 edge = min(materialInput.st, 1.0 - materialInput.st);
@@ -240,7 +263,12 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   if (shorelineReady > 0.5 && shoreFadeDistance > 0.0) {
     material.alpha *= smoothstep(0.0, shoreFadeDistance, mappedShoreDistance(-materialInput.positionToEyeEC));
   }
-  if (waterCompositeOutput > 0.5) {
+  if (microfacetEnabled > 0.5) {
+#ifndef HDR
+    material.diffuse = waterDisplay(material.diffuse);
+#endif
+  }
+  if (waterCompositeOutput > 0.5 || microfacetEnabled > 0.5) {
     // The water color above already contains lighting/reflection. Use emission as
     // Cesium's prelit-color carrier, not as an extra self-illumination contribution.
     material.emission = material.diffuse;
@@ -252,7 +280,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
 
 export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.Material {
   validateWaterMaterial(options)
-  return new Cesium.Material({
+  return protectWaterEnvironmentOwnership(new Cesium.Material({
     fabric: {
       type: 'DemoWaterSurface',
       source,
@@ -260,6 +288,21 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         normalTexture: options.normalMapUrl ?? Cesium.Material.DefaultImageId,
         reflexTexture: Cesium.Material.DefaultImageId,
         time: 0,
+        microfacetEnabled: options.lightingModel === 'microfacet' ? 1 : 0,
+        indexOfRefraction: options.indexOfRefraction ?? 1.333,
+        environmentIntensity: options.environmentIntensity ?? 1,
+        waterEnvironmentMap: Cesium.Material.DefaultCubeMapId,
+        waterBrdfLut: Cesium.Material.DefaultImageId,
+        waterEnvironmentReady: 0, waterEnvironmentMaxLod: 6, waterBrdfReady: 0, lightingDebug: 0,
+        waterSH0: new Cesium.Cartesian3(),
+        waterSH1: new Cesium.Cartesian3(),
+        waterSH2: new Cesium.Cartesian3(),
+        waterSH3: new Cesium.Cartesian3(),
+        waterSH4: new Cesium.Cartesian3(),
+        waterSH5: new Cesium.Cartesian3(),
+        waterSH6: new Cesium.Cartesian3(),
+        waterSH7: new Cesium.Cartesian3(),
+        waterSH8: new Cesium.Cartesian3(),
         size: options.rippleSize ?? 50,
         waveStrength: options.waveStrength ?? 1,
         waterCompositeOutput: options.shadingMode === 'water-composite' ? 1 : 0,
@@ -304,16 +347,17 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
       },
     },
     translucent: (material: Cesium.Material) => material.uniforms.waterAlpha < 1 || material.uniforms.edgeFadeWidth > 0 || material.uniforms.shoreFadeDistance > 0,
-  })
+  }))
 }
 
 export function updateWaterMaterial(material: Cesium.Material, options: WaterMaterialOptions & { time?: number }): void {
   validateWaterMaterial(options)
   if (options.time !== undefined && !Number.isFinite(options.time)) throw new RangeError('time must be finite')
-  const names = { shoreFadeDistance: 'shoreFadeDistance', waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
+  const names = { indexOfRefraction: 'indexOfRefraction', environmentIntensity: 'environmentIntensity', shoreFadeDistance: 'shoreFadeDistance', waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
+  if (options.lightingModel !== undefined) material.uniforms.microfacetEnabled = options.lightingModel === 'microfacet' ? 1 : 0
   if (options.shadingMode !== undefined) material.uniforms.waterCompositeOutput = options.shadingMode === 'water-composite' ? 1 : 0
   if (options.waveModel !== undefined) material.uniforms.waveModel = options.waveModel === 'multiscale' ? 1 : 0
   if (options.waveSpread !== undefined) material.uniforms.waveSpread = Cesium.Math.toRadians(options.waveSpread)
@@ -327,6 +371,9 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
 }
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
+  if(options.lightingModel !== undefined && options.lightingModel !== 'legacy' && options.lightingModel !== 'microfacet') throw new RangeError('Unknown water lighting model')
+  if(options.indexOfRefraction !== undefined && (!Number.isFinite(options.indexOfRefraction)||options.indexOfRefraction<1||options.indexOfRefraction>2.5)) throw new RangeError('indexOfRefraction must be in [1,2.5]')
+  if(options.environmentIntensity !== undefined && (!Number.isFinite(options.environmentIntensity)||options.environmentIntensity<0||options.environmentIntensity>4)) throw new RangeError('environmentIntensity must be in [0,4]')
   if (options.shoreFadeDistance !== undefined && (!Number.isFinite(options.shoreFadeDistance) || options.shoreFadeDistance < 0 || options.shoreFadeDistance > 64)) throw new RangeError('shoreFadeDistance must be metres in [0,64]')
   if (options.shadingMode !== undefined && options.shadingMode !== 'legacy-phong' && options.shadingMode !== 'water-composite') throw new RangeError('Unknown water shading mode')
   if (options.waveModel !== undefined && options.waveModel !== 'legacy' && options.waveModel !== 'multiscale') throw new RangeError('Unknown wave model')
