@@ -107,3 +107,9 @@ Ldirect = Lhost × D_GGX × V_SmithCorrelated × F × max(N·L, 0)
 报告记录实际浏览器及 WebGL renderer；本轮为 Chrome 的 WebGL2 / ANGLE D3D11，使用 NVIDIA GeForce RTX 5070。自动浏览器证据与用户电脑上的交互观感、GPU 性能验收分开，未完成湖面/水库/河道/洪水四种标准案例的统一视觉验收。
 
 代码验证：水面与洪水 97 项单测通过（含独立材质借用纹理销毁回归）；water 与 flow-lab 类型检查通过；生产构建通过，保留现有大 chunk 提示。旧光照实验的 18 个数值探针和路由退出也单独回归，避免只验证候选路径。
+
+## 洪水复用与首次材质初始化
+
+洪水层可复用相同的微表面函数与环境适配器，详见 [实景洪水验证](../flood/cesium/REAL-TERRAIN-LIGHTING.md)。共享GLSL内部函数现在显式接收bodyColor，基础水面仍传入其原waterColor，公开API不变。
+
+环境Pass先于水面首次材质更新时，必须先初始化Fabric默认sampler缓存，再绑定借用的Scene BRDF LUT；否则sampler2D首次更新会将该LUT当作被替换的旧图像销毁。适配器现已统一处理该顺序，并用真实浏览器验证另一图层销毁、后端/模型切换和同一Viewer中重建图层后LUT仍存活。

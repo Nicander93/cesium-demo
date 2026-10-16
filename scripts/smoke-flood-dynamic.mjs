@@ -101,10 +101,11 @@ const checks = [],
   parity = []
 let gpu, resources, updateReuse
 try {
-  await page.goto(new URL('flood-dynamic-lab', baseUrl).href)
+  await page.goto(new URL('flood-dynamic-lab?environment=synthetic', baseUrl).href)
   await page.waitForFunction(
     () => window.__floodDynamicLab?.getState().diagnostics?.ready,
   )
+  await control('setLighting', {model: 'legacy'})
   gpu = await page.evaluate(() => {
     const gl = document.querySelector('canvas').getContext('webgl2'),
       extension = gl.getExtension('WEBGL_debug_renderer_info')

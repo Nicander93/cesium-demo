@@ -95,6 +95,13 @@ export const detailedWaterBody = `
   float noiseB = waterNoise(pB * 0.045) * 0.65 + waterNoise(pB * 0.12) * 0.35;
   float foamNoise = mix(noiseA, noiseB, blend);
   rgb += vec3(0.05, 0.075, 0.065) * (foamNoise - 0.5) * min(speed * 0.5, 1.0);
+  if (floodLightingModel() > 0.5) {
+    // Cesium's environment uses East, Up, -North; all three directions share this basis.
+    vec3 localNormal = vec3(dot(n,east),dot(n,up),-dot(n,north));
+    vec3 localView = vec3(dot(view,east),dot(view,up),-dot(view,north));
+    vec3 localLight = vec3(dot(light,east),dot(light,up),-dot(light,north));
+    rgb = floodSurfaceLighting(localNormal,localView,localLight,body);
+  }
   // Coverage is transported and decayed between result frames on the CPU.
   float coverage = clamp(v_state.a, 0.0, 1.0);
   float breakup = smoothstep(0.64, 0.83, foamNoise);
@@ -104,7 +111,14 @@ export const detailedWaterBody = `
     float fragments = smoothstep(0.48, 0.72, mix(waterNoise(pA * 0.72), waterNoise(pB * 0.72), blend));
     foam = clamp(coverage * fragments * floodFoamOpacity() * 1.2, 0.0, 0.85);
   }
-  rgb = mix(rgb, vec3(0.82, 0.88, 0.83), foam);
+  if (floodLightingModel() > 0.5) {
+    // Foam remains a visual proxy; no unlit white overlay in the microfacet branch.
+    vec3 foamLight = max(czm_lightColorHdr,vec3(0.0)) * max(dot(n,light),0.0) / 3.14159265359;
+    rgb = mix(rgb, vec3(0.64,0.74,0.68) * foamLight, foam);
+#ifndef HDR
+    rgb = floodDisplayColor(rgb);
+#endif
+  } else rgb = mix(rgb, vec3(0.82, 0.88, 0.83), foam);
   float alpha = mix(0.4, 0.98, smoothstep(0.02, 1.8, h));
   alpha = max(alpha, foam * 0.95);
 `

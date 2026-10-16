@@ -11,6 +11,7 @@ export class WaterEnvironment {
   private destroyed = false
   private lightSignature = ''
   private lutFrame = -1
+  private materialInitialized = false
   private brdfTexture: unknown
   private updates = 0
   private generations = 0
@@ -47,6 +48,14 @@ export class WaterEnvironment {
     )
       return
     try {
+      if (!this.materialInitialized) {
+        // Fabric's first sampler2D update treats a borrowed LUT as a replaced image
+        // and destroys it. Initialize default sampler caches before borrowing Scene resources.
+        ;(
+          this.material as unknown as { update: (context: unknown) => void }
+        ).update(frameState.context)
+        this.materialInitialized = true
+      }
       const generator = frameState.brdfLutGenerator
       if (typeof generator?.update !== 'function')
         throw new Error('Water BRDF lookup is unavailable')

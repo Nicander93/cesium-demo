@@ -41,7 +41,7 @@ vec3 waterDirect(vec3 N, vec3 V, vec3 L, float alpha, float f0) {
   // BRDF * NdotL; incident light comes from the host, never from reflected scene color.
   return czm_lightColorHdr * (D*visibility*nl*waterFresnel(f0,vh)) * specularIntensity;
 }
-vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage, float surfaceRoughness) {
+vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage, float surfaceRoughness, vec3 bodyColor) {
   float nv=clamp(dot(N,V),0.0,1.0);
   float f0=pow((indexOfRefraction-1.0)/(indexOfRefraction+1.0),2.0);
   float alpha=max(surfaceRoughness*surfaceRoughness,0.0025);
@@ -69,7 +69,7 @@ vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, floa
   if (indexOfRefraction <= 1.0) envWeight=0.0;
   vec3 indirect=reflected*envWeight*environmentIntensity*reflectionStrength;
   // Tinted body is an explicit diffuse proxy until underwater depth/color are available.
-  vec3 body=waterLinear(waterColor.rgb)*(1.0-envWeight)*max(irradiance,vec3(0.0))*environmentIntensity;
+  vec3 body=waterLinear(bodyColor)*(1.0-envWeight)*max(irradiance,vec3(0.0))*environmentIntensity;
   vec3 result=direct+indirect+body;
   if (lightingDebug>0.5 && lightingDebug<1.5) result=direct;
   else if (lightingDebug<2.5 && lightingDebug>1.5) result=indirect;

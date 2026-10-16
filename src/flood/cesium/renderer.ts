@@ -10,6 +10,8 @@ import { detailedWaterBody, waterShaderFunctions } from './water-shader'
 import { FloodFoam, resolveFloodVisualOptions, type FloodVisualOptions } from './foam'
 import { FlowParticles } from './flow-particles'
 import { createFloodSurfaceState } from './surface-state'
+import { createFloodMaterial, resolveFloodLighting, type FloodLightingOptions } from './lighting'
+import { WaterEnvironment } from '../../water/environment'
 
 function vertexShader(modelMatrix: Cesium.Matrix4): string {
   // Primitive may bake modelMatrix into world-space geometry and render with identity.
@@ -139,18 +141,14 @@ export class FloodRenderer {
   private lastVisualTime: number | undefined
   private visualWater = false
   private visualOptions = resolveFloodVisualOptions({})
-  private readonly waterMaterial = new Cesium.Material({ fabric: {
-    type: 'FloodSurfaceClock', uniforms: { visualTime: 0, flowEnabled: 1, foamOpacity: 0.75, diagnosticMode: 0, surfaceStyle: 0 },
-    source: `float floodVisualTime() { return visualTime; }
-      float floodFlowEnabled() { return flowEnabled; }
-      float floodFoamOpacity() { return foamOpacity; }
-      float floodDiagnosticMode() { return diagnosticMode; }
-      float floodSurfaceStyle() { return surfaceStyle; }
-      czm_material czm_getMaterial(czm_materialInput inputValue) { return czm_getDefaultMaterial(inputValue); }`,
-  } })
+  private readonly waterMaterial = createFloodMaterial()
+  private lightingOptions = resolveFloodLighting({})
+  private environment: WaterEnvironment | undefined
+  private environmentError: string | null = null
 
-  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}, private surfaceBackend: FloodSurfaceBackend = 'primitive') {
+  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}, private surfaceBackend: FloodSurfaceBackend = 'primitive', lighting: FloodLightingOptions = {}) {
     if (surfaceBackend !== 'primitive' && surfaceBackend !== 'gpu') throw new RangeError('未知洪水水面后端')
+    const validLighting = resolveFloodLighting(lighting)
     const count = grid.columns * grid.rows
     if (!Number.isInteger(count) || count < 4 || count > 20000) throw new RangeError('渲染网格大小无效')
     const valid = parseFloodDataset(createDataset(grid, [{ time: 0, depth: new Array<number>(count).fill(0) }])).grid
@@ -168,6 +166,7 @@ export class FloodRenderer {
     }
     viewer.scene.primitives.add(this.points)
     this.setVisualOptions(visuals)
+    this.setLightingOptions(validLighting)
     if (showGround) {
       this.terrain = this.createMesh(undefined, false)
       viewer.scene.primitives.add(this.terrain)
@@ -229,6 +228,46 @@ export class FloodRenderer {
     this.waterMaterial.uniforms.surfaceStyle = next.surfaceStyle === 'flow' ? 1 : 0
     this.waterMaterial.uniforms.flowEnabled = next.flow ? 1 : 0
     this.waterMaterial.uniforms.foamOpacity = next.foam ? next.foamIntensity : 0
+  }
+
+  setLightingOptions(options: FloodLightingOptions): void {
+    this.assertAlive()
+    const next = resolveFloodLighting(options, this.lightingOptions)
+    this.lightingOptions = next
+    Object.assign(this.waterMaterial.uniforms, {
+      microfacetEnabled: next.model === 'microfacet' ? 1 : 0,
+      roughness: next.roughness, specularIntensity: next.specularIntensity,
+      environmentIntensity: next.environmentIntensity,
+    })
+    if (next.model === 'legacy') this.removeEnvironment()
+    else {
+      try {
+        if (!this.environment && !this.environmentError) {
+          const grid = this.grid
+          const position = Cesium.Matrix4.multiplyByPoint(this.modelMatrix,
+            new Cesium.Cartesian3(grid.columns * grid.cellSize / 2, grid.rows * grid.cellSize / 2, Math.min(...grid.elevation)), new Cesium.Cartesian3())
+          this.environment = new WaterEnvironment(this.scene, this.waterMaterial, position)
+          this.scene.primitives.add(this.environment)
+        }
+        if (this.environment) this.environment.atmosphere = next.skyEnvironment
+        if (!next.skyEnvironment) this.waterMaterial.uniforms.waterEnvironmentReady = 0
+      } catch (error) { this.environmentError = String(error) }
+    }
+    this.scene.requestRender()
+  }
+
+  getLightingDiagnostics() {
+    return { ...this.lightingOptions, ...this.environment?.getDiagnostics() ?? {
+      environmentAvailable: false, brdfAvailable: false, environmentUpdates: 0,
+      environmentGenerations: 0, environmentError: this.environmentError,
+    } }
+  }
+
+  private removeEnvironment(): void {
+    if (!this.environment) return
+    if (!this.scene.isDestroyed()) this.scene.primitives.remove(this.environment)
+    if (!this.environment.isDestroyed()) this.environment.destroy()
+    this.environment = undefined
   }
 
   /** Call update with the current frame after changing a diagnostic view. */
@@ -638,6 +677,7 @@ export class FloodRenderer {
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    this.removeEnvironment()
     this.removeDynamicSurface()
     this.lastSurface = undefined
     if (this.scene.isDestroyed()) { this.waterMaterial.destroy(); return }

@@ -268,7 +268,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
       vec3 bitangent = cross(nEC, tangent);
       hostLight = normalize(vec3(dot(czm_lightDirectionEC,tangent),dot(czm_lightDirectionEC,nEC),-dot(czm_lightDirectionEC,bitangent)));
     }
-    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds,surfaceRoughness);
+    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds,surfaceRoughness,waterColor.rgb);
   }
   material.alpha = waterAlpha;
   float foam = shoreFoam(-materialInput.positionToEyeEC);

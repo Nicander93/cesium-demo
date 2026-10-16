@@ -79,6 +79,10 @@ layer.resetVisuals()
 
 新增可选 `surfaceBackend: 'gpu'`，复用固定拓扑和两张状态纹理；`setSurfaceBackend()` 可切回默认 Primitive 对照，`getDiagnostics()` 返回实际后端、更新计数及降级原因。求解器、泡沫输运和岸边视觉延拓仍在 CPU。支持范围、私有 API、资源所有权与复验方法见 [GPU 动态水面](./cesium/DYNAMIC-SURFACE.md)。
 
+## 真实环境中的光照验证
+
+`/flood-dynamic-lab?environment=real` 接入swisstopo真实地形与影像，提供假设泄洪和独立静水光照对照，默认关闭泡沫。图层新增 `lighting` 构造选项、`setLightingOptions()` 与 `getLightingDiagnostics()`，复用基础水面的GGX与大气环境；API默认仍为legacy。原始参数、数据来源、共享纹理所有权和验证边界见 [真实地形中的洪水光照](./cesium/REAL-TERRAIN-LIGHTING.md)。
+
 ## 使用 Cesium 原生地形
 
 ```ts
