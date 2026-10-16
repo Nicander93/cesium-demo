@@ -1,5 +1,7 @@
 import * as Cesium from 'cesium'
-import type { FloodFrame, FloodGrid } from '../core/dataset'
+import { createDataset, parseFloodDataset, type FloodFrame, type FloodGrid } from '../core/dataset'
+import { DynamicFloodSurface } from './dynamic-surface'
+import { validateRenderFrame } from './dynamic-state'
 import type { FloodBarriers, FloodOutlet } from '../core/hydraulics'
 import { getBreachFace, validateDamBreachState, type DamBreachState } from '../core/breach'
 import type { InundationResult } from '../core/analysis'
@@ -9,7 +11,11 @@ import { FloodFoam, resolveFloodVisualOptions, type FloodVisualOptions } from '.
 import { FlowParticles } from './flow-particles'
 import { createFloodSurfaceState } from './surface-state'
 
-const vertexShader = `
+function vertexShader(modelMatrix: Cesium.Matrix4): string {
+  // Primitive may bake modelMatrix into world-space geometry and render with identity.
+  // Keep local ENU directions explicit instead of relying on its command's model matrix.
+  const axis = (offset: number) => 'vec3(' + [0, 1, 2].map(i => modelMatrix[offset + i].toExponential(16)).join(',') + ')'
+  return `
 in vec3 position3DHigh;
 in vec3 position3DLow;
 in vec3 normal;
@@ -29,11 +35,12 @@ void main() {
   v_positionEC = (czm_modelViewRelativeToEye * p).xyz;
   v_st = st;
   v_state = color;
-  v_eastEC = czm_normal * vec3(1.0, 0.0, 0.0);
-  v_northEC = czm_normal * vec3(0.0, 1.0, 0.0);
-  v_upEC = czm_normal * vec3(0.0, 0.0, 1.0);
+  v_eastEC = czm_viewRotation * ${axis(0)};
+  v_northEC = czm_viewRotation * ${axis(4)};
+  v_upEC = czm_viewRotation * ${axis(8)};
   gl_Position = czm_modelViewProjectionRelativeToEye * p;
 }`
+}
 
 function fragmentShader(water: boolean, depthMode: boolean, detail: boolean, minimumDepth = 0.02): string {
   const discard = `float shoreCoverage = smoothstep(${minimumDepth.toFixed(6)} - max(fwidth(h), 0.001), ${minimumDepth.toFixed(6)} + max(fwidth(h), 0.001), h);
@@ -84,10 +91,38 @@ void main() {
 }`
 }
 
+export type FloodSurfaceBackend = 'primitive' | 'gpu'
+
+export interface FloodSurfaceDiagnostics {
+  requestedBackend: FloodSurfaceBackend
+  surfaceBackend: FloodSurfaceBackend
+  fallbackReason: string | null
+  surfaceUpdates: number
+  legacyMeshBuilds: number
+  ready: boolean
+  geometryCreated: number
+  texturesCreated: number
+  textureUploads: number
+  framesQueued: number
+  bytesUploaded: number
+  shaderChanges: number
+  commandsSubmitted: number
+  triangles: number
+  frameTime: number
+  error: string | null
+}
+
 export type FloodDiagnosticMode = 'water' | 'velocity' | 'foam-source' | 'foam'
 const diagnosticModes: FloodDiagnosticMode[] = ['water', 'velocity', 'foam-source', 'foam']
 
 export class FloodRenderer {
+  private readonly scene: Cesium.Scene
+  private dynamicSurface: DynamicFloodSurface | undefined
+  private surfaceError: string | null = null
+  private surfaceUpdates = 0
+  private legacyMeshBuilds = 0
+  private legacyPrimitivesCreated = 0
+  private lastSurface: { frame: FloodFrame; depthMode: boolean; detail: boolean } | undefined
   private diagnosticMode: FloodDiagnosticMode = 'water'
   private destroyed = false
   private terrain: Cesium.Primitive | undefined
@@ -114,7 +149,13 @@ export class FloodRenderer {
       czm_material czm_getMaterial(czm_materialInput inputValue) { return czm_getDefaultMaterial(inputValue); }`,
   } })
 
-  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}) {
+  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}, private surfaceBackend: FloodSurfaceBackend = 'primitive') {
+    if (surfaceBackend !== 'primitive' && surfaceBackend !== 'gpu') throw new RangeError('未知洪水水面后端')
+    const count = grid.columns * grid.rows
+    if (!Number.isInteger(count) || count < 4 || count > 20000) throw new RangeError('渲染网格大小无效')
+    const valid = parseFloodDataset(createDataset(grid, [{ time: 0, depth: new Array<number>(count).fill(0) }])).grid
+    this.grid = grid = { ...valid, ...(valid.active ? { active: valid.active.slice() } : {}) }
+    this.scene = viewer.scene
     this.foam = new FloodFoam(grid, barriers)
     this.flowParticles = new FlowParticles(grid, barriers)
     this.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(...grid.origin))
@@ -199,7 +240,7 @@ export class FloodRenderer {
   }
 
   /** Final Cesium-assembled shader, useful for compilation diagnostics. */
-  getWaterShaderSource(): string | undefined { return this.water?.appearance?.getFragmentShaderSource() }
+  getWaterShaderSource(): string | undefined { return this.dynamicSurface?.getShaderSource() ?? this.water?.appearance?.getFragmentShaderSource() }
   isDestroyed(): boolean { return this.destroyed }
 
   resetVisuals(): void { this.assertAlive(); this.foam.reset(); this.flowParticles.reset(); this.lastVisualTime = undefined }
@@ -210,21 +251,97 @@ export class FloodRenderer {
 
   update(frame: FloodFrame, depthMode = false, detail = true): void {
     this.assertAlive()
+    validateRenderFrame(this.grid, frame)
+    this.lastSurface = {
+      frame: { time: frame.time, depth: frame.depth.slice(), ...(frame.velocityEast ? { velocityEast: frame.velocityEast.slice(), velocityNorth: frame.velocityNorth!.slice() } : {}) },
+      depthMode, detail,
+    }
+    this.surfaceUpdates++
     if (this.visualOptions.foam) this.foam.update(frame, this.visualOptions.foamLifetime, this.breachState, this.visualOptions.surfaceStyle)
     this.flowParticles.setFrame(frame, this.breachState)
     this.visualWater = detail && !depthMode && this.diagnosticMode === 'water'
     this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam && this.visualOptions.particles
-    const next = this.createMesh(frame, depthMode, detail)
-    if (this.water) this.viewer.scene.primitives.remove(this.water)
-    this.water = next
-    if (next) this.viewer.scene.primitives.add(next)
+    this.updateWaterSurface(frame, depthMode, detail)
     this.clearOverfall()
     this.overfall = this.createOverfall(frame, depthMode)
     if (this.overfall) this.viewer.scene.primitives.add(this.overfall)
   }
 
+  /** Switch rendering without resetting the hydraulic frame or visual history. */
+  setSurfaceBackend(backend: FloodSurfaceBackend): void {
+    this.assertAlive()
+    if (backend !== 'primitive' && backend !== 'gpu') throw new RangeError('未知洪水水面后端')
+    if (backend === this.surfaceBackend && !this.surfaceError) return
+    this.removeDynamicSurface()
+    this.surfaceBackend = backend
+    this.surfaceError = null
+    if (this.lastSurface) this.updateWaterSurface(this.lastSurface.frame, this.lastSurface.depthMode, this.lastSurface.detail)
+  }
+
+  getDiagnostics(): FloodSurfaceDiagnostics {
+    const gpu = this.dynamicSurface?.getDiagnostics()
+    return {
+      requestedBackend: this.surfaceBackend,
+      surfaceBackend: this.dynamicSurface ? 'gpu' : 'primitive',
+      fallbackReason: this.surfaceError,
+      surfaceUpdates: this.surfaceUpdates,
+      legacyMeshBuilds: this.legacyMeshBuilds,
+      ...(gpu ?? {
+        ready: !!this.water?.ready, geometryCreated: this.legacyPrimitivesCreated,
+        texturesCreated: 0, textureUploads: 0, framesQueued: 0, bytesUploaded: 0,
+        shaderChanges: 0, commandsSubmitted: 0, triangles: 0,
+        frameTime: this.lastSurface?.frame.time ?? 0, error: null,
+      }),
+    }
+  }
+
+  private removeDynamicSurface(): void {
+    if (!this.dynamicSurface) return
+    if (!this.scene.isDestroyed()) this.scene.primitives.remove(this.dynamicSurface)
+    if (!this.dynamicSurface.isDestroyed()) this.dynamicSurface.destroy()
+    this.dynamicSurface = undefined
+  }
+
+  private updateWaterSurface(frame: FloodFrame, depthMode: boolean, detail: boolean): void {
+    if (this.surfaceBackend === 'gpu' && !this.surfaceError) {
+      try {
+        if (this.barriers) throw new Error('挡墙和溃口暂使用 Primitive 路径，避免跨越水位不连续面')
+        if (!this.dynamicSurface) {
+          this.dynamicSurface = new DynamicFloodSurface(this.scene, this.grid, this.modelMatrix, this.waterMaterial, error => {
+            this.surfaceError = error instanceof Error ? error.message : String(error)
+            // Cesium is traversing its collection; replace the failed surface after this render.
+            queueMicrotask(() => {
+              if (this.destroyed || this.scene.isDestroyed() || !this.lastSurface) return
+              this.removeDynamicSurface()
+              this.updateWaterSurface(this.lastSurface.frame, this.lastSurface.depthMode, this.lastSurface.detail)
+              this.scene.requestRender()
+            })
+          })
+          this.scene.primitives.add(this.dynamicSurface)
+        }
+        this.dynamicSurface.setFrame(frame, this.foam.coverage, this.foam.sources, {
+          fragment: fragmentShader(true, depthMode, detail), translucent: detail && !depthMode,
+          foamSource: this.diagnosticMode === 'foam-source',
+        })
+        if (this.water) { this.scene.primitives.remove(this.water); this.water = undefined }
+        return
+      } catch (error) {
+        this.surfaceError = error instanceof Error ? error.message : String(error)
+        this.removeDynamicSurface()
+      }
+    }
+    this.legacyMeshBuilds++
+    const next = this.createMesh(frame, depthMode, detail)
+    if (next) this.legacyPrimitivesCreated++
+    if (this.water) this.scene.primitives.remove(this.water)
+    this.water = next
+    if (next) this.scene.primitives.add(next)
+  }
+
   updateInundation(result: InundationResult): void {
     this.assertAlive()
+    this.removeDynamicSurface()
+    this.lastSurface = undefined
     this.visualWater = false
     this.points.show = false
     this.clearOverfall()
@@ -285,6 +402,8 @@ export class FloodRenderer {
   // Cell raster on the sampled ground. null cells are absent, not zero values.
   updateAnalysis(values: readonly (number | null)[], maximum?: number): void {
     this.assertAlive()
+    this.removeDynamicSurface()
+    this.lastSurface = undefined
     this.visualWater = false
     this.points.show = false
     this.clearOverfall()
@@ -383,8 +502,8 @@ export class FloodRenderer {
         const i = y * columns + x
         positions.set([(x + 0.5) * cellSize, (y + 0.5) * cellSize, heights[i]], i * 3)
         st.set([(x + 0.5) * cellSize, (y + 0.5) * cellSize], i * 2)
-        const dzdx = (heights[y * columns + Math.min(columns - 1, x + 1)] - heights[y * columns + Math.max(0, x - 1)]) / (2 * cellSize)
-        const dzdy = (heights[Math.min(rows - 1, y + 1) * columns + x] - heights[Math.max(0, y - 1) * columns + x]) / (2 * cellSize)
+        const dzdx = (heights[y * columns + Math.min(columns - 1, x + 1)] - heights[y * columns + Math.max(0, x - 1)]) / ((Math.min(columns - 1, x + 1)-Math.max(0,x-1))*cellSize)
+        const dzdy = (heights[Math.min(rows - 1, y + 1) * columns + x] - heights[Math.max(0, y - 1) * columns + x]) / ((Math.min(rows - 1, y + 1)-Math.max(0,y-1))*cellSize)
         const length = Math.hypot(dzdx, dzdy, 1)
         normals.set([-dzdx / length, -dzdy / length, 1 / length], i * 3)
         if (frame) color.set([surface?.depths[i] ?? frame.depth[i], frame.velocityEast?.[i] ?? 0, frame.velocityNorth?.[i] ?? 0, this.diagnosticMode === 'foam-source' ? this.foam.sources[i] : this.foam.coverage[i]], i * 4)
@@ -504,7 +623,7 @@ export class FloodRenderer {
     return new Cesium.Primitive({
       geometryInstances: new Cesium.GeometryInstance({ geometry, modelMatrix: this.modelMatrix }),
       appearance: new Cesium.Appearance({
-        vertexShaderSource: vertexShader,
+        vertexShaderSource: vertexShader(this.modelMatrix),
         fragmentShaderSource: shader,
         ...(water ? { material: this.waterMaterial } : {}),
         translucent,
@@ -519,6 +638,9 @@ export class FloodRenderer {
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    this.removeDynamicSurface()
+    this.lastSurface = undefined
+    if (this.scene.isDestroyed()) { this.waterMaterial.destroy(); return }
     for (const wall of this.walls) this.viewer.entities.remove(wall)
     if (this.terrain) this.viewer.scene.primitives.remove(this.terrain)
     if (this.water) this.viewer.scene.primitives.remove(this.water)

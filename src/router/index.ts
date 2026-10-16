@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
+  { path: '/flood-dynamic-lab', component: () => import('@/views/flood-dynamic-lab/index.vue'),
+    meta: { title: '泄洪传播与退水', standalone: true, category: 'effect', description: 'GPU 状态纹理与 Primitive 动态水面对照', image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href } },
   { path: '/water-real-terrain', component: () => import('@/views/water-real-terrain/index.vue'),
     meta: { title: '真实地形与湖岸', standalone: true, category: 'effect', description: '官方水域面、独立地形和影像状态',
       image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href } },

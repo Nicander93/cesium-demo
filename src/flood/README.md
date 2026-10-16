@@ -58,7 +58,7 @@ layer.resetVisuals()
 
 泡沫不穿过干地、无效单元或未漫顶的挡墙；溃口按当前有效墙顶处理。部分打开的单元仅近似通道连通，不解析单元内部的精细水流。覆盖率受 0–1 限制，不做物质守恒分析；它不属于导出的水动力成果，依赖播放经过的历史。缺少流速时不生成随流泡沫。首次载入、倒退、跨越超过 30 秒的成果跳转从空泡沫开始；主动 seek 无论前后方向都应调用 `resetVisuals()`。相同时间不会重复生成；干地立即清空。极端流速需要超过 512 个输送子步时清空效果，避免阻塞界面。
 
-此版本保留 CPU 浅水求解器、约 4 Hz 网格重建和已有溢流水幕；未增加 GPU 水动力求解或三维飞溅粒子。细节仅用于动态水面，淹没分析仍基于原始水深数据。Demo 提供“流场驱动细节”“随流泡沫”和强度滑块作同场景对比。“暂停时预览水流”默认开启；关闭该选项后，暂停推演也冻结全部水面动画。时间倍率只控制水动力推演进度。
+默认 Primitive 路径保留 CPU 浅水求解器、约 4 Hz 网格重建和已有溢流水幕；未增加 GPU 水动力求解或三维飞溅粒子。细节仅用于动态水面，淹没分析仍基于原始水深数据。Demo 提供“流场驱动细节”“随流泡沫”和强度滑块作同场景对比。“暂停时预览水流”默认开启；关闭该选项后，暂停推演也冻结全部水面动画。时间倍率只控制水动力推演进度。
 
 | API | 行为 |
 | --- | --- |
@@ -74,6 +74,10 @@ layer.resetVisuals()
 停止泄洪用 `setInflow({ discharge: 0 })`，再继续 `advance`；停止推进就是暂停。修改计算域或挡墙需要创建新实例。`sourceCells` 是 `row * columns + column` 的单元索引；省略时选取南端第 4 行最低点附近单元。
 
 `outlet: 'north' | 'south'` 选择下游开放边界，默认 north；south 时默认输入点改为北端第 4 行附近。其他三条边界封闭，出口只排水、不提供外部回流。西藏真实地形示例采用 south。地形与模型统一适配、跌水显示和取舍说明见 [真实地形与统一计算域](./real-terrain-domain.md)。
+
+## GPU 动态水面实验
+
+新增可选 `surfaceBackend: 'gpu'`，复用固定拓扑和两张状态纹理；`setSurfaceBackend()` 可切回默认 Primitive 对照，`getDiagnostics()` 返回实际后端、更新计数及降级原因。求解器、泡沫输运和岸边视觉延拓仍在 CPU。支持范围、私有 API、资源所有权与复验方法见 [GPU 动态水面](./cesium/DYNAMIC-SURFACE.md)。
 
 ## 使用 Cesium 原生地形
 
@@ -114,7 +118,7 @@ layer.update(frame, true) // 第二个参数：水深配色；第三个参数：
 
 ## 图层与资源所有权
 
-`CesiumFloodLayer` 提供 `update(frame, depthMode?, detail?)`、`updateDamBreach(state?)`、`updateAnalysis(values, maximum?)`、`updateInundation(result)`、`animate(seconds)`、`focus({ padding? })`、`focusBreach(state, outlet?)` 和 `destroy()`。更新帧必须与构造时网格一致；外部 JSON 先经过 `parseFloodDataset`。图层持有传入网格和墙的引用，创建后按只读数据使用，变更计算域则重建图层。
+`CesiumFloodLayer` 提供 `update(frame, depthMode?, detail?)`、`updateDamBreach(state?)`、`updateAnalysis(values, maximum?)`、`updateInundation(result)`、`animate(seconds)`、`focus({ padding? })`、`focusBreach(state, outlet?)` 和 `destroy()`。更新帧必须与构造时网格一致；外部 JSON 先经过 `parseFloodDataset`。图层复制网格；公开的 grid 和传入墙数据应按只读数据使用，变更计算域则重建图层。
 
 `analyzeFloodDataset` 可分析内置模型或外部模型的完整成果；`analyzeInundation` 可在给定水位下计算连通淹没范围。溃坝配置、两种分析的含义、回放与 API 示例见 [溃坝与淹没分析](./dam-inundation.md)。
 

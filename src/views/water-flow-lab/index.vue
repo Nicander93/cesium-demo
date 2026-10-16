@@ -187,6 +187,7 @@ onBeforeUnmount(() => {
     <aside class="flow-lab__panel">
       <RouterLink to="/">← 示例首页</RouterLink>
       <h1>水流渲染对照</h1>
+      <p><RouterLink to="/flood-dynamic-lab">泄洪传播与退水实验 →</RouterLink></p>
       <RouterLink to="/water-real-terrain">查看真实地形与湖岸 →</RouterLink>
       <p>合成数据 · 无需 Ion、影像或 DEM</p>
       <label>固定工况

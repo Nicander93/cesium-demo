@@ -1,6 +1,6 @@
 import type { Viewer } from 'cesium'
 import type { FloodGrid, FloodBarriers } from '../core'
-import { FloodRenderer } from './renderer'
+import { FloodRenderer, type FloodSurfaceBackend } from './renderer'
 import type { FloodVisualOptions } from './foam'
 
 export interface CesiumFloodLayerOptions {
@@ -10,8 +10,10 @@ export interface CesiumFloodLayerOptions {
   /** false uses the viewer's terrain instead of drawing the frozen ground mesh. */
   showGround?: boolean
   visuals?: FloodVisualOptions
+  /** Opt-in dynamic GPU surface; unsupported capabilities/structures fall back safely. */
+  surfaceBackend?: FloodSurfaceBackend
 }
 
 export function createCesiumFloodLayer(options: CesiumFloodLayerOptions): FloodRenderer {
-  return new FloodRenderer(options.viewer, options.grid, options.barriers, options.showGround ?? true, options.visuals)
+  return new FloodRenderer(options.viewer, options.grid, options.barriers, options.showGround ?? true, options.visuals, options.surfaceBackend)
 }
