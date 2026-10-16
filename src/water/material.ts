@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium'
 import { microfacetLighting } from './lighting'
+import { createWaveBands, spectralWaves } from './waves'
 import { protectWaterEnvironmentOwnership } from './environment'
 
 export interface WaterMaterialOptions {
@@ -14,8 +15,8 @@ export interface WaterMaterialOptions {
   origin?: Cesium.Cartesian3
   normalMapUrl?: string
   rippleSize?: number
-  /** Legacy remains the default. Metric multiscale waves require updateWaterMaterialView(). */
-  waveModel?: 'legacy' | 'multiscale'
+  /** Legacy remains the default. Metric wave models require updateWaterMaterialView(). */
+  waveModel?: 'legacy' | 'multiscale' | 'spectrum'
   /** Dominant wavelength in local ENU metres with WaterSurface. */
   waveLength?: number
   /** Compass bearing of wave travel, degrees clockwise from north. */
@@ -184,17 +185,34 @@ vec3 metricWaterNormal(vec2 p) {
   return normalize(vec3(-slope.x * waveStrength, 1.0, slope.y * waveStrength));
 }
 
+${spectralWaves}
+
 ${microfacetLighting}
 
 czm_material czm_getMaterial(czm_materialInput materialInput) {
   czm_material material = czm_getDefaultMaterial(materialInput);
   vec3 normal;
-  if (waveModel > 0.5 && metricWavesReady > 0.5) {
+  float waveVariance = 0.0;
+  if (waveModel > 1.5 && metricWavesReady > 0.5) {
+    vec2 p = (waveFromEye * vec4(-materialInput.positionToEyeEC,1.0)).xy;
+    vec2 dpdx = dFdx(p), dpdy = dFdy(p);
+    if (waveDiagnostic > 2.5) { p=waveProbe.xy; dpdx=vec2(waveProbe.z,0.0); dpdy=vec2(0.0,waveProbe.w); }
+    normal = spectralWaterNormal(p,dpdx,dpdy,waveVariance);
+  } else if (waveModel > 0.5 && metricWavesReady > 0.5) {
     vec2 localPosition = (waveFromEye * vec4(-materialInput.positionToEyeEC, 1.0)).xy;
     normal = metricWaterNormal(localPosition);
   } else {
     normal = waterNormal((materialInput.st * 2.0 - 1.0) * size);
     normal = normalize(vec3(normal.x * waveStrength, normal.y, normal.z * waveStrength));
+  }
+  float surfaceRoughness = waveModel > 1.5 ? waterFilteredRoughness(waveVariance) : roughness;
+  if (waveDiagnostic > 0.5) {
+    bool showRoughness = (waveDiagnostic > 1.5 && waveDiagnostic < 2.5) || waveDiagnostic > 3.5;
+    material.diffuse = vec3(0.0);
+    material.specular = 0.0;
+    material.emission = showRoughness ? vec3(surfaceRoughness) : vec3(normal.x*0.5+0.5,normal.z*0.5+0.5,normal.y);
+    material.alpha = 1.0;
+    return material;
   }
   // Keep fragment math near the camera; ECEF reconstruction quantizes close-up reflections.
   vec3 toEye = mat3(worldToLocal) * czm_inverseViewRotation * materialInput.positionToEyeEC;
@@ -215,7 +233,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   }
   float diffuse = max(dot(light, normal), 0.0) * 0.5;
   float exponent = sunShiny;
-  if (waveModel > 0.5) exponent = mix(220.0, 6.0, roughness * roughness);
+  if (waveModel > 0.5) exponent = mix(220.0, 6.0, surfaceRoughness * surfaceRoughness);
   float variance = dot(dFdx(normal), dFdx(normal)) + dot(dFdy(normal), dFdy(normal));
   float filteredExponent = exponent / (1.0 + exponent * variance * 4.0);
   float specular = pow(max(dot(reflect(-light, normal), eyeDirection), 0.0), filteredExponent) * 2.0 * specularIntensity * filteredExponent / exponent;
@@ -227,8 +245,8 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
   float inBounds = smoothstep(0.0, 0.02, min(edgeDistance.x, edgeDistance.y)) * step(0.0, projected.w);
   vec2 sampleUV = clamp(reflectionUV, 0.001, 0.999);
   vec3 reflectedSample = texture(reflexTexture, sampleUV).rgb;
-  if (waveModel > 0.5 && roughness > 0.01) {
-    float radius = roughness * roughness * 0.008;
+  if (waveModel > 0.5 && surfaceRoughness > 0.01) {
+    float radius = surfaceRoughness * surfaceRoughness * 0.008;
     reflectedSample = (reflectedSample * 2.0
       + texture(reflexTexture, clamp(sampleUV + vec2(radius,0.0),0.001,0.999)).rgb
       + texture(reflexTexture, clamp(sampleUV - vec2(radius,0.0),0.001,0.999)).rgb
@@ -250,7 +268,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
       vec3 bitangent = cross(nEC, tangent);
       hostLight = normalize(vec3(dot(czm_lightDirectionEC,tangent),dot(czm_lightDirectionEC,nEC),-dot(czm_lightDirectionEC,bitangent)));
     }
-    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds);
+    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds,surfaceRoughness);
   }
   material.alpha = waterAlpha;
   float foam = shoreFoam(-materialInput.positionToEyeEC);
@@ -288,6 +306,8 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         normalTexture: options.normalMapUrl ?? Cesium.Material.DefaultImageId,
         reflexTexture: Cesium.Material.DefaultImageId,
         time: 0,
+        ...createWaveBands({waveLength:options.waveLength ?? 48,direction:Cesium.Math.toRadians(options.waveDirection ?? 55),spread:Cesium.Math.toRadians(options.waveSpread ?? 35),irregularity:options.waveIrregularity ?? 0.35}),
+        waveDiagnostic: 0, waveProbe: new Cesium.Cartesian4(),
         microfacetEnabled: options.lightingModel === 'microfacet' ? 1 : 0,
         indexOfRefraction: options.indexOfRefraction ?? 1.333,
         environmentIntensity: options.environmentIntensity ?? 1,
@@ -306,7 +326,7 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         size: options.rippleSize ?? 50,
         waveStrength: options.waveStrength ?? 1,
         waterCompositeOutput: options.shadingMode === 'water-composite' ? 1 : 0,
-        waveModel: options.waveModel === 'multiscale' ? 1 : 0,
+        waveModel: options.waveModel === 'spectrum' ? 2 : options.waveModel === 'multiscale' ? 1 : 0,
         waveLength: options.waveLength ?? 48,
         waveDirection: Cesium.Math.toRadians(options.waveDirection ?? 55),
         waveSpread: Cesium.Math.toRadians(options.waveSpread ?? 35),
@@ -353,13 +373,16 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
 export function updateWaterMaterial(material: Cesium.Material, options: WaterMaterialOptions & { time?: number }): void {
   validateWaterMaterial(options)
   if (options.time !== undefined && !Number.isFinite(options.time)) throw new RangeError('time must be finite')
+  const u=material.uniforms
+  const bands = options.waveLength !== undefined || options.waveDirection !== undefined || options.waveSpread !== undefined || options.waveIrregularity !== undefined
+    ? createWaveBands({waveLength:options.waveLength ?? u.waveLength,direction:options.waveDirection === undefined ? u.waveDirection : Cesium.Math.toRadians(options.waveDirection),spread:options.waveSpread === undefined ? u.waveSpread : Cesium.Math.toRadians(options.waveSpread),irregularity:options.waveIrregularity ?? u.waveIrregularity}) : undefined
   const names = { indexOfRefraction: 'indexOfRefraction', environmentIntensity: 'environmentIntensity', shoreFadeDistance: 'shoreFadeDistance', waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
   if (options.lightingModel !== undefined) material.uniforms.microfacetEnabled = options.lightingModel === 'microfacet' ? 1 : 0
   if (options.shadingMode !== undefined) material.uniforms.waterCompositeOutput = options.shadingMode === 'water-composite' ? 1 : 0
-  if (options.waveModel !== undefined) material.uniforms.waveModel = options.waveModel === 'multiscale' ? 1 : 0
+  if (options.waveModel !== undefined) material.uniforms.waveModel = options.waveModel === 'spectrum' ? 2 : options.waveModel === 'multiscale' ? 1 : 0
   if (options.waveSpread !== undefined) material.uniforms.waveSpread = Cesium.Math.toRadians(options.waveSpread)
   if (options.waveDirection !== undefined) material.uniforms.waveDirection = Cesium.Math.toRadians(options.waveDirection)
   if (options.environmentColor !== undefined) material.uniforms.environmentColor = Cesium.Color.clone(options.environmentColor)
@@ -368,6 +391,7 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
   if (options.waterColor !== undefined) material.uniforms.waterColor = Cesium.Color.clone(options.waterColor)
   if (options.lightDirection !== undefined) material.uniforms.lightDirection = Cesium.Cartesian3.clone(options.lightDirection)
   if (options.foam !== undefined) material.uniforms.foamEnabled = options.foam ? 1 : 0
+  if (bands) Object.assign(u,bands)
 }
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
@@ -376,7 +400,7 @@ function validateWaterMaterial(options: WaterMaterialOptions): void {
   if(options.environmentIntensity !== undefined && (!Number.isFinite(options.environmentIntensity)||options.environmentIntensity<0||options.environmentIntensity>4)) throw new RangeError('environmentIntensity must be in [0,4]')
   if (options.shoreFadeDistance !== undefined && (!Number.isFinite(options.shoreFadeDistance) || options.shoreFadeDistance < 0 || options.shoreFadeDistance > 64)) throw new RangeError('shoreFadeDistance must be metres in [0,64]')
   if (options.shadingMode !== undefined && options.shadingMode !== 'legacy-phong' && options.shadingMode !== 'water-composite') throw new RangeError('Unknown water shading mode')
-  if (options.waveModel !== undefined && options.waveModel !== 'legacy' && options.waveModel !== 'multiscale') throw new RangeError('Unknown wave model')
+  if (options.waveModel !== undefined && options.waveModel !== 'legacy' && options.waveModel !== 'multiscale' && options.waveModel !== 'spectrum') throw new RangeError('Unknown wave model')
   if (options.waveLength !== undefined && (!Number.isFinite(options.waveLength) || options.waveLength <= 0)) throw new RangeError('waveLength must be positive metres')
   if (options.waveSpread !== undefined && (!Number.isFinite(options.waveSpread) || options.waveSpread < 0 || options.waveSpread > 90)) throw new RangeError('waveSpread must be degrees in [0, 90]')
   if (options.waveDirection !== undefined && !Number.isFinite(options.waveDirection)) throw new RangeError('waveDirection must be finite degrees')

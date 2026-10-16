@@ -234,6 +234,12 @@ const opticsLab = {
     viewer.camera.lookAt(calibrationCenter(),new Cesium.HeadingPitchRange(pose.heading,pose.pitch,pose.range))
     viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
   },
+  getWaveBands: () => water ? Array.from({length:5},(_,band)=>Array.from(water!.material.uniforms['waveBand'+band]) as number[]) : [],
+  setWaveProbe: (probe:{mode:number;x?:number;y?:number;footprint?:number}) => {
+    if(!water) return
+    water.material.uniforms.waveDiagnostic=probe.mode
+    water.material.uniforms.waveProbe=new Cesium.Cartesian4(probe.x ?? 0,probe.y ?? 0,probe.footprint ?? 0,probe.footprint ?? 0)
+  },
   setHdr: (enabled:boolean) => { if(viewer) viewer.scene.highDynamicRange=enabled },
   setDebug: (value:number) => { if(water) water.material.uniforms.lightingDebug=value },
   setLight: (light:{direction:[number,number,number];intensity:number}) => {

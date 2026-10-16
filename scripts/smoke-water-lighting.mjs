@@ -179,14 +179,28 @@ try {
   )
   const ldrBefore = await state('__waterOptics')
   await optics('setHdr', true)
-  await page.waitForTimeout(500)
+  await page.waitForFunction(
+    () => {
+      const d = window.__waterOptics.getState().diagnostics
+      return d.environmentAvailable && d.reflectionAvailable
+    },
+    null,
+    { timeout: 30000 },
+  )
   const hdrState = await state('__waterOptics')
   assert.equal(hdrState.hdr, true, 'Water capture must restore host HDR state')
   assert.equal(hdrState.diagnostics.environmentAvailable, true)
   assert.equal(hdrState.diagnostics.reflectionAvailable, true)
   await page.screenshot({ path: path.join(output, 'calibration-hdr.png') })
   await optics('setHdr', false)
-  await page.waitForTimeout(300)
+  await page.waitForFunction(
+    () => {
+      const d = window.__waterOptics.getState().diagnostics
+      return d.environmentAvailable && d.reflectionAvailable
+    },
+    null,
+    { timeout: 30000 },
+  )
   assert.equal((await state('__waterOptics')).hdr, ldrBefore.hdr)
   checks.push({
     check:

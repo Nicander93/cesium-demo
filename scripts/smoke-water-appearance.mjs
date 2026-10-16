@@ -123,12 +123,16 @@ try {
   )
   const initial = await state()
   assert.equal(initial.error, '')
-  assert.equal(initial.options.waveModel, 'multiscale')
+  assert.equal(initial.options.waveModel, 'spectrum')
   assert.equal(initial.lightingTime, '2026-10-14T10:00:00Z')
   assert.equal(initial.options.reflectGlobe, true)
   const geometryCount = initial.diagnostics.geometryCreated
   for (const camera of ['near', 'overview', 'far']) {
     await control('focus', camera)
+    // Keep the former 1400 m framing for the projected-polygon parameter ROI.
+    // The new 350 m close-up is verified separately by smoke:water-waves.
+    if (camera === 'near')
+      await control('orbit', { heading: 4.7, pitch: -0.9, range: 1400 })
     // Load the main camera independently of the reflected globe's competing LOD requests.
     await control('setOptions', { reflection: false })
     await page.waitForFunction(
@@ -184,6 +188,7 @@ try {
     })
   }
   await control('focus', 'near')
+  await control('orbit', { heading: 4.7, pitch: -0.9, range: 1400 })
   await freezeAt()
   const clip = await page.evaluate(() => window.__realWaterLab.getWaterBounds())
   await control('setOptions', { waveStrength: 0, detailStrength: 0 })

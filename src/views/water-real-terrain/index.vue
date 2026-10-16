@@ -42,16 +42,16 @@ function focus(view: 'near' | 'overview' | 'far' | boolean = 'overview'): void {
   cameraView.value = kind
   if (!viewer) return
   const target = Cesium.Cartesian3.fromDegrees(
-    kind === 'near' ? 7.895 : 7.891,
-    kind === 'near' ? 46.694 : 46.695,
+    kind === 'near' || kind === 'far' ? 7.895 : 7.891,
+    kind === 'near' || kind === 'far' ? 46.694 : 46.695,
     height.value ?? 615,
   )
   viewer.camera.lookAt(
     target,
     new Cesium.HeadingPitchRange(
-      kind === 'near' ? 4.7 : 2.7,
-      kind === 'near' ? -0.9 : -0.75,
-      kind === 'near' ? 1400 : kind === 'far' ? 6000 : 3100,
+      kind === 'near' || kind === 'far' ? 4.7 : 2.7,
+      kind === 'near' ? -0.3 : kind === 'far' ? -0.7 : -0.75,
+      kind === 'near' ? 350 : kind === 'far' ? 6000 : 3100,
     ),
   )
   viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
@@ -271,6 +271,12 @@ const lab = {
     viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(7.895,46.694,height.value ?? 615),new Cesium.HeadingPitchRange(pose.heading,pose.pitch,pose.range))
     viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
   },
+  getWaveBands: () => water ? Array.from({length:5},(_,band)=>Array.from(water!.material.uniforms['waveBand'+band]) as number[]) : [],
+  setWaveProbe: (probe:{mode:number;x?:number;y?:number;footprint?:number}) => {
+    if(!water) return
+    water.material.uniforms.waveDiagnostic=probe.mode
+    water.material.uniforms.waveProbe=new Cesium.Cartesian4(probe.x ?? 0,probe.y ?? 0,probe.footprint ?? 0,probe.footprint ?? 0)
+  },
   setDebug: (value:number) => { if(water) water.material.uniforms.lightingDebug=value },
   load,
   setMode: (value: 'imagery' | 'current' | 'enhanced') => {
@@ -427,6 +433,8 @@ onBeforeUnmount(() => {
       </fieldset>
       <fieldset>
         <legend>波纹与动画</legend>
+        <label for="water-wave-model">波纹算法</label>
+        <select id="water-wave-model" v-model="config.waveModel" @change="applyOptions"><option value="legacy">原始贴图</option><option value="multiscale">原多尺度波纹</option><option value="spectrum">分散波列与连续过滤</option></select>
         <label for="water-waveLength"
           >主波长 <output>{{ config.waveLength }} m</output
           ><input

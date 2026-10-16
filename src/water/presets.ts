@@ -37,7 +37,7 @@ export function createWaterPreset(
     throw new RangeError('Unknown water preset')
   const windy = name === 'windy-lake'
   return {
-    waveModel: 'multiscale',
+    waveModel: 'spectrum',
     waveLength: windy ? 28 : 48,
     waveDirection: 55,
     waveSpread: windy ? 55 : 35,

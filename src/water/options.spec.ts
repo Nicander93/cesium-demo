@@ -144,6 +144,23 @@ describe('tunable reusable water', () => {
     expect(options.roughness).toBe(0.8)
     water.destroy()
   })
+  it('updates spectrum coefficients atomically without replacing geometry or visual time', () => {
+    const {scene,water}=fixture(),geometry=scene.primitives.get(0)
+    water.setOptions({waveModel:'spectrum',waveSpeed:0})
+    water.setVisualTime(15)
+    const before=[...water.material.uniforms.waveBand0]
+    expect(()=>water.setOptions({waveLength:NaN,waterAlpha:0.1})).toThrow()
+    expect(()=>water.setOptions({waveLength:Number.MIN_VALUE,waterAlpha:0.1})).toThrow(RangeError)
+    expect(water.material.uniforms.waveBand0).toEqual(before)
+    expect(water.waterAlpha).toBe(0.9)
+    water.setOptions({waveLength:96})
+    expect(water.getOptions().waveModel).toBe('spectrum')
+    expect(water.material.uniforms.waveBand0[0]).toBeCloseTo(before[0]/2,10)
+    water.setOptions({waveSpread:0,detailStrength:0})
+    expect(water.material.uniforms.time).toBe(15)
+    expect(scene.primitives.get(0)).toBe(geometry)
+    water.destroy()
+  })
   it('returns detached configurations and independently editable preset colors', () => {
     const { water } = fixture(),
       snapshot = water.getOptions()
@@ -152,6 +169,7 @@ describe('tunable reusable water', () => {
     expect(water.getOptions().waterColor?.red).not.toBe(0.9)
     const first = createWaterPreset(),
       second = createWaterPreset()
+    expect(first.waveModel).toBe('spectrum')
     first.waterColor.green = 0.9
     expect(second.waterColor.green).not.toBe(0.9)
     expect(createWaterPreset('windy-lake').waveStrength).toBeGreaterThan(

@@ -41,10 +41,10 @@ vec3 waterDirect(vec3 N, vec3 V, vec3 L, float alpha, float f0) {
   // BRDF * NdotL; incident light comes from the host, never from reflected scene color.
   return czm_lightColorHdr * (D*visibility*nl*waterFresnel(f0,vh)) * specularIntensity;
 }
-vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage) {
+vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage, float surfaceRoughness) {
   float nv=clamp(dot(N,V),0.0,1.0);
   float f0=pow((indexOfRefraction-1.0)/(indexOfRefraction+1.0),2.0);
-  float alpha=max(roughness*roughness,0.0025);
+  float alpha=max(surfaceRoughness*surfaceRoughness,0.0025);
   vec3 direct=waterDirect(N,V,localLight,alpha,f0);
   vec3 R=reflect(-V,N);
   vec3 sky=waterLinear(environmentColor.rgb);
@@ -63,7 +63,7 @@ vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, floa
   vec3 reflected=mix(sky,waterLinear(sceneReflection),coverage);
   float envWeight=waterFresnel(f0,nv);
   if (waterBrdfReady>0.5) {
-    vec2 dfg=texture(waterBrdfLut,vec2(max(nv,0.0001),roughness)).rg;
+    vec2 dfg=texture(waterBrdfLut,vec2(max(nv,0.0001),surfaceRoughness)).rg;
     envWeight=clamp(f0*dfg.x+dfg.y,0.0,1.0);
   }
   if (indexOfRefraction <= 1.0) envWeight=0.0;
