@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, reactive } from 'vue'
 import * as Cesium from 'cesium'
 import {
   createCesiumFloodLayer,
+  getFloodAppearancePreset,
+  type FloodAppearanceOptions,
   sampleTerrainGrid,
   type CesiumFloodLayer,
   type FloodSurfaceBackend,
@@ -16,6 +18,17 @@ import { swissTerrainUrl, swissImageryUrl } from '../../water/terrain-water'
 import { analyzeInundation } from '../../flood/core/analysis'
 import type { FloodFrame } from '../../flood/core/dataset'
 
+const appearance = reactive(getFloodAppearancePreset('muddy'))
+const foamIntensity = ref(0.75),
+  foamLifetime = ref(6)
+function setAppearance(value: FloodAppearanceOptions = appearance): void {
+  layer?.setAppearanceOptions(value)
+  Object.assign(appearance, layer?.getAppearanceOptions() ?? value)
+  revision.value++
+}
+function restoreAppearance(): void {
+  setAppearance(getFloodAppearancePreset('muddy'))
+}
 const container = ref<HTMLElement>()
 const environment = ref<'synthetic' | 'real'>(
   new URLSearchParams(location.search).get('environment') === 'real'
@@ -63,7 +76,8 @@ function paint(): void {
     foam: foam.value,
     particles: particles.value,
     surfaceStyle: 'flow',
-    foamLifetime: 6,
+    foamLifetime: foamLifetime.value,
+    foamIntensity: foamIntensity.value,
   })
   layer.setDiagnosticMode(diagnostic.value)
   const renderFrame = frameMode.value === 'level' ? createLevelFrame() : frame
@@ -248,6 +262,7 @@ function createLayer(): void {
     surfaceBackend: backend.value,
     showGround: environment.value === 'synthetic',
     visuals: { particles: false },
+    appearance: { ...appearance },
     lighting: { model: lightingModel.value, roughness: roughness.value },
   })
   paint()
@@ -432,6 +447,7 @@ function state() {
     terrainStatus: terrainStatus.value,
     imageryStatus: imageryStatus.value,
     lighting: layer?.getLightingDiagnostics(),
+    appearance: layer?.getAppearanceOptions(),
     tilesLoaded: viewer?.scene.globe.tilesLoaded,
     time: time.value,
     playing: playing.value,
@@ -445,6 +461,8 @@ function state() {
 const lab = {
   getTestContext: () => ({ viewer, layer, grid: experiment.grid }),
   getState: state,
+  setAppearance,
+  restoreAppearance,
   loadEnvironment,
   setFrameMode: (value: 'simulation' | 'level') => {
     frameMode.value = value
@@ -640,6 +658,90 @@ onBeforeUnmount(() => {
           {{ t }} s
         </button>
       </div>
+      <details open>
+        <summary>水色与外观</summary>
+        <p>默认黄褐浑水；仅调整外观，不改变水深、流速和推演时间。</p>
+        <label
+          >浅水颜色
+          <input
+            v-model="appearance.shallowColor"
+            type="color"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >深水颜色
+          <input
+            v-model="appearance.deepColor"
+            type="color"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >泡沫颜色
+          <input
+            v-model="appearance.foamColor"
+            type="color"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >整体不透明度 {{ appearance.opacity.toFixed(2)
+          }}<input
+            v-model.number="appearance.opacity"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >色深过渡尺度 {{ appearance.colorDepth.toFixed(2) }} m<input
+            v-model.number="appearance.colorDepth"
+            type="range"
+            min="0.05"
+            max="10"
+            step="0.05"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >细波强度 {{ appearance.waveStrength.toFixed(2)
+          }}<input
+            v-model.number="appearance.waveStrength"
+            type="range"
+            min="0"
+            max="3"
+            step="0.05"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >流动细节强度 {{ appearance.flowStrength.toFixed(2)
+          }}<input
+            v-model.number="appearance.flowStrength"
+            type="range"
+            min="0"
+            max="3"
+            step="0.05"
+            @input="setAppearance()"
+        /></label>
+        <label
+          >泡沫强度 {{ foamIntensity.toFixed(2)
+          }}<input
+            v-model.number="foamIntensity"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            @input="paint"
+        /></label>
+        <label
+          >泡沫消散时间 {{ foamLifetime }} s<input
+            v-model.number="foamLifetime"
+            type="range"
+            min="1"
+            max="120"
+            step="1"
+            @input="paint"
+        /></label>
+        <button @click="restoreAppearance">恢复黄褐浑水外观</button>
+      </details>
       <label
         ><input v-model="depthMode" type="checkbox" @change="paint" />
         水深诊断</label

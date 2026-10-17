@@ -11,6 +11,7 @@ import { FloodFoam, resolveFloodVisualOptions, type FloodVisualOptions } from '.
 import { FlowParticles } from './flow-particles'
 import { createFloodSurfaceState } from './surface-state'
 import { createFloodMaterial, resolveFloodLighting, type FloodLightingOptions } from './lighting'
+import { resolveFloodAppearance, type FloodAppearanceOptions } from './appearance'
 import { WaterEnvironment } from '../../water/environment'
 
 function vertexShader(modelMatrix: Cesium.Matrix4): string {
@@ -78,13 +79,13 @@ void main() {
   float speed = length(velocity);
   vec3 view = normalize(-v_positionEC);
   float fresnel = pow(1.0 - abs(dot(view, n)), 4.0);
-  vec3 deep = mix(vec3(0.07, 0.48, 0.55), vec3(0.025, 0.15, 0.27), clamp(h / 4.0, 0.0, 1.0));
+  vec3 deep = floodBodyColor(h);
   vec3 rgb = mix(deep, vec3(0.62, 0.78, 0.82), fresnel * 0.7);
   float spec = pow(max(dot(reflect(-normalize(czm_lightDirectionEC), n), view), 0.0), 70.0);
   float streak = pow(max(0.0, wave), 10.0) * clamp(speed / 3.0, 0.0, 0.6);
-  rgb += vec3(0.04 * wave + 0.3 * spec + 0.2 * streak);
+  rgb += vec3(0.04 * wave * floodWaveStrength() + 0.3 * spec + 0.2 * streak * floodFlowStrength());
   ${depthMode ? 'rgb = mix(vec3(0.22, 0.78, 0.9), vec3(0.75, 0.22, 0.12), clamp(h / 5.0, 0.0, 1.0));' : ''}
-  out_FragColor = vec4(rgb, 1.0);
+  out_FragColor = vec4(rgb, ${depthMode ? '1.0' : 'floodOpacity() * shoreCoverage'});
   ` : `
   float light = 0.45 + 0.55 * max(0.0, dot(n, normalize(czm_lightDirectionEC)));
   float contour = smoothstep(0.94, 1.0, cos(v_state.r * 3.14159));
@@ -142,13 +143,15 @@ export class FloodRenderer {
   private visualWater = false
   private visualOptions = resolveFloodVisualOptions({})
   private readonly waterMaterial = createFloodMaterial()
+  private appearanceOptions = resolveFloodAppearance({})
   private lightingOptions = resolveFloodLighting({})
   private environment: WaterEnvironment | undefined
   private environmentError: string | null = null
 
-  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}, private surfaceBackend: FloodSurfaceBackend = 'primitive', lighting: FloodLightingOptions = {}) {
+  constructor(private readonly viewer: Cesium.Viewer, readonly grid: FloodGrid, private readonly barriers?: FloodBarriers, showGround = true, visuals: FloodVisualOptions = {}, private surfaceBackend: FloodSurfaceBackend = 'primitive', lighting: FloodLightingOptions = {}, appearance: FloodAppearanceOptions = {}) {
     if (surfaceBackend !== 'primitive' && surfaceBackend !== 'gpu') throw new RangeError('未知洪水水面后端')
     const validLighting = resolveFloodLighting(lighting)
+    const validAppearance = resolveFloodAppearance(appearance)
     const count = grid.columns * grid.rows
     if (!Number.isInteger(count) || count < 4 || count > 20000) throw new RangeError('渲染网格大小无效')
     const valid = parseFloodDataset(createDataset(grid, [{ time: 0, depth: new Array<number>(count).fill(0) }])).grid
@@ -167,6 +170,7 @@ export class FloodRenderer {
     viewer.scene.primitives.add(this.points)
     this.setVisualOptions(visuals)
     this.setLightingOptions(validLighting)
+    this.setAppearanceOptions(validAppearance)
     if (showGround) {
       this.terrain = this.createMesh(undefined, false)
       viewer.scene.primitives.add(this.terrain)
@@ -206,7 +210,7 @@ export class FloodRenderer {
     this.waterMaterial.uniforms.visualTime = seconds
     const dt = this.lastVisualTime === undefined ? 0 : Math.max(0, seconds - this.lastVisualTime)
     this.lastVisualTime = seconds
-    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam && this.visualOptions.particles
+    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.particles
     if (!this.points.show) return
     this.flowParticles.advance(dt)
     this.flowParticles.particles.forEach((particle, i) => {
@@ -214,7 +218,7 @@ export class FloodRenderer {
       item.point.show = particle.opacity > 0.01
       if (!item.point.show) return
       item.position.x = particle.x; item.position.y = particle.y; item.position.z = particle.z
-      item.color.alpha = particle.opacity * this.visualOptions.foamIntensity * 0.65
+      item.color.alpha = particle.opacity * 0.65
       item.point.position = item.position
       item.point.color = item.color
     })
@@ -228,6 +232,26 @@ export class FloodRenderer {
     this.waterMaterial.uniforms.surfaceStyle = next.surfaceStyle === 'flow' ? 1 : 0
     this.waterMaterial.uniforms.flowEnabled = next.flow ? 1 : 0
     this.waterMaterial.uniforms.foamOpacity = next.foam ? next.foamIntensity : 0
+  }
+
+  /** Updates material uniforms only; input frames and GPU state textures are untouched. */
+  setAppearanceOptions(options: FloodAppearanceOptions): void {
+    this.assertAlive()
+    const next = resolveFloodAppearance(options, this.appearanceOptions)
+    Object.assign(this.waterMaterial.uniforms, {
+      shallowColor: Cesium.Color.fromCssColorString(next.shallowColor),
+      deepColor: Cesium.Color.fromCssColorString(next.deepColor),
+      foamColor: Cesium.Color.fromCssColorString(next.foamColor),
+      colorDepth: next.colorDepth, surfaceOpacity: next.opacity,
+      waveStrength: next.waveStrength, flowStrength: next.flowStrength,
+    })
+    this.appearanceOptions = next
+    this.scene.requestRender()
+  }
+
+  getAppearanceOptions(): Required<FloodAppearanceOptions> {
+    this.assertAlive()
+    return { ...this.appearanceOptions }
   }
 
   setLightingOptions(options: FloodLightingOptions): void {
@@ -299,7 +323,7 @@ export class FloodRenderer {
     if (this.visualOptions.foam) this.foam.update(frame, this.visualOptions.foamLifetime, this.breachState, this.visualOptions.surfaceStyle)
     this.flowParticles.setFrame(frame, this.breachState)
     this.visualWater = detail && !depthMode && this.diagnosticMode === 'water'
-    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.foam && this.visualOptions.particles
+    this.points.show = this.visualWater && this.visualOptions.flow && this.visualOptions.particles
     this.updateWaterSurface(frame, depthMode, detail)
     this.clearOverfall()
     this.overfall = this.createOverfall(frame, depthMode)

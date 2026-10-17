@@ -135,3 +135,5 @@ layer.update(frame, true) // 第二个参数：水深配色；第三个参数：
 水面材质与计算水量独立。当前材质是程序波浪、流速细节和近似天空反射；已增加由墙顶和已知流速控制的越顶水片与跌水示意，尚无真实场景反射、折射或三维水花。网格不能表达小沟渠和复杂桥洞；工程预测需要更完整模型及基准校准。`composeFloodDomain` 可合并显式实心轮廓及墙线，3D Tiles 自动几何提取仍是 [后续设计](../views/flood-valley/3dtiles-hydraulics-design.md)。
 
 验证命令：`node node_modules/vitest/vitest.mjs run src/flood`、`node node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.flood.json`、`npm run build`。
+
+洪水颜色、透明度与波纹原始参数见 [外观 API](cesium/APPEARANCE.md)。

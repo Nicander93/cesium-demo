@@ -63,13 +63,13 @@ export const detailedWaterBody = `
   vec2 pB = v_st - drift * phaseB;
   // Spatial wave coordinates stay fixed. Rotating a world position by a varying
   // velocity basis produces angular contours at triangle boundaries.
-  vec2 slope = rippleSlope(v_st, time * 0.65);
+  vec2 slope = rippleSlope(v_st, time * 0.65) * floodWaveStrength();
   float flowStyle = floodSurfaceStyle();
   if (flowStyle > 0.5) {
     // Each phase resets only when its weight is zero. The experiment limits drift to 1.9 seconds to reduce local shear stretching.
     vec2 flowing = mix(advectedSlope(pA), advectedSlope(pB), blend);
     float roughness = mix(0.1, 0.65, smoothstep(0.15, 3.5, speed));
-    slope = slope * 0.8 + flowing * roughness * smoothstep(0.02, 0.25, speed);
+    slope = slope * 0.8 + flowing * roughness * smoothstep(0.02, 0.25, speed) * floodFlowStrength();
   }
   float shoreDamping = smoothstep(0.02, 0.6, h);
   vec3 east = normalize(v_eastEC);
@@ -81,10 +81,7 @@ export const detailedWaterBody = `
   float facing = clamp(dot(n, view), 0.0, 1.0);
   float fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
   vec3 reflected = reflectedSky(reflect(-view, n), east, north, up);
-  vec3 absorption = exp(-vec3(0.42, 0.18, 0.12) * h);
-  vec3 shallow = vec3(0.24, 0.42, 0.36);
-  vec3 deep = vec3(0.035, 0.16, 0.19);
-  vec3 body = deep + (shallow - deep) * absorption;
+  vec3 body = floodBodyColor(h);
   vec3 rgb = mix(body, reflected, fresnel);
   // Approximate specular antialiasing: broaden and reduce unresolved highlights.
   float normalVariance = dot(dFdx(n), dFdx(n)) + dot(dFdy(n), dFdy(n));
@@ -114,11 +111,11 @@ export const detailedWaterBody = `
   if (floodLightingModel() > 0.5) {
     // Foam remains a visual proxy; no unlit white overlay in the microfacet branch.
     vec3 foamLight = max(czm_lightColorHdr,vec3(0.0)) * max(dot(n,light),0.0) / 3.14159265359;
-    rgb = mix(rgb, vec3(0.64,0.74,0.68) * foamLight, foam);
+    rgb = mix(rgb, floodLinearFoamColor() * foamLight, foam);
 #ifndef HDR
     rgb = floodDisplayColor(rgb);
 #endif
-  } else rgb = mix(rgb, vec3(0.82, 0.88, 0.83), foam);
+  } else rgb = mix(rgb, floodFoamColor(), foam);
   float alpha = mix(0.4, 0.98, smoothstep(0.02, 1.8, h));
-  alpha = max(alpha, foam * 0.95);
+  alpha = max(alpha, foam * 0.95) * floodOpacity();
 `

@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium'
+import { getFloodAppearancePreset } from './appearance'
 import { microfacetLighting } from '../../water/lighting'
 import { protectWaterEnvironmentOwnership } from '../../water/environment'
 
@@ -39,7 +40,15 @@ export function resolveFloodLighting(
 
 /** Shared water BRDF and environment slots; the layer owns lifecycle, the host owns lighting. */
 export function createFloodMaterial(): Cesium.Material {
+  const appearance = getFloodAppearancePreset('clear')
   const uniforms: Record<string, unknown> = {
+    shallowColor: Cesium.Color.fromCssColorString(appearance.shallowColor),
+    deepColor: Cesium.Color.fromCssColorString(appearance.deepColor),
+    foamColor: Cesium.Color.fromCssColorString(appearance.foamColor),
+    colorDepth: appearance.colorDepth,
+    surfaceOpacity: appearance.opacity,
+    waveStrength: appearance.waveStrength,
+    flowStrength: appearance.flowStrength,
     visualTime: 0,
     flowEnabled: 1,
     foamOpacity: 0.75,
@@ -68,6 +77,15 @@ export function createFloodMaterial(): Cesium.Material {
         source:
           microfacetLighting +
           `
+      vec3 floodBodyColor(float depth) {
+        // Preserve the original channel ratios; this is an artistic depth-color proxy.
+        return mix(deepColor.rgb, shallowColor.rgb, exp(-vec3(3.5,1.5,1.0)*depth/colorDepth));
+      }
+      vec3 floodFoamColor() { return foamColor.rgb; }
+      vec3 floodLinearFoamColor() { return waterLinear(foamColor.rgb); }
+      float floodOpacity() { return surfaceOpacity; }
+      float floodWaveStrength() { return waveStrength; }
+      float floodFlowStrength() { return flowStrength; }
       float floodVisualTime() { return visualTime; }
       float floodFlowEnabled() { return flowEnabled; }
       float floodFoamOpacity() { return foamOpacity; }
