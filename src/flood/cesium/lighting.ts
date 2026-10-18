@@ -47,6 +47,8 @@ export function createFloodMaterial(): Cesium.Material {
     foamColor: Cesium.Color.fromCssColorString(appearance.foamColor),
     colorDepth: appearance.colorDepth,
     surfaceOpacity: appearance.opacity,
+    opacityDepth: appearance.opacityDepth,
+    bodyScattering: appearance.bodyScattering,
     waveStrength: appearance.waveStrength,
     flowStrength: appearance.flowStrength,
     visualTime: 0,
@@ -78,12 +80,14 @@ export function createFloodMaterial(): Cesium.Material {
           microfacetLighting +
           `
       vec3 floodBodyColor(float depth) {
-        // Preserve the original channel ratios; this is an artistic depth-color proxy.
-        return mix(deepColor.rgb, shallowColor.rgb, exp(-vec3(3.5,1.5,1.0)*depth/colorDepth));
+        // Interpolate body colors in linear space with one depth weight.
+        // Clear-water RGB extinction ratios must not be imposed on arbitrary sediment colors.
+        return waterDisplay(mix(waterLinear(deepColor.rgb),waterLinear(shallowColor.rgb),exp(-depth/colorDepth)));
       }
       vec3 floodFoamColor() { return foamColor.rgb; }
       vec3 floodLinearFoamColor() { return waterLinear(foamColor.rgb); }
       float floodOpacity() { return surfaceOpacity; }
+      float floodDepthOpacity(float depth) { return 1.0-exp(-max(depth,0.0)/opacityDepth); }
       float floodWaveStrength() { return waveStrength; }
       float floodFlowStrength() { return flowStrength; }
       float floodVisualTime() { return visualTime; }
@@ -93,7 +97,13 @@ export function createFloodMaterial(): Cesium.Material {
       float floodSurfaceStyle() { return surfaceStyle; }
       float floodLightingModel() { return microfacetEnabled; }
       vec3 floodSurfaceLighting(vec3 N, vec3 V, vec3 L, vec3 body) {
-        return waterMicrofacet(N,V,L,vec3(0.0),0.0,roughness,body);
+        // Bounded Lambertian body proxy for turbid water, alongside the existing sky-lit body.
+        // The Fresnel complement reserves energy for surface reflection. This is not a volume integrator.
+        float f0=pow((indexOfRefraction-1.0)/(indexOfRefraction+1.0),2.0);
+        float transmitted=1.0-waterFresnel(f0,max(dot(N,V),0.0));
+        vec3 bodyLight=waterLinear(body)*max(czm_lightColorHdr,vec3(0.0))
+          *max(dot(N,L),0.0)*transmitted*bodyScattering/3.14159265359;
+        return waterMicrofacet(N,V,L,vec3(0.0),0.0,roughness,body)+bodyLight;
       }
       vec3 floodDisplayColor(vec3 rgb) { return waterDisplay(rgb); }
       czm_material czm_getMaterial(czm_materialInput inputValue) { return czm_getDefaultMaterial(inputValue); }

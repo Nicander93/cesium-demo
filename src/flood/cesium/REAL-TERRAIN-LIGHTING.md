@@ -72,3 +72,5 @@ layer.destroy()
 - 110项水面/洪水单测、flood类型检查、生产构建通过。原动态洪水GPU验收、基础水面27个GGX数值探针和32个角度的光照回归通过。
 
 截图与报告：`test-results/flood-dynamic/real-lighting/`（本地产物，不提交）。该验证不等于最终视觉质量、工程水动力精度、跨GPU性能或真实地形倒影验收。
+
+后续浑水体色增加可选的直接日光 Lambert 代理（appearance.bodyScattering）和深度透光参数，见 [外观 API](APPEARANCE.md)。上面的纯镜面直接光验证会显式关闭体色日光项，再单独验证体色响应。它不等价于完整体积散射或地形阴影接收。

@@ -8,6 +8,10 @@ export interface FloodAppearanceOptions {
   colorDepth?: number
   /** Overall water opacity multiplier, including foam, 0–1. */
   opacity?: number
+  /** Vertical water depth at 1-exp(-1) coverage, in meters; a transmission proxy. */
+  opacityDepth?: number
+  /** Direct-light diffuse body proxy weight, 0–1; not a sediment concentration. */
+  bodyScattering?: number
   /** Fine wave normal strength, 0–3. Does not displace the computed water surface. */
   waveStrength?: number
   /** Velocity-driven normal detail strength, 0–3. Does not scale supplied velocity. */
@@ -24,6 +28,8 @@ const presets: Record<
     foamColor: '#d1e0d4',
     colorDepth: 1 / 0.12,
     opacity: 1,
+    opacityDepth: 0.5,
+    bodyScattering: 0,
     waveStrength: 1,
     flowStrength: 1,
   }),
@@ -33,6 +39,8 @@ const presets: Record<
     foamColor: '#d9d4bf',
     colorDepth: 0.7,
     opacity: 1,
+    opacityDepth: 0.04,
+    bodyScattering: 1,
     waveStrength: 0.65,
     flowStrength: 0.7,
   }),
@@ -63,6 +71,18 @@ export function resolveFloodAppearance(
     throw new RangeError('colorDepth must be 0.01–100 m')
   if (!Number.isFinite(next.opacity) || next.opacity < 0 || next.opacity > 1)
     throw new RangeError('opacity must be 0–1')
+  if (
+    !Number.isFinite(next.opacityDepth) ||
+    next.opacityDepth < 0.001 ||
+    next.opacityDepth > 100
+  )
+    throw new RangeError('opacityDepth must be 0.001–100 m')
+  if (
+    !Number.isFinite(next.bodyScattering) ||
+    next.bodyScattering < 0 ||
+    next.bodyScattering > 1
+  )
+    throw new RangeError('bodyScattering must be 0–1')
   for (const key of ['waveStrength', 'flowStrength'] as const)
     if (!Number.isFinite(next[key]) || next[key] < 0 || next[key] > 3)
       throw new RangeError(key + ' must be 0–3')

@@ -85,7 +85,7 @@ void main() {
   float streak = pow(max(0.0, wave), 10.0) * clamp(speed / 3.0, 0.0, 0.6);
   rgb += vec3(0.04 * wave * floodWaveStrength() + 0.3 * spec + 0.2 * streak * floodFlowStrength());
   ${depthMode ? 'rgb = mix(vec3(0.22, 0.78, 0.9), vec3(0.75, 0.22, 0.12), clamp(h / 5.0, 0.0, 1.0));' : ''}
-  out_FragColor = vec4(rgb, ${depthMode ? '1.0' : 'floodOpacity() * shoreCoverage'});
+  out_FragColor = vec4(rgb, ${depthMode ? '1.0' : 'floodDepthOpacity(h) * floodOpacity() * shoreCoverage'});
   ` : `
   float light = 0.45 + 0.55 * max(0.0, dot(n, normalize(czm_lightDirectionEC)));
   float contour = smoothstep(0.94, 1.0, cos(v_state.r * 3.14159));
@@ -243,6 +243,7 @@ export class FloodRenderer {
       deepColor: Cesium.Color.fromCssColorString(next.deepColor),
       foamColor: Cesium.Color.fromCssColorString(next.foamColor),
       colorDepth: next.colorDepth, surfaceOpacity: next.opacity,
+      opacityDepth: next.opacityDepth, bodyScattering: next.bodyScattering,
       waveStrength: next.waveStrength, flowStrength: next.flowStrength,
     })
     this.appearanceOptions = next

@@ -116,6 +116,6 @@ export const detailedWaterBody = `
     rgb = floodDisplayColor(rgb);
 #endif
   } else rgb = mix(rgb, floodFoamColor(), foam);
-  float alpha = mix(0.4, 0.98, smoothstep(0.02, 1.8, h));
+  float alpha = floodDepthOpacity(h);
   alpha = max(alpha, foam * 0.95) * floodOpacity();
 `

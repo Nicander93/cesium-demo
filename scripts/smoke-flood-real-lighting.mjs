@@ -249,6 +249,8 @@ try {
     skyEnvironment: false,
     intensity: 0,
   })
+  const appearanceBeforeLightProbe = (await state()).appearance
+  await control('setAppearance', { bodyScattering: 0 })
   const unlit = await capture('water-direct-zero')
   await control('setLighting', { intensity: 2 })
   const lit = await capture('water-direct-two'),
@@ -265,6 +267,30 @@ try {
     directDisabled.meanRgbDifference < 0.01,
     'Disabled direct light must match zero incident light',
   )
+  await control('setAppearance', {
+    bodyScattering: 1,
+    shallowColor: '#a18758',
+    deepColor: '#a18758',
+    opacityDepth: 0.001,
+    waveStrength: 0,
+    flowStrength: 0,
+  })
+  const bodyLit = await capture('water-body-daylight')
+  await control('setLighting', { intensity: 0 })
+  const bodyUnlit = await capture('water-body-no-daylight')
+  const bodyDirectResponse = await compare(bodyUnlit, bodyLit)
+  assert(
+    bodyDirectResponse.meanRgbDifference > 0.02,
+    'Turbid body color must respond to direct light with specular disabled',
+  )
+  await control('setAppearance', { bodyScattering: 0 })
+  const bodyDisabled = await capture('water-body-disabled')
+  const bodyZeroResponse = await compare(bodyUnlit, bodyDisabled)
+  assert(
+    bodyZeroResponse.meanRgbDifference < 0.01,
+    'Body shading must not emit light without incident light',
+  )
+  await control('setAppearance', appearanceBeforeLightProbe)
   await page.evaluate(() => {
     const { viewer } = window.__floodDynamicLab.getTestContext()
     viewer.scene.globe.show = true
@@ -370,6 +396,8 @@ try {
     parity,
     directResponse,
     directDisabled,
+    bodyDirectResponse,
+    bodyZeroResponse,
     toggles,
     missing,
     sampledGrid: {
@@ -400,6 +428,8 @@ try {
       passed: true,
       directResponse,
       directDisabled,
+      bodyDirectResponse,
+      bodyZeroResponse,
       parity,
       toggles,
       terrainResponses: report.terrainResponses,

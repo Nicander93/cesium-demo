@@ -86,6 +86,49 @@ async function difference(first, second) {
     [first, second],
   )
 }
+async function waterHue(surface, ground) {
+  return page.evaluate(
+    async ([surface, ground]) => {
+      async function decode(src) {
+        const img = new Image()
+        img.src = 'data:image/png;base64,' + src
+        await img.decode()
+        const c = document.createElement('canvas')
+        c.width = img.width
+        c.height = img.height
+        const ctx = c.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        return ctx.getImageData(0, 0, c.width, c.height).data
+      }
+      const a = await decode(surface),
+        b = await decode(ground)
+      let count = 0,
+        warm = 0,
+        r = 0,
+        g = 0,
+        blue = 0
+      for (let i = 0; i < a.length; i += 4) {
+        const delta =
+          (Math.abs(a[i] - b[i]) +
+            Math.abs(a[i + 1] - b[i + 1]) +
+            Math.abs(a[i + 2] - b[i + 2])) /
+          3
+        if (delta < 5) continue
+        count++
+        r += a[i]
+        g += a[i + 1]
+        blue += a[i + 2]
+        if (a[i] > a[i + 1] * 1.03 && a[i + 1] > a[i + 2] * 1.08) warm++
+      }
+      return {
+        pixels: count,
+        warmFraction: warm / Math.max(1, count),
+        meanRgb: [r, g, blue].map((x) => x / Math.max(1, count)),
+      }
+    },
+    [surface, ground],
+  )
+}
 const counters = (s) =>
   Object.fromEntries(
     [
@@ -138,7 +181,13 @@ try {
     const hidden = await capture(view + '-hidden')
     const color = await difference(brown, blue),
       opacity = await difference(blue, hidden)
-    console.log(view, { color, opacity })
+    const hue = await waterHue(brown, hidden)
+    console.log(view, { color, opacity, hue })
+    assert(hue.pixels > 100, view + ' must contain visible water')
+    assert(
+      hue.warmFraction > 0.65,
+      view + ' muddy water must actually appear warm brown',
+    )
     assert(color.changedOver2 > 0.001, view + ' color must visibly change')
     assert(opacity.changedOver2 > 0.001, view + ' opacity must visibly change')
     assert.deepEqual(
@@ -149,8 +198,31 @@ try {
     assert.deepEqual(await call('getFrame'), hydraulicFrame)
     await call('restoreAppearance')
     assert.deepEqual((await state()).appearance, muddy)
-    report.views[view] = { color, opacity }
+    report.views[view] = { color, opacity, hue }
   }
+  // The late retreat frame is especially thin: ground blending must not erase the muddy tint.
+  await call('seek', 600)
+  report.retreat = {}
+  for (const view of ['near', 'far']) {
+    await call('camera', view)
+    await page.waitForFunction(
+      () => window.__floodDynamicLab.getState().tilesLoaded,
+      null,
+      { timeout: 60000 },
+    )
+    const brown = await capture('retreat-' + view + '-muddy')
+    await call('setAppearance', { opacity: 0 })
+    const ground = await capture('retreat-' + view + '-hidden')
+    const hue = await waterHue(brown, ground)
+    console.log('retreat', view, hue)
+    assert(
+      hue.pixels > 100 && hue.warmFraction > 0.65,
+      'Thin retreat water must retain a brown body color',
+    )
+    report.retreat[view] = hue
+    await call('restoreAppearance')
+  }
+  await call('seek', 120)
   await page.getByLabel('浅水颜色', { exact: true }).fill('#9b7045')
   assert.equal((await state()).appearance.shallowColor, '#9b7045')
   await page.getByLabel(/^细波强度/).fill('0')

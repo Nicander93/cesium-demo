@@ -693,6 +693,26 @@ onBeforeUnmount(() => {
             @input="setAppearance()"
         /></label>
         <label
+          >透光深度 {{ appearance.opacityDepth.toFixed(3) }} m<input
+            v-model.number="appearance.opacityDepth"
+            type="range"
+            min="0.005"
+            max="1"
+            step="0.005"
+            @input="setAppearance()"
+        /></label>
+        <p>透光深度越小，薄水层越能遮住底图；它不改变计算水深。</p>
+        <label
+          >日光体色强度 {{ appearance.bodyScattering.toFixed(2)
+          }}<input
+            v-model.number="appearance.bodyScattering"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            @input="setAppearance()"
+        /></label>
+        <label
           >色深过渡尺度 {{ appearance.colorDepth.toFixed(2) }} m<input
             v-model.number="appearance.colorDepth"
             type="range"
