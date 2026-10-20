@@ -48,7 +48,7 @@ function random(index: number, salt: number): number {
 }
 
 // Finite directional waves and slope-variance filtering, not a calibrated ocean spectrum.
-// Derivation, filtering limits and references are recorded in WAVES.md.
+// Derivation, filtering limits and references are recorded in docs/WAVES.md.
 export const spectralWaves = `
 uniform mat4 waveBand0;
 uniform mat4 waveBand1;

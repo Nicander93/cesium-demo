@@ -73,15 +73,15 @@ layer.resetVisuals()
 
 停止泄洪用 `setInflow({ discharge: 0 })`，再继续 `advance`；停止推进就是暂停。修改计算域或挡墙需要创建新实例。`sourceCells` 是 `row * columns + column` 的单元索引；省略时选取南端第 4 行最低点附近单元。
 
-`outlet: 'north' | 'south'` 选择下游开放边界，默认 north；south 时默认输入点改为北端第 4 行附近。其他三条边界封闭，出口只排水、不提供外部回流。西藏真实地形示例采用 south。地形与模型统一适配、跌水显示和取舍说明见 [真实地形与统一计算域](./real-terrain-domain.md)。
+`outlet: 'north' | 'south'` 选择下游开放边界，默认 north；south 时默认输入点改为北端第 4 行附近。其他三条边界封闭，出口只排水、不提供外部回流。西藏真实地形示例采用 south。地形与模型统一适配、跌水显示和取舍说明见 [真实地形与统一计算域](./docs/real-terrain-domain.md)。
 
 ## GPU 动态水面实验
 
-新增可选 `surfaceBackend: 'gpu'`，复用固定拓扑和两张状态纹理；`setSurfaceBackend()` 可切回默认 Primitive 对照，`getDiagnostics()` 返回实际后端、更新计数及降级原因。求解器、泡沫输运和岸边视觉延拓仍在 CPU。支持范围、私有 API、资源所有权与复验方法见 [GPU 动态水面](./cesium/DYNAMIC-SURFACE.md)。
+新增可选 `surfaceBackend: 'gpu'`，复用固定拓扑和两张状态纹理；`setSurfaceBackend()` 可切回默认 Primitive 对照，`getDiagnostics()` 返回实际后端、更新计数及降级原因。求解器、泡沫输运和岸边视觉延拓仍在 CPU。支持范围、私有 API、资源所有权与复验方法见 [GPU 动态水面](./cesium/docs/DYNAMIC-SURFACE.md)。
 
 ## 真实环境中的光照验证
 
-`/flood-dynamic-lab?environment=real` 接入swisstopo真实地形与影像，提供假设泄洪和独立静水光照对照，默认关闭泡沫。图层新增 `lighting` 构造选项、`setLightingOptions()` 与 `getLightingDiagnostics()`，复用基础水面的GGX与大气环境；API默认仍为legacy。原始参数、数据来源、共享纹理所有权和验证边界见 [真实地形中的洪水光照](./cesium/REAL-TERRAIN-LIGHTING.md)。
+`/flood-dynamic-lab?environment=real` 接入swisstopo真实地形与影像，提供假设泄洪和独立静水光照对照，默认关闭泡沫。图层新增 `lighting` 构造选项、`setLightingOptions()` 与 `getLightingDiagnostics()`，复用基础水面的GGX与大气环境；API默认仍为legacy。原始参数、数据来源、共享纹理所有权和验证边界见 [真实地形中的洪水光照](./cesium/docs/REAL-TERRAIN-LIGHTING.md)。
 
 ## 使用 Cesium 原生地形
 
@@ -118,13 +118,13 @@ const frame = interpolateFrame(dataset.frames, 30)
 layer.update(frame, true) // 第二个参数：水深配色；第三个参数：是否显示细节材质。
 ```
 
-这条路径不创建内置求解器。转换器只要输出 `FloodDataset`，就能沿用同一个图层；只有水深也可以回放。CRS、高程基准、单元顺序、NoData 和速度方向需要在转换器中处理。协议与转换步骤见 [demo 说明](../views/flood-valley/README.md)。这是一份项目交换协议，不是已有行业标准，也还没有 HEC-RAS / TELEMAC 原生文件解析器。
+这条路径不创建内置求解器。转换器只要输出 `FloodDataset`，就能沿用同一个图层；只有水深也可以回放。CRS、高程基准、单元顺序、NoData 和速度方向需要在转换器中处理。协议与转换步骤见 [demo 说明](../views/flood/valley/README.md)。这是一份项目交换协议，不是已有行业标准，也还没有 HEC-RAS / TELEMAC 原生文件解析器。
 
 ## 图层与资源所有权
 
 `CesiumFloodLayer` 提供 `update(frame, depthMode?, detail?)`、`updateDamBreach(state?)`、`updateAnalysis(values, maximum?)`、`updateInundation(result)`、`animate(seconds)`、`focus({ padding? })`、`focusBreach(state, outlet?)` 和 `destroy()`。更新帧必须与构造时网格一致；外部 JSON 先经过 `parseFloodDataset`。图层复制网格；公开的 grid 和传入墙数据应按只读数据使用，变更计算域则重建图层。
 
-`analyzeFloodDataset` 可分析内置模型或外部模型的完整成果；`analyzeInundation` 可在给定水位下计算连通淹没范围。溃坝配置、两种分析的含义、回放与 API 示例见 [溃坝与淹没分析](./dam-inundation.md)。
+`analyzeFloodDataset` 可分析内置模型或外部模型的完整成果；`analyzeInundation` 可在给定水位下计算连通淹没范围。溃坝配置、两种分析的含义、回放与 API 示例见 [溃坝与淹没分析](./docs/dam-inundation.md)。
 
 宿主拥有 Viewer、定时器、播放进度和文件操作。`destroy()` 可重复调用，只释放该图层创建的 primitive、墙实体和材质，不销毁 Viewer；销毁后不要再使用。两个推演实例没有共享计算状态。core 可以迁入 Worker，但当前 demo 的求解仍在主线程；Worker 消息协议、GPU 求解和 npm 发布配置尚未实现。
 
@@ -132,8 +132,8 @@ layer.update(frame, true) // 第二个参数：水深配色；第三个参数：
 
 内置模型是局部惯性浅水近似，默认干地，也支持 `initialDepth` 初始水深。可选择北边或南边开放，其他边界封闭；尚无任意水位边界与完整热启动（初始面流量不支持）。计算要求完整有效地形，不支持把 NoData 当作实体。挡墙面采用同一 ENU 基准的绝对墙顶高程，水面超过墙顶才漫流；仅内部网格面参与障碍计算。求解器与显示支持 east/north 墙，预设溃口目前仅作用于 north 墙。
 
-水面材质与计算水量独立。当前材质是程序波浪、流速细节和近似天空反射；已增加由墙顶和已知流速控制的越顶水片与跌水示意，尚无真实场景反射、折射或三维水花。网格不能表达小沟渠和复杂桥洞；工程预测需要更完整模型及基准校准。`composeFloodDomain` 可合并显式实心轮廓及墙线，3D Tiles 自动几何提取仍是 [后续设计](../views/flood-valley/3dtiles-hydraulics-design.md)。
+水面材质与计算水量独立。当前材质是程序波浪、流速细节和近似天空反射；已增加由墙顶和已知流速控制的越顶水片与跌水示意，尚无真实场景反射、折射或三维水花。网格不能表达小沟渠和复杂桥洞；工程预测需要更完整模型及基准校准。`composeFloodDomain` 可合并显式实心轮廓及墙线，3D Tiles 自动几何提取仍是 [后续设计](../views/flood/valley/3dtiles-hydraulics-design.md)。
 
 验证命令：`node node_modules/vitest/vitest.mjs run src/flood`、`node node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.flood.json`、`npm run build`。
 
-洪水颜色、透明度与波纹原始参数见 [外观 API](cesium/APPEARANCE.md)。
+洪水颜色、透明度与波纹原始参数见 [外观 API](cesium/docs/APPEARANCE.md)。

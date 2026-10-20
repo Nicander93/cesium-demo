@@ -1,7 +1,6 @@
 import * as Cesium from 'cesium'
 import { getFloodAppearancePreset } from './appearance'
-import { microfacetLighting } from '../../water/lighting'
-import { protectWaterEnvironmentOwnership } from '../../water/environment'
+import { microfacetLighting, protectWaterEnvironmentOwnership } from '../../water'
 
 export interface FloodLightingOptions {
   model?: 'legacy' | 'microfacet'

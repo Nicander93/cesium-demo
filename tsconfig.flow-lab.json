@@ -2,12 +2,12 @@
   "extends": "./tsconfig.flood.json",
   "include": [
     "src/flood/**/*.ts",
-    "src/views/flood-valley/**/*.ts",
-    "src/views/flood-valley/**/*.vue",
-    "src/views/water-flow-lab/**/*.vue",
-    "src/types/Cesium.d.ts",
-    "src/vite-env.d.ts",
+    "src/views/flood/**/*.ts",
+    "src/views/flood/**/*.vue",
     "src/water/**/*.ts",
-    "src/views/water-real-terrain/**/*.vue"
+    "src/views/water/**/*.vue",
+    "src/views/water/**/*.ts",
+    "src/types/Cesium.d.ts",
+    "src/vite-env.d.ts"
   ]
 }

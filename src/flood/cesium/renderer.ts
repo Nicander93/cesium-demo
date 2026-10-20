@@ -12,7 +12,7 @@ import { FlowParticles } from './flow-particles'
 import { createFloodSurfaceState } from './surface-state'
 import { createFloodMaterial, resolveFloodLighting, type FloodLightingOptions } from './lighting'
 import { resolveFloodAppearance, type FloodAppearanceOptions } from './appearance'
-import { WaterEnvironment } from '../../water/environment'
+import { WaterEnvironment } from '../../water'
 
 function vertexShader(modelMatrix: Cesium.Matrix4): string {
   // Primitive may bake modelMatrix into world-space geometry and render with identity.

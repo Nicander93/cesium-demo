@@ -3,3 +3,5 @@ export { WaterSurface, type WaterSurfaceOptions, type WaterSurfaceUpdateOptions,
 
 export { updateWaterMaterialView } from './material'
 export { createWaterPreset, type WaterPresetName, type WaterPresetOptions } from './presets'
+export { microfacetLighting } from './lighting'
+export { WaterEnvironment, protectWaterEnvironmentOwnership } from './environment'

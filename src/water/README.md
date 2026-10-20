@@ -168,23 +168,23 @@ pnpm build
 
 ## 可调多尺度水面
 
-新增公开参数、预设、运行时配置快照和视觉时间控制，见 [可调水面 API](./APPEARANCE-API.md)。真实地形页面使用该路径；现有调用的默认 waveModel 仍为 legacy。
+新增公开参数、预设、运行时配置快照和视觉时间控制，见 [可调水面 API](./docs/APPEARANCE-API.md)。真实地形页面使用该路径；现有调用的默认 waveModel 仍为 legacy。
 
 
-水面质量优先的研究结论、UE 参考和下一项对照实验，见 [水面质量评审](./QUALITY-REVIEW.md)。编译与像素差测试不能替代视觉质量验收。
+水面质量优先的研究结论、UE 参考和下一项对照实验，见 [水面质量评审](./docs/QUALITY-REVIEW.md)。编译与像素差测试不能替代视觉质量验收。
 
 ## 光照输出实验
 
-新增可选 `shadingMode`：默认 `legacy-phong` 保留原始效果，`water-composite` 直接输出已合成水面颜色。可通过 `setOptions()` 切换。公式来源、固定相机对照、数值验证与未验证范围见 [实验记录](./OPTICS-EXPERIMENT.md)。该开关尚不代表完整物理水体着色或最终视觉验收。
+新增可选 `shadingMode`：默认 `legacy-phong` 保留原始效果，`water-composite` 直接输出已合成水面颜色。可通过 `setOptions()` 切换。公式来源、固定相机对照、数值验证与未验证范围见 [实验记录](./docs/OPTICS-EXPERIMENT.md)。该开关尚不代表完整物理水体着色或最终视觉验收。
 
 ## 静态真实岸线融合
 
-`WaterSurface` 可接收裁剪前的完整 `shoreline: Cartographic[]`，并通过 `shoreFadeDistance`（0–64 米）调节接水线透明度。未提供岸线时保留原有行为。原理、API、静态边界限制与验证见 [岸线记录](./SHORELINE.md)。
+`WaterSurface` 可接收裁剪前的完整 `shoreline: Cartographic[]`，并通过 `shoreFadeDistance`（0–64 米）调节接水线透明度。未提供岸线时保留原有行为。原理、API、静态边界限制与验证见 [岸线记录](./docs/SHORELINE.md)。
 
 ## 表面光照候选
 
-可选 `lightingModel: 'microfacet'` 使用 GGX 太阳高光及大气环境反射；默认仍为 `legacy`。公开参数、算法来源、私有适配边界、颜色空间限制和实景验收结果见 [光照记录](./LIGHTING.md)。真实地形入口可用 `?lighting=microfacet`，也可在页面的“光照模型”中切换。该候选尚未替代视觉验收。
+可选 `lightingModel: 'microfacet'` 使用 GGX 太阳高光及大气环境反射；默认仍为 `legacy`。公开参数、算法来源、私有适配边界、颜色空间限制和实景验收结果见 [光照记录](./docs/LIGHTING.md)。真实地形入口可用 `?lighting=microfacet`，也可在页面的“光照模型”中切换。该候选尚未替代视觉验收。
 
 ## 分散波列与远近过渡
 
-`waveModel: 'spectrum'` 通过有限方向波列减少周期条纹，按像素足迹过滤，未解析坡度方差用于 GGX 粗糙度近似。湖面预设使用该模型；原始调用默认仍是 legacy，两条旧路径保留可选。原理、参数、固定近/远景对照和限制见 [波列记录](./WAVES.md)。
+`waveModel: 'spectrum'` 通过有限方向波列减少周期条纹，按像素足迹过滤，未解析坡度方差用于 GGX 粗糙度近似。湖面预设使用该模型；原始调用默认仍是 legacy，两条旧路径保留可选。原理、参数、固定近/远景对照和限制见 [波列记录](./docs/WAVES.md)。

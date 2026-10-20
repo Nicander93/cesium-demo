@@ -1,16 +1,16 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
-  { path: '/flood-dynamic-lab', component: () => import('@/views/flood-dynamic-lab/index.vue'),
-    meta: { title: '泄洪传播与退水', standalone: true, category: 'effect', description: 'GPU 状态纹理与 Primitive 动态水面对照', image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href } },
-  { path: '/water-real-terrain', component: () => import('@/views/water-real-terrain/index.vue'),
+  { path: '/flood-dynamic-lab', component: () => import('@/views/flood/dynamic-lab/index.vue'),
+    meta: { title: '泄洪传播与退水', standalone: true, category: 'effect', description: 'GPU 状态纹理与 Primitive 动态水面对照', image: new URL('../views/flood/flow-lab/preview.svg', import.meta.url).href } },
+  { path: '/water-real-terrain', component: () => import('@/views/water/real-terrain/index.vue'),
     meta: { title: '真实地形与湖岸', standalone: true, category: 'effect', description: '官方水域面、独立地形和影像状态',
-      image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href } },
+      image: new URL('../views/flood/flow-lab/preview.svg', import.meta.url).href } },
   {
     path: '/water-flow-lab',
-    component: () => import('@/views/water-flow-lab/index.vue'),
+    component: () => import('@/views/flood/flow-lab/index.vue'),
     meta: { title: '水流渲染对照', standalone: true, category: 'effect',
-      image: new URL('../views/water-flow-lab/preview.svg', import.meta.url).href,
+      image: new URL('../views/flood/flow-lab/preview.svg', import.meta.url).href,
       description: '无网络合成工况、速度场与泡沫诊断' },
   },
   {
@@ -46,10 +46,10 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/flood-valley',
-    component: () => import('@/views/flood-valley/index.vue'),
+    component: () => import('@/views/flood/valley/index.vue'),
     meta: {
       title: '小山谷泄洪',
-      image: new URL('../views/flood-valley/preview.svg', import.meta.url).href,
+      image: new URL('../views/flood/valley/preview.svg', import.meta.url).href,
       description: '内置水动力实验与外部模型成果回放',
       category: 'effect',
     },

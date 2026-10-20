@@ -1,4 +1,4 @@
-// GGX/Smith dielectric surface reflection. References and approximations: LIGHTING.md.
+// GGX/Smith dielectric surface reflection. References and approximations: docs/LIGHTING.md.
 export const microfacetLighting = `
 uniform float microfacetEnabled;
 uniform float indexOfRefraction;

@@ -67,7 +67,8 @@ Each Cesium demo feature is a separate route under `src/views/`:
 - **mask/** - Shader-based masking techniques
 - **mask1/** - Advanced masking (Entity/Primitive/PostProcess/Texture approaches)
   - `mask-types.ts` - Type definitions for masking systems
-- **water/** - Water surface effects
+- **water/** - Lake/plane water demos (`water.vue`, `real-terrain/`)
+- **flood/** - Flood demos (`valley/`, `dynamic-lab/`, `flow-lab/`); reusable APIs in `src/flood` and `src/water`
 - **volume-rendering/** - 3D volumetric rendering
 - **tile-local-flatten/** - 3D tileset flattening
 - **model-editor/** - Interactive 3D model editing

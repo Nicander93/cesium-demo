@@ -3,10 +3,6 @@ import * as Cesium from 'cesium'
 export type WaterCoordinate = [number, number]
 export type WaterBounds = [number, number, number, number]
 export const brienzBounds: WaterBounds = [7.884, 46.688, 7.901, 46.701]
-export const swissTerrainUrl =
-  'https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/'
-export const swissImageryUrl =
-  'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg'
 
 /** Clip a known geographic water boundary; this never infers a river from a DEM. */
 export function clipWaterRing(

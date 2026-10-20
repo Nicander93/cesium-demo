@@ -1,11 +1,10 @@
 {
   "extends": "./tsconfig.app.json",
   "include": [
-    "src/views/flood-dynamic-lab/**/*.vue",
-    "src/views/flood-valley/**/*.ts",
-    "src/views/flood-valley/**/*.vue",
+    "src/flood/**/*.ts",
+    "src/views/flood/**/*.ts",
+    "src/views/flood/**/*.vue",
     "src/types/Cesium.d.ts",
-    "src/vite-env.d.ts",
-    "src/flood/**/*.ts"
+    "src/vite-env.d.ts"
   ]
 }
