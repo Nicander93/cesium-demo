@@ -1,6 +1,44 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
+  { path: '/landscape-showcase', component: () => import('@/views/landscape-showcase/index.vue'),
+    meta: { title: '山海景观渲染', standalone: true, category: 'render', description: '真实山地倒影、细波岸线与滨海城市的独立观感演示', image: new URL('../views/landscape-showcase/preview.svg', import.meta.url).href } },
+  {
+    path: '/vegetation-lab',
+    component: () => import('@/views/vegetation-lab/index.vue'),
+    meta: { title: '植被种植实验', standalone: true, category: 'render',
+      description: '单株、笔刷、区域批量种植与分块 GPU 实例化性能实验',
+      image: new URL('../views/vegetation-lab/preview.svg', import.meta.url).href },
+  },
+  {
+    path: '/first-person-lab',
+    component: () => import('@/views/first-person-lab/index.vue'),
+    meta: { title: '室内第一人称行走', standalone: true, category: 'render',
+      description: 'WASD、鼠标视角、墙体碰撞、门洞通过与台阶支撑',
+      image: new URL('../views/first-person-lab/preview.svg', import.meta.url).href },
+  },
+  { path: '/environment-lab', component: () => import('@/views/environment-lab/index.vue'),
+    meta: { title: '环境观感实验室', standalone: true, category: 'render', description: 'HDRI 天空、统一照明与城市、水库、洪水布景', image: new URL('../views/environment-lab/preview.svg', import.meta.url).href } },
+  {
+    path: '/animation-lab',
+    component: () => import('@/views/animation-lab/index.vue'),
+    meta: {
+      title: 'GIS 动画实验场', standalone: true, category: 'effect',
+      description: '飞线、流动箭头与 ENU 喷泉的独立控制和资源释放实验',
+      image: new URL('../views/animation-lab/preview.svg', import.meta.url).href,
+    },
+  },
+  {
+    path: '/cloud-atmosphere-lab',
+    component: () => import('@/views/cloud-atmosphere-lab/index.vue'),
+    meta: {
+      title: '云与大气对照实验',
+      standalone: true,
+      category: 'render',
+      description: '固定太阳与视角下比较 Cesium 基础、当前管线和社区云大气实现',
+      image: new URL('../views/cloud-atmosphere-lab/preview.svg', import.meta.url).href,
+    },
+  },
   { path: '/flood-dynamic-lab', component: () => import('@/views/flood/dynamic-lab/index.vue'),
     meta: { title: '泄洪传播与退水', standalone: true, category: 'effect', description: 'GPU 状态纹理与 Primitive 动态水面对照', image: new URL('../views/flood/flow-lab/preview.svg', import.meta.url).href } },
   { path: '/water-real-terrain', component: () => import('@/views/water/real-terrain/index.vue'),

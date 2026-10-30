@@ -1,4 +1,5 @@
 // GGX/Smith dielectric surface reflection. References and approximations: docs/LIGHTING.md.
+import { waterTransportGLSL } from './optics'
 export const microfacetLighting = `
 uniform float microfacetEnabled;
 uniform float indexOfRefraction;
@@ -19,7 +20,7 @@ uniform vec3 waterSH6;
 uniform vec3 waterSH7;
 uniform vec3 waterSH8;
 
-vec3 waterLinear(vec3 c) {
+${waterTransportGLSL}\nvec3 waterLinear(vec3 c) {
   return mix(c / 12.92, pow((max(c, vec3(0.0)) + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
 vec3 waterDisplay(vec3 c) {
@@ -41,7 +42,7 @@ vec3 waterDirect(vec3 N, vec3 V, vec3 L, float alpha, float f0) {
   // BRDF * NdotL; incident light comes from the host, never from reflected scene color.
   return czm_lightColorHdr * (D*visibility*nl*waterFresnel(f0,vh)) * specularIntensity;
 }
-vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage, float surfaceRoughness, vec3 bodyColor) {
+vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage, float surfaceRoughness, vec3 bodyColor, float verticalDepth, float viewCosine, float opticsEnabled, float depthReady, float depthScale, vec3 absorption, vec3 scattering, vec3 scatteringColor) {
   float nv=clamp(dot(N,V),0.0,1.0);
   float f0=pow((indexOfRefraction-1.0)/(indexOfRefraction+1.0),2.0);
   float alpha=max(surfaceRoughness*surfaceRoughness,0.0025);
@@ -68,8 +69,14 @@ vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, floa
   }
   if (indexOfRefraction <= 1.0) envWeight=0.0;
   vec3 indirect=reflected*envWeight*environmentIntensity*reflectionStrength;
-  // Tinted body is an explicit diffuse proxy until underwater depth/color are available.
-  vec3 body=waterLinear(bodyColor)*(1.0-envWeight)*max(irradiance,vec3(0.0))*environmentIntensity;
+  // Preserve the original diffuse proxy at zero/invalid depth. The opt-in path adds
+  // captured scene depth but remains a tint approximation without underwater color.
+  vec3 bodyAlbedo=waterLinear(bodyColor);
+  if(opticsEnabled>0.5 && depthReady>0.5 && verticalDepth>0.0) {
+    bodyAlbedo=waterDepthTransport(bodyAlbedo,waterLinear(scatteringColor),absorption,scattering,
+      verticalDepth,viewCosine,depthScale);
+  }
+  vec3 body=bodyAlbedo*(1.0-envWeight)*max(irradiance,vec3(0.0))*environmentIntensity;
   vec3 result=direct+indirect+body;
   if (lightingDebug>0.5 && lightingDebug<1.5) result=direct;
   else if (lightingDebug<2.5 && lightingDebug>1.5) result=indirect;
@@ -77,5 +84,8 @@ vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, floa
   else if (lightingDebug<4.5 && lightingDebug>3.5) result=vec3(envWeight);
   else if (lightingDebug>4.5) result=body;
   return result;
+}
+vec3 waterMicrofacet(vec3 N, vec3 V, vec3 localLight, vec3 sceneReflection, float coverage, float surfaceRoughness, vec3 bodyColor) {
+  return waterMicrofacet(N,V,localLight,sceneReflection,coverage,surfaceRoughness,bodyColor,0.0,1.0,0.0,0.0,1.0,vec3(0.0),vec3(0.0),vec3(0.0));
 }
 `

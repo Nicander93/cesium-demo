@@ -1,0 +1,8 @@
+# Preserve raw model buffers, collision data and GPU texture bytes on all platforms.
+*.bin binary
+*.glb binary
+*.ktx binary
+*.ktx2 binary
+*.hdr binary
+*.exr binary
+*.raw binary

@@ -40,6 +40,16 @@ export interface WaterMaterialOptions {
   lightDirection?: Cesium.Cartesian3
   /** Mapped-shore horizontal fade in metres, [0,64]; requires WaterSurface shoreline input. */
   shoreFadeDistance?: number
+  /** Opt-in Beer-Lambert bottom transport; WaterSurface needs rendered scene depth. */
+  underwaterOptics?: boolean
+  /** Artistic scale for the vertical-depth / oblique-ray optical path, [0,4]. */
+  underwaterDepthScale?: number
+  /** Per-channel absorption coefficients in reciprocal metres. */
+  waterAbsorption?: Cesium.Cartesian3
+  /** Per-channel single-scattering coefficients in reciprocal metres. */
+  waterScattering?: Cesium.Cartesian3
+  /** Display-space tint for the approximate water-volume scattering source. */
+  waterScatteringColor?: Cesium.Color
   foam?: boolean
   foamWidth?: number
   foamIntensity?: number
@@ -88,6 +98,9 @@ uniform sampler2D shorelineTexture;
 uniform vec4 shorelineBounds;
 uniform float shorelineReady;
 uniform float shoreFadeDistance;
+uniform float underwaterOpticsEnabled;
+uniform float underwaterDepthScale;
+uniform float underwaterDepthReady;
 
 float mappedShoreDistance(vec3 positionEC) {
   vec2 p = (waveFromEye * vec4(positionEC, 1.0)).xy;
@@ -231,6 +244,18 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
     vec3 localLight = mat3(worldToLocal) * czm_inverseViewRotation * czm_lightDirectionEC;
     light = normalize(vec3(localLight.x, localLight.z, -localLight.y));
   }
+  float opticalDepth = 0.0;
+  float opticalViewCosine = max(dot(normal, eyeDirection), 0.15);
+  if (underwaterOpticsEnabled > 0.5 && underwaterDepthReady > 0.5) {
+    vec4 depthClip = shoreFromEye * vec4(-materialInput.positionToEyeEC, 1.0);
+    if (depthClip.w > 0.0) {
+      vec2 depthUV = depthClip.xy / depthClip.w * 0.5 + 0.5;
+      if (all(greaterThanEqual(depthUV, vec2(0.0))) && all(lessThanEqual(depthUV, vec2(1.0)))) {
+        float bottomHeight = shoreHeight(depthUV);
+        if (bottomHeight > -999.0 && bottomHeight < 0.0) opticalDepth = min(-bottomHeight, 120.0);
+      }
+    }
+  }
   float diffuse = max(dot(light, normal), 0.0) * 0.5;
   float exponent = sunShiny;
   if (waveModel > 0.5) exponent = mix(220.0, 6.0, surfaceRoughness * surfaceRoughness);
@@ -268,7 +293,7 @@ czm_material czm_getMaterial(czm_materialInput materialInput) {
       vec3 bitangent = cross(nEC, tangent);
       hostLight = normalize(vec3(dot(czm_lightDirectionEC,tangent),dot(czm_lightDirectionEC,nEC),-dot(czm_lightDirectionEC,bitangent)));
     }
-    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds,surfaceRoughness,waterColor.rgb);
+    material.diffuse = waterMicrofacet(normal,eyeDirection,hostLight,reflectedSample,reflectionReady*inBounds,surfaceRoughness,waterColor.rgb,opticalDepth,opticalViewCosine,underwaterOpticsEnabled,underwaterDepthReady,underwaterDepthScale,waterAbsorption,waterScattering,waterScatteringColor.rgb);
   }
   material.alpha = waterAlpha;
   float foam = shoreFoam(-materialInput.positionToEyeEC);
@@ -309,6 +334,12 @@ export function createWaterMaterial(options: WaterMaterialOptions = {}): Cesium.
         ...createWaveBands({waveLength:options.waveLength ?? 48,direction:Cesium.Math.toRadians(options.waveDirection ?? 55),spread:Cesium.Math.toRadians(options.waveSpread ?? 35),irregularity:options.waveIrregularity ?? 0.35}),
         waveDiagnostic: 0, waveProbe: new Cesium.Cartesian4(),
         microfacetEnabled: options.lightingModel === 'microfacet' ? 1 : 0,
+        underwaterOpticsEnabled: options.underwaterOptics === true ? 1 : 0,
+        underwaterDepthScale: options.underwaterDepthScale ?? 1,
+        underwaterDepthReady: 0,
+        waterAbsorption: Cesium.Cartesian3.clone(options.waterAbsorption ?? new Cesium.Cartesian3(0.16, 0.06, 0.025)),
+        waterScattering: Cesium.Cartesian3.clone(options.waterScattering ?? new Cesium.Cartesian3(0.025, 0.015, 0.01)),
+        waterScatteringColor: Cesium.Color.clone(options.waterScatteringColor ?? Cesium.Color.fromCssColorString('#438c83')!),
         indexOfRefraction: options.indexOfRefraction ?? 1.333,
         environmentIntensity: options.environmentIntensity ?? 1,
         waterEnvironmentMap: Cesium.Material.DefaultCubeMapId,
@@ -376,11 +407,15 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
   const u=material.uniforms
   const bands = options.waveLength !== undefined || options.waveDirection !== undefined || options.waveSpread !== undefined || options.waveIrregularity !== undefined
     ? createWaveBands({waveLength:options.waveLength ?? u.waveLength,direction:options.waveDirection === undefined ? u.waveDirection : Cesium.Math.toRadians(options.waveDirection),spread:options.waveSpread === undefined ? u.waveSpread : Cesium.Math.toRadians(options.waveSpread),irregularity:options.waveIrregularity ?? u.waveIrregularity}) : undefined
-  const names = { indexOfRefraction: 'indexOfRefraction', environmentIntensity: 'environmentIntensity', shoreFadeDistance: 'shoreFadeDistance', waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
+  const names = { underwaterDepthScale: 'underwaterDepthScale', indexOfRefraction: 'indexOfRefraction', environmentIntensity: 'environmentIntensity', shoreFadeDistance: 'shoreFadeDistance', waveIrregularity: 'waveIrregularity', waveLength: 'waveLength', detailStrength: 'detailStrength', roughness: 'roughness', specularIntensity: 'specularIntensity', reflectionStrength: 'reflectionStrength', waveStrength: 'waveStrength', rippleSize: 'size', waterAlpha: 'waterAlpha', edgeFadeWidth: 'edgeFadeWidth', reflectivity: 'rf0', sunShiny: 'sunShiny', distortionScale: 'distortionScale', time: 'time', foamWidth: 'foamWidth', foamIntensity: 'foamIntensity', foamSpeed: 'foamSpeed' } as const
   for (const key of Object.keys(names) as (keyof typeof names)[]) {
     if (options[key] !== undefined) material.uniforms[names[key]] = options[key]
   }
   if (options.lightingModel !== undefined) material.uniforms.microfacetEnabled = options.lightingModel === 'microfacet' ? 1 : 0
+  if (options.underwaterOptics !== undefined) material.uniforms.underwaterOpticsEnabled = options.underwaterOptics ? 1 : 0
+  if (options.waterAbsorption !== undefined) material.uniforms.waterAbsorption = Cesium.Cartesian3.clone(options.waterAbsorption)
+  if (options.waterScattering !== undefined) material.uniforms.waterScattering = Cesium.Cartesian3.clone(options.waterScattering)
+  if (options.waterScatteringColor !== undefined) material.uniforms.waterScatteringColor = Cesium.Color.clone(options.waterScatteringColor)
   if (options.shadingMode !== undefined) material.uniforms.waterCompositeOutput = options.shadingMode === 'water-composite' ? 1 : 0
   if (options.waveModel !== undefined) material.uniforms.waveModel = options.waveModel === 'spectrum' ? 2 : options.waveModel === 'multiscale' ? 1 : 0
   if (options.waveSpread !== undefined) material.uniforms.waveSpread = Cesium.Math.toRadians(options.waveSpread)
@@ -396,6 +431,16 @@ export function updateWaterMaterial(material: Cesium.Material, options: WaterMat
 
 function validateWaterMaterial(options: WaterMaterialOptions): void {
   if(options.lightingModel !== undefined && options.lightingModel !== 'legacy' && options.lightingModel !== 'microfacet') throw new RangeError('Unknown water lighting model')
+  for (const key of ['waterAbsorption', 'waterScattering'] as const) {
+    const value = options[key]
+    if (value && [value.x, value.y, value.z].some(component => !Number.isFinite(component) || component < 0 || component > 4))
+      throw new RangeError(key + ' components must be finite and in [0, 4]')
+  }
+  if (options.waterScatteringColor && ![options.waterScatteringColor.red, options.waterScatteringColor.green, options.waterScatteringColor.blue].every(Number.isFinite))
+    throw new TypeError('waterScatteringColor components must be finite')
+  if (options.underwaterOptics !== undefined && typeof options.underwaterOptics !== 'boolean') throw new TypeError('underwaterOptics must be a boolean')
+  if(options.underwaterDepthScale !== undefined && (!Number.isFinite(options.underwaterDepthScale)||options.underwaterDepthScale<0||options.underwaterDepthScale>4))
+    throw new RangeError('underwaterDepthScale must be in [0,4]')
   if(options.indexOfRefraction !== undefined && (!Number.isFinite(options.indexOfRefraction)||options.indexOfRefraction<1||options.indexOfRefraction>2.5)) throw new RangeError('indexOfRefraction must be in [1,2.5]')
   if(options.environmentIntensity !== undefined && (!Number.isFinite(options.environmentIntensity)||options.environmentIntensity<0||options.environmentIntensity>4)) throw new RangeError('environmentIntensity must be in [0,4]')
   if (options.shoreFadeDistance !== undefined && (!Number.isFinite(options.shoreFadeDistance) || options.shoreFadeDistance < 0 || options.shoreFadeDistance > 64)) throw new RangeError('shoreFadeDistance must be metres in [0,64]')

@@ -1,0 +1,16 @@
+# Local cumulus reference
+
+This lab-only provider is a deterministic, full-resolution reference for one 20 km ENU cloud formation anchored at 119.0317°E, 33.5921°N. It uses the repository's R8 `shape.bin` (128³) and `shape_detail.bin` (32³) loader textures through Cesium `sampler3D`; red-channel samples are scalar noise. STBN and local-weather assets are loaded by the shared loader but immediately released because this provider uses neither jitter nor history. No cloud implementation or third-party engine is vendored here.
+
+The shader builds broad overlapping cumulus envelopes, a coverage threshold, a height-dependent rounded top and softened base, then erodes the solid mass with detail noise. View transmittance and direct-sun optical depth use Beer–Lambert steps in meters; the sun ray uses eight samples and exits when it leaves the local volume. It composites linear radiance before one final Cesium PBR-neutral tone map. Cesium's built-in sky and opaque imagery remain active. Raw post-process depth is decoded through Cesium 1.132 `czm_windowToEyeCoordinates(windowXY, rawDepth)` so the cloud segment stops at opaque scene depth.
+
+The ENU tangent frame is a local approximation: across 20 km, curvature and terrain-height variation are ignored. The provider does not model global cloud cover, cloud-shadow maps, precipitation, temporal reconstruction, or high-altitude cirrus. `reference` uses 256 fixed view steps; `balanced` uses 144, both at the full drawing-buffer resolution with no TAA or jitter. Performance therefore scales with output pixels and cloud-crossing ray length; the inside view is the worst case.
+
+## Sources and license boundaries
+
+- Repository texture loader and binary shape assets: [`weatherTextures.ts`](../../vendor/cesium-geospatial/clouds/weatherTextures.ts), documented in [`UPSTREAM.md`](../../vendor/cesium-geospatial/UPSTREAM.md). The loader's R8/sampler semantics were inspected; the existing community shader and its visual output were not copied into this provider.
+- Ogawa Cesium volumetric-cloud PoC: <https://github.com/tatsuya-ogawa/cesium-volumetric-clouds> (MIT, as declared by that repository). Its shader was read for Cesium stage/depth integration and Beer–Lambert marching; this implementation is independently written and does not copy its shader.
+- Alex Evans, “The Art of Rendering: The Rendering of INSIDE the Cloud” presentation: <https://advances.realtimerendering.com/s2015/AlexEvans_SIGGRAPH-2015-sml.pdf>. The Shadertoy reference is <https://www.shadertoy.com/view/XslGRr>. The Shadertoy page returned HTTP 402 during this exploration, so its live shader and runtime image were not inspected. Shadertoy's default publication does not grant permission to copy source; this provider includes no Shadertoy code.
+- Guerrilla Games, “Nubis: Authoring Real-Time Volumetric Cloudscapes with the Decima Engine”: <https://www.guerrilla-games.com/read/nubis-authoring-real-time-volumetric-cloudscapes-with-the-decima-engine>. Used as a high-level reference for layered shape/detail erosion only; no source code or assets are included.
+
+The actual GPU result must be reviewed in `test-results/atmosphere-local/`; smoke diagnostics establish runtime state and resolution, not visual acceptance by themselves.

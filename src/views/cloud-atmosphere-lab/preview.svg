@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" fill="none">
+  <rect width="960" height="540" fill="#0a1620"/>
+  <circle cx="670" cy="300" r="190" fill="#1f5167"/>
+  <path d="M460 307c12-45 52-68 91-56 20-53 100-69 143-25 42-8 76 15 81 52 32 2 58 24 58 50 0 30-26 49-62 49H520c-42 0-71-27-60-70Z" fill="#d5e4e8" opacity=".92"/>
+  <path d="M0 435h960v105H0z" fill="#102b36"/>
+  <path d="M108 435v-93h76v93m30 0V300h112v135m28 0v-74h79v74m274 0v-127h87v127m22 0V330h87v105" fill="#163846" stroke="#6a9aa4" stroke-width="3"/>
+  <text x="48" y="74" fill="#ecf5f6" font-family="sans-serif" font-size="30">CLOUD / ATMOSPHERE LAB</text>
+</svg>

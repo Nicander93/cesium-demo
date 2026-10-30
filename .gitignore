@@ -28,3 +28,15 @@ dist-ssr
 
 # Local dynamic flood acceptance artifacts
 /test-results/flood-dynamic/
+
+# Local atmosphere GPU acceptance artifacts
+/test-results/atmosphere*
+
+# Local animation behavioral acceptance report
+/test-results/animation/
+
+# Local packed SDK consumer and acceptance artifacts
+/test-results/animation-package/
+
+# Local browser/GPU test recordings, screenshots and reports
+/test-results/

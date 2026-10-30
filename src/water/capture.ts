@@ -54,12 +54,13 @@ export class SceneCapture {
     const originalShadow = scene.shadowMap
     const originalPostProcess = scene.postProcessStages
     const globeShow = scene.globe?.show
-    // Reuse the main view's loaded terrain tiles. A second quadtree frame would
-    // replace its selection/load queues and run host height callbacks from the mirrored camera.
-    const reuseTerrain = reflectGlobe && !this.directDepth && !!scene.globe
+    // Every auxiliary pass must reuse the main view's loaded terrain tiles.
+    // A depth pass that selects tiles from above also poisons the following reflection
+    // and runs host load/height callbacks from the wrong camera.
+    const reuseTerrain = reflectGlobe && !!scene.globe
     const terrainDebug = reuseTerrain ? scene.globe._surface?._debug : undefined
     if (reuseTerrain && typeof terrainDebug?.suspendLodUpdate !== 'boolean') {
-      throw new Error('Terrain reflection requires the supported Cesium 1.132 quadtree adapter')
+      throw new Error('Terrain capture requires the supported Cesium 1.132 quadtree adapter')
     }
     const originalSuspendLod = terrainDebug?.suspendLodUpdate
     const logDepth = scene._logDepthBuffer

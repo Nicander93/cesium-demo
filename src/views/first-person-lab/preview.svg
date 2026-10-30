@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600">
+  <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#b9d0d8"/><stop offset="1" stop-color="#e8e4d7"/></linearGradient></defs>
+  <rect width="960" height="600" fill="url(#sky)"/>
+  <path d="M0 440 960 390v210H0Z" fill="#66756a"/>
+  <path d="M226 435V210l254-112 254 112v225Z" fill="#d7cbb6" stroke="#7e776c" stroke-width="8"/>
+  <path d="M206 214 480 78l274 136" fill="none" stroke="#53675b" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M474 435V326q0-58 58-58t58 58v109M274 248h116v102H274Z" fill="#536b63"/>
+  <path d="M254 435V235M706 435V235M480 435V213" stroke="#f1e9d9" stroke-width="13" opacity=".8"/>
+  <rect x="52" y="48" width="350" height="108" rx="12" fill="#f8f6f0" opacity=".94"/>
+  <text x="78" y="91" font-family="sans-serif" font-size="15" letter-spacing="3" fill="#718177">CESIUM WALKTHROUGH</text>
+  <text x="78" y="130" font-family="sans-serif" font-size="30" font-weight="700" fill="#263a30">房屋步行视角</text>
+</svg>

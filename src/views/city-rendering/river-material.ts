@@ -57,7 +57,8 @@ export function applyRiverMaterial(
     vec3 reflected = mix(vec3(0.10, 0.18, 0.25), pow(max(reflectionSample, vec3(0.0)), vec3(2.2)), ${name('reflectionReady')} * inBounds);`,
   )
   source = source.replace(
-    /material\.diffuse = .*?;/,
+    // Match the lit water body, leaving earlier diagnostic returns untouched.
+    /material\.diffuse = mix\(vec3\(diffuse \* 0\.3\) \+ scatter,.*?;/,
     `vec3 body = ${color}.rgb * (0.65 + diffuse * 0.3);
     vec3 waterLight = mix(body, reflected, fresnel) + vec3(1.0, 0.94, 0.82) * specular * 0.20;
     material.diffuse = vec3(0.0);

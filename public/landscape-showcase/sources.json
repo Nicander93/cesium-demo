@@ -1,0 +1,14 @@
+{
+  "name": "Lac de Mauvoisin",
+  "featureId": 29,
+  "layer": "ch.bafu.vec25-seen",
+  "retrievedAt": "2026-10-29",
+  "sourceUrl": "https://api3.geo.admin.ch/rest/services/api/MapServer/ch.bafu.vec25-seen/29?sr=4326&geometryFormat=geojson",
+  "terrain": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/",
+  "imagery": "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg",
+  "attribution": "swisstopo SWISSIMAGE, BAFU / BFE, geo.admin.ch",
+  "savedFeatureSha256": "300bc35a8aec1173de7b7af908fb2bb2f41a12b00ba6b6c6e84e02f257a304a9",
+  "displayBoundary": "Full mapped outer ring; no holes or crop edges added.",
+  "heightBoundary": "Terrain-derived display surface, sampled at runtime; not an observed reservoir level or bathymetry.",
+  "referenceBoundary": "Public alpine site selected for a comparable composition; not identified as the location in the supplied screenshots."
+}

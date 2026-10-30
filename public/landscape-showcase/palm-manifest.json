@@ -1,0 +1,42 @@
+{
+  "format": "cesium-demo-coast-palms-v1",
+  "generator": "src/views/landscape-showcase/palm-geometry.ts",
+  "generatorSha256": "f9002d1caf9beacd2f14795348f7bfd61d629e2197b2af08fd29ab9ab9e04cdd",
+  "instanceCount": 123,
+  "prototypeCount": 6,
+  "totalBytes": 834556,
+  "geometryTriangles": 10440,
+  "drawTriangles": 214020,
+  "prototypes": [
+    {
+      "seed": 0,
+      "instances": 21,
+      "geometryTriangles": 1740
+    },
+    {
+      "seed": 1,
+      "instances": 20,
+      "geometryTriangles": 1740
+    },
+    {
+      "seed": 2,
+      "instances": 21,
+      "geometryTriangles": 1740
+    },
+    {
+      "seed": 3,
+      "instances": 20,
+      "geometryTriangles": 1740
+    },
+    {
+      "seed": 4,
+      "instances": 21,
+      "geometryTriangles": 1740
+    },
+    {
+      "seed": 5,
+      "instances": 20,
+      "geometryTriangles": 1740
+    }
+  ]
+}

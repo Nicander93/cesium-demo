@@ -55,6 +55,29 @@ const point = new Cesium.Cartesian3()
 const normal = new Cesium.Cartesian3(0, 0, 1)
 
 describe('reflection pass isolation', () => {
+  it('keeps host terrain selection across depth and reflection captures without running another quadtree frame', () => {
+    const f = fixture()
+    const capture = new SceneCapture(f.scene as unknown as Cesium.Scene, f.scene.camera as unknown as Cesium.Camera, f.material as unknown as Cesium.Material, 'shoreDepthTexture', true)
+    f.scene.updateAndExecuteCommands.mockImplementation(() => {
+      expect(f.scene.globe._surface._debug.suspendLodUpdate).toBe(true)
+    })
+    try {
+      capture.render(512, 256, true)
+      f.pass.update(point, normal, { ...options, reflectGlobe: true }, 0)
+      expect(f.scene.globe.beginFrame).not.toHaveBeenCalled()
+      expect(f.scene.globe.endFrame).not.toHaveBeenCalled()
+      expect(f.scene.globe._surface._debug.suspendLodUpdate).toBe(false)
+      expect(f.scene._view).toBe(f.view)
+      f.scene.updateAndExecuteCommands.mockImplementationOnce(() => { throw new Error('Depth draw failed') })
+      expect(() => capture.render(512, 256, true)).toThrow('Depth draw failed')
+      expect(f.scene.globe._surface._debug.suspendLodUpdate).toBe(false)
+      expect(f.scene._view).toBe(f.view)
+    } finally {
+      capture.destroy()
+      f.pass.destroy()
+    }
+  })
+
   it('reuses host terrain selection without auxiliary load/height updates and restores the LOD flag on failure', () => {
     const f = fixture()
     f.scene.updateAndExecuteCommands.mockImplementation(() => {

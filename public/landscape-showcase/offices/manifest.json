@@ -1,0 +1,91 @@
+{
+  "format": "cesium-demo-showcase-offices-v1",
+  "generator": "src/views/landscape-showcase/office-model.ts",
+  "generatorSha256": "34f795d273d51c55797f327e21d35ae3d09735e507ccba30c2db35027ceb3c9b",
+  "assets": [
+    {
+      "filename": "office-01.glb",
+      "seed": 1,
+      "type": "glass-office",
+      "bytes": 151776,
+      "triangles": 2746
+    },
+    {
+      "filename": "office-02.glb",
+      "seed": 2,
+      "type": "stepped-tower",
+      "bytes": 164208,
+      "triangles": 2976
+    },
+    {
+      "filename": "office-03.glb",
+      "seed": 3,
+      "type": "stepped-tower",
+      "bytes": 161396,
+      "triangles": 2924
+    },
+    {
+      "filename": "office-04.glb",
+      "seed": 4,
+      "type": "stepped-tower",
+      "bytes": 141740,
+      "triangles": 2560
+    },
+    {
+      "filename": "office-05.glb",
+      "seed": 5,
+      "type": "stepped-tower",
+      "bytes": 145620,
+      "triangles": 2632
+    },
+    {
+      "filename": "office-06.glb",
+      "seed": 6,
+      "type": "glass-office",
+      "bytes": 134284,
+      "triangles": 2422
+    },
+    {
+      "filename": "office-07.glb",
+      "seed": 7,
+      "type": "brick-midrise",
+      "bytes": 98644,
+      "triangles": 1762
+    },
+    {
+      "filename": "office-08.glb",
+      "seed": 8,
+      "type": "brick-midrise",
+      "bytes": 104480,
+      "triangles": 1870
+    },
+    {
+      "filename": "office-09.glb",
+      "seed": 9,
+      "type": "brick-midrise",
+      "bytes": 114852,
+      "triangles": 2062
+    },
+    {
+      "filename": "office-10.glb",
+      "seed": 10,
+      "type": "glass-office",
+      "bytes": 149188,
+      "triangles": 2698
+    },
+    {
+      "filename": "office-11.glb",
+      "seed": 11,
+      "type": "glass-office",
+      "bytes": 157608,
+      "triangles": 2854
+    },
+    {
+      "filename": "office-12.glb",
+      "seed": 12,
+      "type": "brick-midrise",
+      "bytes": 83312,
+      "triangles": 1478
+    }
+  ]
+}

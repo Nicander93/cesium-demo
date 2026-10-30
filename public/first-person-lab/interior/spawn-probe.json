@@ -1,0 +1,143 @@
+{
+  "sourceModel": "Benedikt Bitterli Living Room",
+  "collisionTriangles": 131989,
+  "octreeBuildMs": 1658.02,
+  "grid": {
+    "stepMeters": 0.2,
+    "testedPoints": 494,
+    "floorCandidates": 448,
+    "capsuleTestedSamples": 56,
+    "capsuleSafeSamples": 43,
+    "capsuleIntersectionRejected": 13,
+    "acceptedFloorBand": [
+      -0.022000000000000002,
+      0.028
+    ],
+    "capsuleSamplingStride": 3
+  },
+  "spawns": [
+    {
+      "spawn": {
+        "id": "entry",
+        "label": "Entry (mesh-probed)",
+        "position": [
+          1.681944966316223,
+          -0.6141090393066408,
+          0.003162000032514278
+        ],
+        "heading": -1.22071700310179,
+        "pitch": -0.14
+      },
+      "path": {
+        "start": {
+          "x": 1.681944966316223,
+          "y": -0.6141090393066408,
+          "footHeight": 0.003162000032514278,
+          "heading": 0,
+          "pitch": 0,
+          "verticalVelocity": 0,
+          "grounded": true
+        },
+        "velocity": {
+          "x": -1.1741818874644734,
+          "y": 0.4287154011117011
+        },
+        "seconds": 0.8,
+        "end": {
+          "x": 0.7424874033891959,
+          "y": -0.2707516819120671,
+          "footHeight": 0.0031620000325143227
+        },
+        "distance": 1.0002373655376877,
+        "blockedAt": null,
+        "directionHeading": -1.22071700310179,
+        "spawnClearanceMeters": 0.49995286820212853,
+        "wallOrFurnitureBlock": {
+          "heading": 3.141592653589793,
+          "velocity": {
+            "x": 7.654042494670958e-17,
+            "y": -1.25
+          },
+          "start": {
+            "x": 1.681944966316223,
+            "y": -0.6141090393066408,
+            "footHeight": 0.003162000032514278,
+            "heading": 0,
+            "pitch": 0,
+            "verticalVelocity": 0,
+            "grounded": true
+          },
+          "point": {
+            "x": 1.6820953271793204,
+            "y": -1.2868494546505869,
+            "footHeight": 0.0031620000325143227,
+            "elapsedSeconds": 0.8
+          },
+          "distanceBeforeBlock": 0.6727404321471501
+        }
+      }
+    },
+    {
+      "spawn": {
+        "id": "inside",
+        "label": "Inside (mesh-probed)",
+        "position": [
+          -1.3180550336837769,
+          -0.6141090393066408,
+          0.0031620000325143336
+        ],
+        "heading": 1.134781958686073,
+        "pitch": -0.14
+      },
+      "path": {
+        "start": {
+          "x": -1.3180550336837769,
+          "y": -0.6141090393066408,
+          "footHeight": 0.0031620000325143336,
+          "heading": 0,
+          "pitch": 0,
+          "verticalVelocity": 0,
+          "grounded": true
+        },
+        "velocity": {
+          "x": 1.1330526381777164,
+          "y": 0.5279126055688738
+        },
+        "seconds": 0.8,
+        "end": {
+          "x": -0.4118461823964094,
+          "y": -0.19124465711015437,
+          "footHeight": 0.0031620000325143227
+        },
+        "distance": 1.0000143838375457,
+        "blockedAt": null,
+        "directionHeading": 1.134781958686073,
+        "spawnClearanceMeters": 0.49990062409527325,
+        "wallOrFurnitureBlock": {
+          "heading": 3.141592653589793,
+          "velocity": {
+            "x": 7.654042494670958e-17,
+            "y": -1.25
+          },
+          "start": {
+            "x": -1.3180550336837769,
+            "y": -0.6141090393066408,
+            "footHeight": 0.0031620000325143336,
+            "heading": 0,
+            "pitch": 0,
+            "verticalVelocity": 0,
+            "grounded": true
+          },
+          "point": {
+            "x": -1.178054982991701,
+            "y": -1.2558140716565334,
+            "footHeight": 0.0031620000325143227,
+            "elapsedSeconds": 1
+          },
+          "distanceBeforeBlock": 0.6567993321684793
+        }
+      }
+    }
+  ],
+  "methodology": "Uses staged createMeshWalkingWorld/spawnMeshPlayer/moveMeshPlayer; 0.23 m capsule radius, 1.72 m body height, actual collision.bin triangles. Scans x/y at 0.2 m spacing against actual floor triangles and checks capsule spawn every third node; clearance is the minimum of eight 0.5 m capsule movement probes, capped at 0.5 m. Six spatially distributed clear starts are route-probed toward room center/cardinal directions at 1.25 m/s in 0.2 s steps until 1 m travel or blockage. Separate cardinal probes record the first static mesh contact for each selected start."
+}

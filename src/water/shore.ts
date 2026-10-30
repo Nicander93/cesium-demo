@@ -56,6 +56,7 @@ export class ShoreDepth {
         this.material.uniforms.shoreSize = new Cesium.Cartesian2(width, length)
         this.mask.update(this.capture.depthTexture, localFromClip, this.material.uniforms.shoreSize, this.capture.width, this.capture.height)
         this.material.uniforms.shoreReady = 1
+        this.material.uniforms.underwaterDepthReady = 1
         this.frames++
         this.lastUpdate = now
         this.error = null
@@ -63,6 +64,7 @@ export class ShoreDepth {
         this.error = error instanceof Error ? error.message : String(error)
         this.retryAt = now + 2000
         this.material.uniforms.shoreReady = 0
+        this.material.uniforms.underwaterDepthReady = 0
       }
     }
     Cesium.Matrix4.multiply(this.viewProjection, this.scene.camera.inverseViewMatrix, this.fromEye)
@@ -77,6 +79,7 @@ export class ShoreDepth {
     if (this.destroyed) return
     this.destroyed = true
     this.material.uniforms.shoreReady = 0
+    this.material.uniforms.underwaterDepthReady = 0
     this.capture.destroy()
     this.mask.destroy()
   }

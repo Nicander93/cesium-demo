@@ -1,0 +1,29 @@
+{
+  "dataset": "Lac de la Gruyère reservoir shoreline",
+  "featureName": "Lac de la Gruyère",
+  "layerId": "ch.bafu.vec25-seen",
+  "featureId": 117,
+  "waterbodyId": "CH0092760000",
+  "retrievedAt": "2026-10-27",
+  "retrievalUrl": "https://api3.geo.admin.ch/rest/services/api/MapServer/ch.bafu.vec25-seen/117?sr=4326&geometryFormat=geojson",
+  "discoveryUrl": "https://api3.geo.admin.ch/rest/services/api/MapServer/find?layer=ch.bafu.vec25-seen&searchText=Gruy%C3%A8re&searchField=name&contains=true&geometryFormat=geojson&returnGeometry=false&sr=4326&lang=fr",
+  "layerLegendUrl": "https://api3.geo.admin.ch/rest/services/api/MapServer/ch.bafu.vec25-seen/legend",
+  "geometrySource": "swisstopo VECTOR25 primary lake polygons",
+  "attributesSource": "BAFU hydrological and water-management data; BFE storage-lake data",
+  "layerDataStatus": "2007-01-01 (as reported by the official layer legend)",
+  "verifiedAttributes": {
+    "lakeType": 2,
+    "surfaceAreaKm2": 9.6,
+    "storageVolumeMillionM3": 200,
+    "usableVolumeMillionM3": 180,
+    "metadataElevationMetersAboveSea": 677,
+    "shorelineLengthMeters": 48442
+  },
+  "metadataElevationNote": "The 677 m ü.M. value is Swiss national elevation metadata, not a Cesium ellipsoid water height; runtime water height comes only from finite, approximately planar level-14 Cesium terrain samples over the lake interior.",
+  "reservoirEvidenceUrl": "https://data.geo.admin.ch/ch.bafu.bundesinventare-vogelreservate/objectsheets/2023revision/nr125.pdf",
+  "reservoirEvidence": "Official BAFU description says lake level variations are caused by the operation of the Rossens dam.",
+  "attribution": "© swisstopo, BAFU, BFE / geo.admin.ch",
+  "terms": "The geo.admin.ch API documentation states access and use are free of charge subject to fair-use terms. Preserve attribution and check current provider terms before redistributing or using the source beyond the demo.",
+  "terrainService": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/",
+  "terrainServiceDocumentation": "https://docs.geo.admin.ch/visualize-data/terrain-service.html"
+}

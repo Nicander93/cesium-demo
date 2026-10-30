@@ -89,6 +89,10 @@ viewer.destroy() // 宿主最后销毁 Viewer
 | `foamWidth` | 默认 2 米，非负；控制近岸泡沫带宽度 |
 | `foamIntensity` | 默认 0.8，范围 0–1 |
 | `foamSpeed` | 默认 0.5，非负；视觉动画速度，不是水动力流速 |
+| `underwaterOptics` | 默认 false；`WaterSurface` 采集场景深度并启用微表面模型内 Beer–Lambert 水深传输，独立于 foam |
+| `underwaterDepthScale` | 默认 1，范围 [0,4]；斜视光程的艺术比例 |
+| `waterAbsorption` / `waterScattering` | RGB 每米系数，默认 (0.16,0.06,0.025) / (0.025,0.015,0.01) m⁻¹ |
+| `waterScatteringColor` | 显示色输入；散射源颜色，默认 `#438c83` |
 
 | 画质 | 边长比例 | 最长边上限 | 反射更新上限 |
 | --- | --- | --- | --- |
@@ -127,6 +131,14 @@ viewer.destroy() // 宿主最后销毁 Viewer
 镜像相机视域扩大到原来的 1.2 倍，为波纹扰动预留边缘。主相机位置或投影变化时立即重绘反射，不等待静止时的 FPS 限制；这会增加拖动时的渲染成本。反射仍是局部平面近似，不能保证任意极端视角或复杂模型的完全正确倒影。
 
 辅助 View 使用独立后处理集合，不借用主画面的后处理资源。资源请求错误按 1、2、4、8 秒间隔退避重试，最大间隔 8 秒；其他渲染错误连续三次后暂停反射。调用 `water.setOptions({ reflection: true })` 可立即手动重试，状态由 `reflectionAvailable`、`reflectionFailures` 和 `error` 诊断字段提供。
+
+### 水深吸收与散射（实验）
+
+光学传输属于 `microfacet` 光照候选。`WaterSurface` 启用 `underwaterOptics: true` 后复用俯视深度捕获；即使 `foam: false` 或使用 `shoreline` 遮罩也会独立采集。`createWaterMaterial()` 本身没有 Scene，只有 uniform 配置，不会自动产生场景深度。`show = false` 停止捕获更新，恢复显示后继续；`destroy()` 释放深度帧缓冲和遮罩。
+
+模型取 ENU 局部水面与可见地形/模型表面间的垂直高度差 `d`，视线光程近似为 `d / max(dot(N,V), 0.15)`，并用 RGB 吸收/散射系数做 Beer–Lambert 透射及单次散射混合。它只处理现有水色代理：没有采样水下场景颜色，没有计算水下折射方向；场景深度来自可见表面捕获，局部平面和最高可见面假设不适用于洞穴、遮挡底面或精确水深分析；湖区 DEM 可能被压平，导致估算值接近零。该效果不是 bathymetry 数据产品。
+
+真实地形实验页默认启用并可调强度，`?lighting=legacy` 会使用旧光照且关闭深度光学；库 API 默认关闭以保持已有场景外观。该通道在同一 IBL/间接光照下先混合透射和散射，不重复增加光照，也沿用微表面既有的单次 LDR 色调映射路径。
 
 ### 岸边泡沫
 
@@ -180,6 +192,15 @@ pnpm build
 ## 静态真实岸线融合
 
 `WaterSurface` 可接收裁剪前的完整 `shoreline: Cartographic[]`，并通过 `shoreFadeDistance`（0–64 米）调节接水线透明度。未提供岸线时保留原有行为。原理、API、静态边界限制与验证见 [岸线记录](./docs/SHORELINE.md)。
+
+### 大范围演示水面的可选范围
+
+`WaterSurface` 构造时还可传入两个可选参数，现有调用的默认行为保持不变：
+
+- `shorelineExtent: readonly Cartographic[]`：独立指定岸线 mask 的包围范围。例如海面延伸到远景，而泡沫只需要覆盖近岸时，可将纹理精度集中在近岸。该参数不会改变水面几何或完整 `shoreline`；mask 范围外不生成岸线泡沫。
+- `planeOrigin: Cartographic`：指定演示水面的局部水平面原点经纬度，水面高度仍由 `height` 决定。几何会投影到该点的 ENU 水平面，并与反射平面保持一致。适用于合成海岸布景；大范围局部平面不代表真实海平面曲率。
+
+这两个参数在构造时设置，修改范围或原点需要重建水面。实际用例见 [山海景观页](../views/landscape-showcase/README.md)。
 
 ## 表面光照候选
 

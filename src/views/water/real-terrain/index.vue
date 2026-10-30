@@ -25,7 +25,7 @@ const height = ref<number>(),
   error = ref('')
 const mode = ref<'imagery' | 'current' | 'enhanced'>('enhanced')
 const presetName = ref<WaterPresetName>('calm-lake')
-const config = reactive({ ...createWaterPreset(), lightingModel: (new URLSearchParams(window.location.search).get('lighting') === 'microfacet' ? 'microfacet' : 'legacy') as 'legacy' | 'microfacet', skyEnvironment: true, indexOfRefraction: 1.333, environmentIntensity: 1, shoreFadeDistance: 8, foamWidth: 8, foamIntensity: 0.35, foamSpeed: 0.3 })
+const config = reactive({ ...createWaterPreset(), lightingModel: (new URLSearchParams(window.location.search).get('lighting') === 'legacy' ? 'legacy' : 'microfacet') as 'legacy' | 'microfacet', underwaterOptics: true, underwaterDepthScale: 1, skyEnvironment: true, indexOfRefraction: 1.333, environmentIntensity: 1, shoreFadeDistance: 8, foamWidth: 8, foamIntensity: 0.35, foamSpeed: 0.3 })
 const diagnostics = ref<ReturnType<WaterSurface['getDiagnostics']>>()
 const reflectionNotice = ref('')
 const fps = ref(0)
@@ -77,6 +77,7 @@ function applyMode(): void {
     water.setOptions({
       waveModel: 'legacy',
       lightingModel: 'legacy',
+      underwaterOptics: false,
       shoreFadeDistance: 0,
       foam: false,
       reflection: false,
@@ -240,6 +241,7 @@ const lab = {
     cameraView: cameraView.value,
     shaderSource: water?.getWaterShaderSource(),
     visualTime: water?.material.uniforms.time,
+    underwaterDepthReady: water?.material.uniforms.underwaterDepthReady > 0.5,
     fps: fps.value,
   }),
   getWaterBounds: () => {
@@ -408,6 +410,9 @@ onBeforeUnmount(() => {
         <label for="lighting-model">光照模型</label><select id="lighting-model" v-model="config.lightingModel" @change="applyOptions"><option value="legacy">原有光照</option><option value="microfacet">GGX 与环境光（实验）</option></select>
         <template v-if="config.lightingModel === 'microfacet'">
           <label><input v-model="config.skyEnvironment" type="checkbox" @change="applyOptions" /> 大气环境反射</label>
+          <label><input v-model="config.underwaterOptics" type="checkbox" @change="applyOptions" /> 水深吸收与散射（实验）</label>
+          <label v-if="config.underwaterOptics" for="water-depth-scale">水深光程强度 <output>{{ config.underwaterDepthScale.toFixed(2) }}</output><input id="water-depth-scale" v-model.number="config.underwaterDepthScale" type="range" min="0" max="2" step="0.05" @input="applyOptions" /></label>
+          <p v-if="config.underwaterOptics">深度捕获 {{ diagnostics?.underwaterDepthReady ? '已就绪' : '采集中或不可用' }}；用水面与可见表面高度差估算斜视光程，不读取水下场景颜色。湖区 DEM 可能被压平，估算值可接近零。</p>
           <label for="water-ior">折射率 <output>{{ config.indexOfRefraction.toFixed(3) }}</output><input id="water-ior" v-model.number="config.indexOfRefraction" type="range" min="1" max="1.6" step="0.001" @input="applyOptions" /></label>
           <label for="water-environment-intensity">环境光强度 <output>{{ config.environmentIntensity.toFixed(2) }}</output><input id="water-environment-intensity" v-model.number="config.environmentIntensity" type="range" min="0" max="4" step="0.05" @input="applyOptions" /></label>
           <p>{{ diagnostics?.environmentAvailable ? '大气环境图已就绪' : diagnostics?.environmentError || (config.skyEnvironment ? '环境图准备中' : '使用常量环境近似') }}；新模式按折射率推导反射率。</p>

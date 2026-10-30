@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "exactOptionalPropertyTypes": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@cesium-geospatial/core": ["./src/vendor/cesium-geospatial/core/experimental.ts"]
+    }
+  },
+  "include": [
+    "src/views/cloud-atmosphere-lab/**/*.ts",
+    "src/views/cloud-atmosphere-lab/**/*.vue",
+    "src/vendor/cesium-geospatial/core/experimental.ts",
+    "src/types/Cesium.d.ts",
+    "src/vendor/cesium-geospatial/core/cesium/cesium-augment.d.ts"
+  ]
+}
+

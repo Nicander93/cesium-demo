@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "typecheck:practice-labs": "vue-tsc -p tsconfig.practice-labs.json --noEmit",
+    "smoke:practice-labs": "node scripts/smoke-practice-labs.mjs",
+    "smoke:vegetation-terrain": "node scripts/smoke-vegetation-terrain.mjs",
+    "smoke:interior": "node scripts/smoke-interior.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -16,6 +20,7 @@
     "typecheck:city": "vue-tsc -p tsconfig.city.json --noEmit",
     "validate:city-assets": "node scripts/validate-city-assets.mjs",
     "typecheck:flow-lab": "vue-tsc -p tsconfig.flow-lab.json --noEmit",
+    "typecheck:atmosphere": "vue-tsc -p tsconfig.atmosphere.json --noEmit",
     "smoke:water-flow": "node scripts/smoke-water-flow.mjs",
     "smoke:water-distance": "node scripts/smoke-water-distance.mjs",
     "smoke:real-water": "node scripts/smoke-real-water.mjs",
@@ -26,31 +31,37 @@
     "smoke:water-waves": "node scripts/smoke-water-waves.mjs",
     "smoke:flood-dynamic": "node scripts/smoke-flood-dynamic.mjs",
     "smoke:flood-real-lighting": "node scripts/smoke-flood-real-lighting.mjs",
-    "smoke:flood-appearance": "node scripts/smoke-flood-appearance.mjs"
+    "smoke:flood-appearance": "node scripts/smoke-flood-appearance.mjs",
+    "smoke:atmosphere": "node scripts/smoke-atmosphere.mjs",
+    "typecheck:landscape": "vue-tsc -p tsconfig.landscape.json --noEmit",
+    "smoke:landscape": "node scripts/smoke-landscape-showcase.mjs",
+    "generate:showcase-offices": "node scripts/generate-showcase-offices.mjs",
+    "generate:showcase-palms": "node scripts/generate-showcase-palms.mjs"
   },
   "dependencies": {
+    "@petamoriken/float16": "^3.9.3",
     "@types/cesium": "^1.70.4",
     "@types/heatmap.js": "^2.0.41",
+    "cesium": "1.132.0",
     "heatmap.js": "^2.0.5",
     "lil-gui": "^0.20.0",
+    "three": "0.180.0",
     "vite-plugin-cesium": "^1.2.23",
-    "cesium": "1.132.0",
     "vue": "^3.5.13",
-    "vue-router": "4",
-    "three": "0.180.0"
+    "vue-router": "4"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
+    "@types/three": "0.180.0",
     "@vitejs/plugin-vue": "^5.2.3",
     "@vitest/ui": "^3.2.4",
     "@vue/tsconfig": "^0.7.0",
     "jsdom": "^26.1.0",
+    "ktx-parse": "1.1.0",
     "prettier": "3.6.2",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.4",
-    "vue-tsc": "^2.2.8",
-    "@types/three": "0.180.0",
-    "ktx-parse": "1.1.0"
+    "vue-tsc": "^2.2.8"
   }
 }

@@ -1,6 +1,6 @@
 # 表面光照候选：GGX 与大气环境
 
-状态：可切换实验，默认仍为 `legacy`。本轮解决太阳高光与倒影颜色耦合、常量环境缺少方向变化的问题；没有把“画面更暗”或“数值正确”当作高质量水面的验收结论。
+状态：库 API 默认仍为 `legacy`，真实地形实验页默认切到 `microfacet` 和水深光学。候选解决太阳高光与倒影颜色耦合、常量环境缺少方向变化的问题；没有把“画面更暗”或“数值正确”当作高质量水面的验收结论。
 
 ## 使用与边界
 
@@ -10,6 +10,7 @@ const water = new WaterSurface({
   positions,
   height,
   lightingModel: 'microfacet',
+  underwaterOptics: true,
   skyEnvironment: true,
   indexOfRefraction: 1.333,
   environmentIntensity: 1,
@@ -29,6 +30,11 @@ water.destroy()
 | `indexOfRefraction`    | 1.333             | 空气侧介电界面折射率，范围 [1, 2.5]，候选用它推导 F0                  |
 | `skyEnvironment`       | true              | `WaterSurface` 是否生成大气环境；关闭后用 `environmentColor` 常量近似 |
 | `environmentIntensity` | 1                 | 间接反射及水色代理的艺术强度，范围 [0, 4]，不改变太阳光强             |
+| `underwaterOptics`     | false             | `WaterSurface` 的光学深度实验开关；独立于 foam，单材质没有场景深度       |
+| `underwaterDepthScale` | 1                 | 斜视光程乘数，范围 [0, 4]                                               |
+| `waterAbsorption`      | (0.16,0.06,0.025) | RGB 每米吸收系数，范围 [0, 4] m⁻¹                                      |
+| `waterScattering`      | (0.025,0.015,0.01)| RGB 每米散射系数，范围 [0, 4] m⁻¹                                      |
+| `waterScatteringColor` | `#438c83`         | 散射源显示色输入，先解码到线性域                                         |
 | `roughness`            | 沿用当前参数/预设 | 感知粗糙度；微表面参数 alpha = max(roughness², 0.0025)，下限用于数值稳定                             |
 | `specularIntensity`    | 沿用当前参数/预设 | 太阳高光强度；0 可单独检查环境反射                                    |
 | `reflectionStrength`   | 沿用当前参数/预设 | 间接反射强度；0 不关闭太阳高光                                        |
@@ -37,7 +43,7 @@ water.destroy()
 
 `createWaterMaterial()` 也接受候选参数，但单独的材质不持有 Scene，不会自动生成大气环境或采集场景反射，采用常量环境降级。无 ENU origin 的材质以几何法线构造局部基，视线与宿主光保持同一坐标系；`WaterSurface` 使用以水域中心建立的 ENU 基。
 
-示例入口：`/water-real-terrain?lighting=microfacet`；页面“光照模型”可随时切回原效果。`/water?scene=calibration` 是无网络资产的算法校准场景。示例主动设置大气跟随 `SCENE_LIGHT`；模块不修改宿主的大气模式、相机、光源、HDR、底图或 Ion Token。
+示例入口：`/water-real-terrain` 默认使用 `microfacet` 与水深光学；`?lighting=legacy` 可直达原有光照，页面“水深吸收与散射”复选框也可关闭实验。库 API 不传 `underwaterOptics` 时仍关闭。`/water?scene=calibration` 是无网络资产的算法校准场景。示例主动设置大气跟随 `SCENE_LIGHT`；模块不修改宿主的大气模式、相机、光源、HDR、底图或 Ion Token。
 
 ## 算法与来源
 
@@ -67,7 +73,7 @@ Ldirect = Lhost × D_GGX × V_SmithCorrelated × F × max(N·L, 0)
 以下限制仍然存在：
 
 - 当前环境与平面倒影使用 LDR 纹理，不能恢复已截断的高亮辐射。通过 HDR 开关兼容测试不等于建立了完整 HDR 辐射标定。
-- 水色项是受环境照亮的染色代理，采用 `(1 - envWeight)` 避免直接叠满颜色；它**不是**体积散射、Beer–Lambert 吸收或真实水下折射。仍缺少可信水深及水下颜色。
+- 水色项是受环境照亮的染色代理，采用 `(1 - envWeight)` 避免直接叠满颜色。可选 Beer–Lambert 通道从水面上方采集的可见地形/模型表面与水面的高度差估算垂直深度 `d`，再以 `d / max(dot(N,V), 0.15)` 近似斜视光程；光程上限由采集深度的 120 m 截断与参数强度控制。它不是屏幕空间水下颜色采样，也没有从水下场景求真实折射射线，因此底色仍是材质水色代理。垂直深度假设局部平面水面，场景捕获按可见最高表面还原，不是湖底测深或高精度水深产品；Swiss DEM 可能把湖区压为近似平坦面，因而算得的深度接近零。
 - 平面倒影的五点模糊是近似，不是严格 GGX 预积分；它仍受单平面投影、已加载瓦片和反射分辨率限制。
 - 使用 Schlick 和 split-sum IBL 近似，不是精确介电 Fresnel 积分。艺术强度可以改变能量尺度，不承诺全模型能量守恒。
 - 透明混合沿用 Cesium 当前通道。LDR 下的透明混合并非全程在线性域完成，不能据此声称完整颜色管线正确。
@@ -93,7 +99,7 @@ Ldirect = Lhost × D_GGX × V_SmithCorrelated × F × max(N·L, 0)
 
 ## 验证与实景结论
 
-命令：`pnpm smoke:water-lighting`，需要本地开发服务，默认端口 5198。可用 `PLAYWRIGHT_MODULE_PATH` 与 `PLAYWRIGHT_EXECUTABLE_PATH` 指定 Playwright 和浏览器。报告、截图、视频写入忽略目录 `test-results/water-flow-lab/lighting`。
+命令：`pnpm exec vitest run src/water/spec/optics.spec.ts src/water/spec/options.spec.ts` 与 `node scripts/test-water-transport-gpu.mjs`；GPU 检查需要本地开发服务和 Playwright。光照基础检查命令为 `pnpm smoke:water-lighting`，默认端口 5198。可用 `PLAYWRIGHT_MODULE_PATH` 与 `PLAYWRIGHT_EXECUTABLE_PATH` 指定 Playwright 和浏览器。报告、截图、视频写入忽略目录 `test-results/water-flow-lab/lighting`。
 
 2026-10-16 的检查包括：
 

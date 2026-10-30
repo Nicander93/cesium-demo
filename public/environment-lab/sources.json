@@ -1,0 +1,267 @@
+{
+  "generatedAt": "2026-10-27T07:09:51.875Z",
+  "license": {
+    "name": "CC0 1.0 Universal",
+    "url": "https://polyhaven.com/license",
+    "assets": "https://polyhaven.com/a/"
+  },
+  "coordinateSystem": {
+    "hdrDirection": "[east, up, south]",
+    "panorama": "equirectangular; u=0.5+atan2(south,east)/(2π), v=acos(up)/π; top row is +up",
+    "cesiumEnu": "sunDirection=[hdr.x,-hdr.z,hdr.y] in [east,north,up] order",
+    "sphericalHarmonics": "Cesium polynomial order [L00,L1-1,L10,L11,L2-2,L2-1,L20,L21,L22]; first-three terms are Y-up/z-south/x-east"
+  },
+  "bake": {
+    "sourceResolution": "Panorama uses the native 4K HDR; SH, sun, horizon and GGX use the 2K HDR lighting source. No panorama upscaling.",
+    "specular": {
+      "format": "KTX2 RGBA32F linear",
+      "width": 128,
+      "height": 128,
+      "faces": 6,
+      "levels": 8,
+      "ggxSamples": 48
+    },
+    "normalization": {
+      "panoramaEncoding": "reinhard-srgb",
+      "panoramaRange": 32,
+      "radianceScale": "recorded per preset in assets[key].normalization and manifest[key].radianceScale"
+    },
+    "sunDirection": "Luminance-weighted centroid above max(p99.9, 55% peak), transformed from HDR Y-up into local ENU",
+    "horizonColor": "Linear RGB mean of the ±1 degree band around the equirectangular horizon; same normalized radiance"
+  },
+  "assets": {
+    "day": {
+      "assetId": "kloofendal_48d_partly_cloudy_puresky",
+      "title": "Kloofendal 48d Partly Cloudy (Pure Sky)",
+      "sourcePage": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+      "apiUrl": "https://api.polyhaven.com/files/kloofendal_48d_partly_cloudy_puresky",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+      "sourceResolution": {
+        "name": "2k",
+        "width": 2048,
+        "height": 1024
+      },
+      "sourcePurpose": "spherical harmonics, GGX specular, sun direction and horizon color",
+      "panoramaDownloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/kloofendal_48d_partly_cloudy_puresky_4k.hdr",
+      "panoramaSourceResolution": {
+        "name": "4k",
+        "width": 4096,
+        "height": 2048
+      },
+      "panoramaSourcePurpose": "background panorama only",
+      "panoramaSourceBytes": 20674857,
+      "panoramaSourceMd5": "816340c969d2e60d659051d13ac3c4dc",
+      "panoramaSourceSha256": "3061c00a16ecae748e84fd6c44c04804f539c118bb66325db858bad87b11bf88",
+      "panoramaSourceCachePath": "C:\\Users\\PC\\.codex\\visualizations\\2026\\10\\25\\01a1720a-d9e2-78f0-91cc-0d22df6fb55f\\environment-hdri-source\\kloofendal_48d_partly_cloudy_puresky-4k.hdr",
+      "normalization": {
+        "radianceScale": 2,
+        "panoramaEncoding": "reinhard-srgb",
+        "panoramaRange": 32
+      },
+      "sourceBytes": 5451493,
+      "sourceMd5": "2eba3a4d7eeb23cbfbeca364c97e7980",
+      "sourceSha256": "5244534e9cf5b606f2ff513aa00ddb161b0a4826ffd88a0d3bd03ac29247d198",
+      "sourceCachePath": "C:\\Users\\PC\\.codex\\visualizations\\2026\\10\\25\\01a1720a-d9e2-78f0-91cc-0d22df6fb55f\\environment-hdri-source\\kloofendal_48d_partly_cloudy_puresky-2k.hdr",
+      "license": {
+        "name": "CC0 1.0 Universal",
+        "url": "https://polyhaven.com/license",
+        "assets": "https://polyhaven.com/a/"
+      },
+      "panorama": {
+        "path": "panoramas/day.jpg",
+        "width": 4096,
+        "height": 2048,
+        "bytes": 1156212,
+        "sha256": "18ffa7d41999c64e1bebbe1594747a715c065c7343ff81ce95e5903e3695c6fe"
+      },
+      "specular": {
+        "path": "specular/day.ktx2",
+        "width": 128,
+        "height": 128,
+        "faces": 6,
+        "levels": 8,
+        "vkFormat": 109,
+        "bytes": 2097520,
+        "sha256": "43e0f98ade988d3f3d24b9f90367cd9c15f18d6e31d6199d210d936679d6ff78"
+      },
+      "sphericalHarmonics": {
+        "path": "day.sh.json",
+        "terms": 9,
+        "channels": 3,
+        "sha256": "534401b8f48e8339457dbc71d0a11f671067c12e694335f9ca297b1e1e06a2b1"
+      },
+      "sunDirectionEstimate": {
+        "hdrYUp": [
+          0.55429690066008,
+          0.7417613248433491,
+          0.3775514307816468
+        ],
+        "method": "luminance-weighted centroid of pixels above max(p99.9, 55% peak)"
+      },
+      "horizonColor": [
+        0.8228080269218481,
+        0.8888890755539857,
+        1.0739288346497535
+      ]
+    },
+    "sunset": {
+      "assetId": "industrial_sunset_02_puresky",
+      "title": "Industrial Sunset 02 (Pure Sky)",
+      "sourcePage": "https://polyhaven.com/a/industrial_sunset_02_puresky",
+      "apiUrl": "https://api.polyhaven.com/files/industrial_sunset_02_puresky",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/industrial_sunset_02_puresky_2k.hdr",
+      "sourceResolution": {
+        "name": "2k",
+        "width": 2048,
+        "height": 1024
+      },
+      "sourcePurpose": "spherical harmonics, GGX specular, sun direction and horizon color",
+      "panoramaDownloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/industrial_sunset_02_puresky_4k.hdr",
+      "panoramaSourceResolution": {
+        "name": "4k",
+        "width": 4096,
+        "height": 2048
+      },
+      "panoramaSourcePurpose": "background panorama only",
+      "panoramaSourceBytes": 16086915,
+      "panoramaSourceMd5": "4622800e22ecc1b2930e03df65fb3a00",
+      "panoramaSourceSha256": "79c8cbb67b306a04ae8e5aa17536f8f5fb71b2219c09b39793890bc53b1ef9f7",
+      "panoramaSourceCachePath": "C:\\Users\\PC\\.codex\\visualizations\\2026\\10\\25\\01a1720a-d9e2-78f0-91cc-0d22df6fb55f\\environment-hdri-source\\industrial_sunset_02_puresky-4k.hdr",
+      "normalization": {
+        "radianceScale": 0.5,
+        "panoramaEncoding": "reinhard-srgb",
+        "panoramaRange": 32
+      },
+      "sourceBytes": 4132592,
+      "sourceMd5": "b54af864f1868a59cdc391744532776c",
+      "sourceSha256": "439d7e99b34bd3727896d9a06247d4bd80d8276f208f4fdefce919ce74b602c3",
+      "sourceCachePath": "C:\\Users\\PC\\.codex\\visualizations\\2026\\10\\25\\01a1720a-d9e2-78f0-91cc-0d22df6fb55f\\environment-hdri-source\\industrial_sunset_02_puresky-2k.hdr",
+      "license": {
+        "name": "CC0 1.0 Universal",
+        "url": "https://polyhaven.com/license",
+        "assets": "https://polyhaven.com/a/"
+      },
+      "panorama": {
+        "path": "panoramas/sunset.jpg",
+        "width": 4096,
+        "height": 2048,
+        "bytes": 808178,
+        "sha256": "0fe9ef5de5b2e63631865905f849d2fbb16e8981eddfdba92393d70d092aec42"
+      },
+      "specular": {
+        "path": "specular/sunset.ktx2",
+        "width": 128,
+        "height": 128,
+        "faces": 6,
+        "levels": 8,
+        "vkFormat": 109,
+        "bytes": 2097520,
+        "sha256": "5ee7173934a4bcfe21f466eb2630c3701461107d513273eaac1f5978e113d8d5"
+      },
+      "sphericalHarmonics": {
+        "path": "sunset.sh.json",
+        "terms": 9,
+        "channels": 3,
+        "sha256": "81701cee762936ef4387efa0ac1810c581c73edab3746bc5bfb0473817940c38"
+      },
+      "sunDirectionEstimate": {
+        "hdrYUp": [
+          0.8085861425352551,
+          0.03884239902489303,
+          0.5870943008903654
+        ],
+        "method": "luminance-weighted centroid of pixels above max(p99.9, 55% peak)"
+      },
+      "horizonColor": [
+        0.30408996106901515,
+        0.3069271778440452,
+        0.36177365155041724
+      ]
+    },
+    "rain": {
+      "assetId": "overcast_soil_puresky",
+      "title": "Overcast Soil (Pure Sky)",
+      "sourcePage": "https://polyhaven.com/a/overcast_soil_puresky",
+      "apiUrl": "https://api.polyhaven.com/files/overcast_soil_puresky",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/overcast_soil_puresky_2k.hdr",
+      "sourceResolution": {
+        "name": "2k",
+        "width": 2048,
+        "height": 1024
+      },
+      "sourcePurpose": "spherical harmonics, GGX specular, sun direction and horizon color",
+      "panoramaDownloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/overcast_soil_puresky_4k.hdr",
+      "panoramaSourceResolution": {
+        "name": "4k",
+        "width": 4096,
+        "height": 2048
+      },
+      "panoramaSourcePurpose": "background panorama only",
+      "panoramaSourceBytes": 16949123,
+      "panoramaSourceMd5": "8c05e24908d99a6c4c5c1a63d753df3f",
+      "panoramaSourceSha256": "717958e9dfd092fcead82ff4691f3d615088803dd1888bb638ba948669021140",
+      "panoramaSourceCachePath": "C:\\Users\\PC\\.codex\\visualizations\\2026\\10\\25\\01a1720a-d9e2-78f0-91cc-0d22df6fb55f\\environment-hdri-source\\overcast_soil_puresky-4k.hdr",
+      "normalization": {
+        "radianceScale": 0.5,
+        "panoramaEncoding": "reinhard-srgb",
+        "panoramaRange": 32
+      },
+      "sourceBytes": 4568000,
+      "sourceMd5": "877caf0680d7269037995f6567a67103",
+      "sourceSha256": "5414e1ac0c35e451d28595b2a2cba05e2ca301fdeb755b0a469408443093dafc",
+      "sourceCachePath": "C:\\Users\\PC\\.codex\\visualizations\\2026\\10\\25\\01a1720a-d9e2-78f0-91cc-0d22df6fb55f\\environment-hdri-source\\overcast_soil_puresky-2k.hdr",
+      "license": {
+        "name": "CC0 1.0 Universal",
+        "url": "https://polyhaven.com/license",
+        "assets": "https://polyhaven.com/a/"
+      },
+      "panorama": {
+        "path": "panoramas/rain.jpg",
+        "width": 4096,
+        "height": 2048,
+        "bytes": 649924,
+        "sha256": "1d167536606b6556b115892d4021716eba356bbc1776e7cd60893068d6b1f560"
+      },
+      "specular": {
+        "path": "specular/rain.ktx2",
+        "width": 128,
+        "height": 128,
+        "faces": 6,
+        "levels": 8,
+        "vkFormat": 109,
+        "bytes": 2097520,
+        "sha256": "0b1fa8df0c553ea2830534bcf58bf67a9fc506c115c168b58043d9abf0e12c85"
+      },
+      "sphericalHarmonics": {
+        "path": "rain.sh.json",
+        "terms": 9,
+        "channels": 3,
+        "sha256": "a8ce0191d8de15a9226f10ecebd6db31b1608e777bea679805b5bc45d0f5df83"
+      },
+      "sunDirectionEstimate": {
+        "hdrYUp": [
+          0.8010669730736711,
+          0.5765726988677063,
+          -0.1607968518690452
+        ],
+        "method": "luminance-weighted centroid of pixels above max(p99.9, 55% peak)"
+      },
+      "horizonColor": [
+        0.4159394425842038,
+        0.37013674562695087,
+        0.32701971348130127
+      ]
+    }
+  },
+  "modelLighting": {
+    "description": "Model-only studio lighting reused from city-rendering; weather panoramas and water keep their original HDRI.",
+    "coefficients": {
+      "path": "../model-rendering/studio-sh.json",
+      "sha256": "86569dee8745c83a6670a9282f50f4eaff2667f334cb37b72f1af59a68392dde"
+    },
+    "specular": {
+      "path": "../model-rendering/studio-specular.ktx2",
+      "sha256": "d45d5031d5aada5e5d090fd2aa0aae90f46ac01b73a756d440fc60b5e180861f"
+    }
+  }
+}

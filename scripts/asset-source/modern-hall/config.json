@@ -1,0 +1,42 @@
+{
+  "spawns": [
+    {
+      "label": "入口门厅",
+      "id": "entry",
+      "position": [
+        12,
+        -2,
+        0
+      ],
+      "heading": -1.57,
+      "pitch": -0.08
+    },
+    {
+      "label": "中央长廊",
+      "id": "inside",
+      "position": [
+        3,
+        0,
+        0
+      ],
+      "heading": -1.57,
+      "pitch": -0.06
+    },
+    {
+      "label": "休息区",
+      "id": "lounge",
+      "position": [
+        -4,
+        3,
+        0
+      ],
+      "heading": 1.57,
+      "pitch": -0.08
+    }
+  ],
+  "floorY": 0,
+  "name": "现代建筑大厅",
+  "author": "NewSee2l035",
+  "sourceUrl": "https://github.com/ErfanMo77/gltf-research-scenes/tree/1f47d4c63bcad7582150d68300308b0c913bda6c/scenes/modern-hall",
+  "includeGlassCollision": true
+}

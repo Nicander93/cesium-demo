@@ -1,0 +1,25 @@
+{
+  "dataset": "Mars3D Dayanta oblique sample",
+  "tilesetUrl": "https://data.mars3d.cn/3dtiles/qx-dyt/tileset.json",
+  "terrainUrl": "https://data.mars3d.cn/terrain/",
+  "documentationUrl": "https://mars3d.cn/docs/data/server/",
+  "attribution": "Mars3D / original dataset providers",
+  "use": "Online reference only; dataset redistribution license not independently confirmed",
+  "validation": "Nine representative geometry leaves returned HTTP 200 on 2026-10-27; this is not a full integrity audit",
+  "previousSample": "qx-shequ was replaced after multiple referenced tiles returned HTTP 404",
+  "groundReference": {
+    "type": "Calibrated display plane of this example: native visible ground 421.1 m plus display offset -28 m",
+    "ellipsoidHeightMeters": 393.1,
+    "nativeRootBoxLowestCornerMeters": 403.91,
+    "purpose": "Display water reference after placement; not measured ground",
+    "isMeasuredGround": false
+  },
+  "water": "Water is a visual offset from the placed example display plane, not a measured water level; no real flood event or hydraulic calculation is implied. Custom OBB models keep their own box reference.",
+  "displayAlignment": {
+    "offsetMeters": -28,
+    "purpose": "Visual placement of the default public example only; not a vertical datum conversion or survey control",
+    "evidence": "Strict target-model depth probe: 47 valid hits, minimum 421.084 m, lower quartile 425.930 m. Nine level-14 terrain samples: 387.47-395.65 m, median 392.67 m. Native OBB minimum 403.91 m lies below the sampled visible plaza and is not a reliable ground surface.",
+    "appliesToCustomTilesets": false
+  },
+  "knownLimitations": "Low-angle views still show stretched mesh edges and photogrammetry holes in the public sample. The display translation cannot repair source mesh reconstruction defects."
+}

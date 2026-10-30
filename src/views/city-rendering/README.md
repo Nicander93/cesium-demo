@@ -108,3 +108,12 @@ Three.js 页是独立的同模型对照，Cesium 页没有叠加一个 Three ren
 
 
 当前效果推进、官方参考资料与实际浏览器验收记录见 [RENDERING-PLAN.md](./RENDERING-PLAN.md)。2026-10-13 已完成晴天/雨天云光照分离与可调行进波，浏览器已验证波浪暂停/恢复、一次拖动与渲染错误日志；参考视频已取得公开画面对照，云团形态与持续拖动稳定性仍需继续验收。
+
+
+### 2026-10-26：河面编译修复与模型光照复用
+
+共享水面增加了波纹诊断提前返回，城市河面原先替换首个 material.diffuse 赋值的补丁误命中该分支，导致 diffuse/reflected/fresnel/specular 在声明前被使用，GLSL 编译失败并停止整个主场景。补丁现在只匹配普通水体的光照表达式，保留诊断提前返回；新增作用域回归和城市页实际 GPU 检查。
+
+城市使用 model-rendering 的 studio-sh.json（漫反射 SH）与 studio-specular.ktx2（GGX 预滤波镜面环境），模型保留 Cesium glTF metallic-roughness PBR。城市 IBL 权重为 0.8，模型对照默认 1；城市使用随时间变化的太阳光，模型对照使用固定摄影棚主光。两页共用光照资源和部分配置，城市尚未复用模型页的控制器、同步相机或完整配置界面。启用云时，城市在云和大气线性 HDR 合成之后用 CityFinalToneMapping 调用 PBR Neutral 与 gamma 校正，暂停 Cesium 内置 tone pass；关闭云时恢复内置 tone pass。
+
+验证：城市、共享水面与模型资源共 67 项测试、城市类型检查、生产构建通过。node scripts/smoke-city-rendering.mjs 使用 CITY_BASE_URL（默认 127.0.0.1:5174/cesium-demo/）与现有 Playwright 环境变量；RTX 5070 / Chromium 151 上晴天河岸、夕照街区、雨天积水均持续渲染，无页面/渲染错误，65 个模型均配置同一 SH 与镜面环境资源，离开页面后场景释放。报告在 test-results/city-rendering-recovery/report.json。该检查不替代最终视觉质量验收。

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="82" y1="38" x2="843" y2="496" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13293D"/>
+      <stop offset="1" stop-color="#07111C"/>
+    </linearGradient>
+    <linearGradient id="arcA" x1="268" y1="291" x2="839" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4AC8EE" stop-opacity=".14"/>
+      <stop offset=".52" stop-color="#6DDEFF"/>
+      <stop offset="1" stop-color="#C8F6FF"/>
+    </linearGradient>
+    <linearGradient id="arcB" x1="172" y1="338" x2="839" y2="252" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2A856" stop-opacity=".15"/>
+      <stop offset=".5" stop-color="#FFC477"/>
+      <stop offset="1" stop-color="#FFE8C3"/>
+    </linearGradient>
+    <radialGradient id="globe" cx="0" cy="0" r="1" gradientTransform="matrix(362 106 -83 283 479 416)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#193D50"/>
+      <stop offset="1" stop-color="#0A1724"/>
+    </radialGradient>
+    <filter id="glow" x="142" y="101" width="744" height="310" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h960v540H0z"/>
+  <circle cx="714" cy="91" r="1.5" fill="#D8ECF7" opacity=".76"/>
+  <circle cx="843" cy="118" r="1" fill="#D8ECF7" opacity=".52"/>
+  <circle cx="603" cy="69" r="1" fill="#D8ECF7" opacity=".63"/>
+  <circle cx="397" cy="98" r="1.2" fill="#D8ECF7" opacity=".48"/>
+  <path fill="url(#globe)" stroke="#3A7086" stroke-opacity=".62" d="M-82 460c102-117 268-174 492-174s391 57 632 174v160H-82V460Z"/>
+  <path stroke="#376B7E" stroke-opacity=".3" d="M43 432c187-84 473-85 780 0M-8 466c258-62 527-62 976 0M222 332c-60 48-93 107-109 173m239-205c-32 71-47 131-49 210m194-207c30 69 43 132 46 214m173-179c78 56 119 111 154 174"/>
+  <path stroke="#68D6F5" stroke-opacity=".16" stroke-width="15" d="M263 336c109-97 234-166 365-166 84 0 150 35 212 18" filter="url(#glow)"/>
+  <path stroke="url(#arcA)" stroke-width="3" d="M263 336c109-97 234-166 365-166 84 0 150 35 212 18"/>
+  <path stroke="#FFC477" stroke-opacity=".2" stroke-width="12" d="M172 372c130-90 253-110 392-113 117-3 183 38 276-8" filter="url(#glow)"/>
+  <path stroke="url(#arcB)" stroke-width="2" stroke-dasharray="3 13" stroke-linecap="round" d="M172 372c130-90 253-110 392-113 117-3 183 38 276-8"/>
+  <path fill="#FFC477" d="m806 251 18-1-11 13-1-8-7-4 1 0Z"/>
+  <path fill="#64D9FF" d="M255 333a7 7 0 1 0 14 0 7 7 0 0 0-14 0Zm581-150a6 6 0 1 0 12 0 6 6 0 0 0-12 0Z"/>
+  <path stroke="#FFB5DE" stroke-opacity=".7" stroke-width="1.5" d="M499 408c-9-31-9-60 0-86m-12 86c-13-20-17-38-14-54m26 54c10-24 14-44 10-63"/>
+  <circle cx="499" cy="318" r="3" fill="#FFE6F4"/>
+  <circle cx="486" cy="351" r="2" fill="#FFB5DE"/>
+  <circle cx="512" cy="343" r="2.5" fill="#FFB5DE"/>
+  <circle cx="493" cy="370" r="1.5" fill="#FFE6F4"/>
+  <path stroke="#E1B2D0" stroke-opacity=".45" d="M474 410h52"/>
+  <rect x="30" y="30" width="900" height="480" rx="18" stroke="#B2D5E7" stroke-opacity=".14"/>
+  <rect x="52" y="54" width="294" height="431" rx="14" fill="#081522" fill-opacity=".82" stroke="#A7C9E1" stroke-opacity=".15"/>
+  <text x="74" y="87" fill="#70CBE8" font-family="Arial,sans-serif" font-size="10" font-weight="700" letter-spacing="2">SPATIAL MOTION / 01</text>
+  <text x="74" y="119" fill="#F2F7FB" font-family="Arial,sans-serif" font-size="23" font-weight="600">GIS 动画实验场</text>
+  <text x="74" y="145" fill="#9DAFBE" font-family="Arial,sans-serif" font-size="11">离线 ENU 场景 · 飞线、箭头与粒子</text>
+  <rect x="73" y="166" width="250" height="1" fill="#AAC8DB" fill-opacity=".14"/>
+  <text x="74" y="192" fill="#A9BCCB" font-family="Arial,sans-serif" font-size="11">测试位置</text>
+  <rect x="73" y="203" width="79" height="26" rx="6" fill="#16384A" stroke="#64D9FF" stroke-opacity=".55"/>
+  <text x="93" y="220" fill="#9BEAFF" font-family="Arial,sans-serif" font-size="10">贵阳</text>
+  <rect x="157" y="203" width="79" height="26" rx="6" fill="#FFFFFF" fill-opacity=".03" stroke="#9DBDD4" stroke-opacity=".14"/>
+  <text x="180" y="220" fill="#C7D4DF" font-family="Arial,sans-serif" font-size="10">赤道</text>
+  <rect x="241" y="203" width="82" height="26" rx="6" fill="#FFFFFF" fill-opacity=".03" stroke="#9DBDD4" stroke-opacity=".14"/>
+  <text x="255" y="220" fill="#C7D4DF" font-family="Arial,sans-serif" font-size="10">高纬度</text>
+  <text x="74" y="257" fill="#A9BCCB" font-family="Arial,sans-serif" font-size="11">场景效果</text>
+  <rect x="73" y="268" width="250" height="57" rx="9" fill="#FFFFFF" fill-opacity=".025" stroke="#9DBDD4" stroke-opacity=".12"/>
+  <circle cx="88" cy="287" r="3.5" fill="#64D9FF"/>
+  <text x="101" y="291" fill="#E5EEF4" font-family="Arial,sans-serif" font-size="11">空间飞线</text>
+  <text x="289" y="291" fill="#8298A9" font-family="Arial,sans-serif" font-size="10">空闲</text>
+  <path stroke="#9DB0BF" stroke-opacity=".34" d="M87 306h220"/>
+  <text x="74" y="352" fill="#A9BCCB" font-family="Arial,sans-serif" font-size="11">全部效果</text>
+  <rect x="73" y="364" width="57" height="29" rx="6" fill="#123A50" stroke="#64D9FF" stroke-opacity=".48"/>
+  <text x="92" y="382" fill="#B0F0FF" font-family="Arial,sans-serif" font-size="10">播放</text>
+  <rect x="136" y="364" width="57" height="29" rx="6" fill="#FFFFFF" fill-opacity=".035" stroke="#9DBDD4" stroke-opacity=".14"/>
+  <text x="155" y="382" fill="#C7D4DF" font-family="Arial,sans-serif" font-size="10">暂停</text>
+  <rect x="199" y="364" width="57" height="29" rx="6" fill="#FFFFFF" fill-opacity=".035" stroke="#9DBDD4" stroke-opacity=".14"/>
+  <text x="218" y="382" fill="#C7D4DF" font-family="Arial,sans-serif" font-size="10">恢复</text>
+  <rect x="262" y="364" width="61" height="29" rx="6" fill="#FFFFFF" fill-opacity=".035" stroke="#9DBDD4" stroke-opacity=".14"/>
+  <text x="281" y="382" fill="#C7D4DF" font-family="Arial,sans-serif" font-size="10">停止</text>
+  <text x="691" y="482" fill="#8EA2B2" font-family="Arial,sans-serif" font-size="10">1.3 km ARC  /  100 m FOUNTAIN</text>
+</svg>

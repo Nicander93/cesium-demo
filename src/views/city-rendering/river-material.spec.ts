@@ -22,3 +22,23 @@ it('adapts actual Cesium Fabric uniforms without leaving suffixed GLSL fragments
   expect(shader).not.toContain('vec3(0.1) + reflected')
   material.destroy()
 })
+
+
+it('keeps diagnostic returns independent of the later river lighting variables', () => {
+  const material = createWaterMaterial({ normalMapUrl: 'waves.png' })
+  try {
+    applyRiverMaterial(material, 48, 3300)
+    const shader = material.shaderSource
+    const diagnostic = shader.match(/if \(waveDiagnostic(?:_\d+)? > 0\.5\) \{([\s\S]*?)return material;\s*\}/)?.[1]
+    expect(diagnostic).toBeDefined()
+    expect(diagnostic).toContain('material.diffuse = vec3(0.0)')
+    expect(diagnostic).not.toContain('waterLight')
+    expect(diagnostic).not.toContain('reflected')
+    const riverLighting = shader.indexOf('vec3 body =')
+    for (const declaration of ['float diffuse =', 'float specular =', 'vec3 reflected =', 'float fresnel =']) {
+      const offset = shader.indexOf(declaration)
+      expect(offset).toBeGreaterThanOrEqual(0)
+      expect(offset).toBeLessThan(riverLighting)
+    }
+  } finally { material.destroy() }
+})
